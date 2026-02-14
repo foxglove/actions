@@ -1,0 +1,183 @@
+name: Claude PR Review (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      ai_review_label:
+        description: Label used to opt-in draft PR reviews
+        required: false
+        default: ai review
+        type: string
+      review_prompt_file:
+        description: Path to additional review instructions in the caller repo
+        required: false
+        default: .cursor/commands/review-pr.md
+        type: string
+      allowed_bots:
+        description: Bots allowed to trigger this workflow via Claude action policy
+        required: false
+        default: cursor[bot]
+        type: string
+      bot_reviewer_logins:
+        description: Comma-separated bot logins Claude should treat as its prior review identity
+        required: false
+        default: foxglovebot,claude[bot],github-actions[bot]
+        type: string
+      model:
+        description: Claude model
+        required: false
+        default: claude-opus-4-6
+        type: string
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      REVIEW_GITHUB_TOKEN:
+        required: false
+
+concurrency:
+  group: claude-review-${{ github.repository }}-${{ github.head_ref }}-${{ github.event.action }}
+  cancel-in-progress: true
+
+jobs:
+  pr-review:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.actor != 'dependabot[bot]' &&
+      (
+        (github.event.pull_request.draft == false && github.event.action != 'labeled') ||
+        (github.event.pull_request.draft == true && github.event.action == 'labeled' && github.event.label.name == inputs.ai_review_label) ||
+        (github.event.pull_request.draft == true && github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, inputs.ai_review_label))
+      )
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect docs-only PR
+        id: changed-files
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.REVIEW_GITHUB_TOKEN || github.token }}
+          script: |
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+
+            const isDocsPath = (filename) =>
+              filename.startsWith(".cursor/") ||
+              filename.startsWith("packages/docs/") ||
+              filename.endsWith(".md");
+
+            const docsOnly = files.length > 0 && files.every((file) => isDocsPath(file.filename));
+            core.setOutput("docs_only", docsOnly ? "true" : "false");
+            core.info(`Docs-only PR: ${docsOnly}`);
+
+      - name: Read caller prompt file
+        id: prompt
+        shell: bash
+        run: |
+          prompt_file="${{ inputs.review_prompt_file }}"
+          {
+            echo "content<<EOF"
+            if [ -f "$prompt_file" ]; then
+              cat "$prompt_file"
+            else
+              echo "No additional review prompt file found at: $prompt_file"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Clean up previous pending bot reviews
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.REVIEW_GITHUB_TOKEN || github.token }}
+          script: |
+            const botLogins = new Set(
+              `${{ inputs.bot_reviewer_logins }}`
+                .split(",")
+                .map((value) => value.trim())
+                .filter(Boolean),
+            );
+
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+
+            for (const review of reviews) {
+              const reviewerLogin = review.user?.login;
+              if (!reviewerLogin || !botLogins.has(reviewerLogin) || review.state !== "PENDING") {
+                continue;
+              }
+
+              try {
+                await github.rest.pulls.deletePendingReview({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.payload.pull_request.number,
+                  review_id: review.id,
+                });
+                core.info(`Deleted pending review ${review.id} from ${reviewerLogin}`);
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                core.warning(`Failed to delete pending review ${review.id} from ${reviewerLogin}: ${message}`);
+              }
+            }
+
+      - name: Run Claude review
+        id: review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.REVIEW_GITHUB_TOKEN || github.token }}
+          track_progress: false
+          use_sticky_comment: false
+          allowed_bots: ${{ inputs.allowed_bots }}
+
+          prompt: |
+            REPO: ${{ github.repository }}
+            REPO OWNER: ${{ github.repository_owner }}
+            REPO NAME: ${{ github.event.repository.name }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            BASE BRANCH: ${{ github.event.pull_request.base.ref }}
+            DOCS ONLY PR: ${{ steps.changed-files.outputs.docs_only }}
+            BOT REVIEWER LOGINS: ${{ inputs.bot_reviewer_logins }}
+
+            ${{ steps.prompt.outputs.content }}
+
+            ## Review Publication Instructions
+
+            Publish all feedback as a pull request review (never as an issue comment).
+
+            1. Before creating a new review, inspect existing review threads with
+               `mcp__github__pull_request_read` (`method: get_review_comments`), and identify
+               threads authored by logins listed in `BOT REVIEWER LOGINS`.
+            2. If one of those prior concerns is now fixed:
+               - Reply on the thread with `mcp__github__add_reply_to_pull_request_comment`.
+               - Resolve the thread via GraphQL:
+                 `gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{isResolved}}}' -f threadId='<THREAD_NODE_ID>'`
+            3. Do not duplicate unresolved prior threads that already capture the same concern.
+            4. Create a pending review with `mcp__github__pull_request_review_write` (`method: create`).
+            5. Add each blocker/suggestion as inline review comments with
+               `mcp__github__add_comment_to_pending_review` (`subjectType: LINE`).
+            6. Put summary/general/informational content in the review-level body.
+            7. If `DOCS ONLY PR` is `true`, submit with `event: APPROVE`; otherwise submit with `event: COMMENT`.
+            8. Do not create sticky comments, issue comments, or standalone PR comments.
+
+          claude_args: |
+            --model ${{ inputs.model }}
+            --allowedTools "Read,Glob,Grep,mcp__github__pull_request_read,mcp__github__pull_request_review_write,mcp__github__add_comment_to_pending_review,mcp__github__add_reply_to_pull_request_comment,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
