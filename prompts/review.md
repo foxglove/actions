@@ -151,6 +151,11 @@ Publish all feedback as a pull request review (never as an issue comment).
   - Reply on the thread with `mcp__github__add_reply_to_pull_request_comment`.
   - Resolve the thread via GraphQL:
     `gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{isResolved}}}' -f threadId='<THREAD_NODE_ID>'`
+- After processing prior threads from `CONTEXT.bot_login`, consider older review-level comments authored by `CONTEXT.bot_login`.
+  - Minimize an older review-level comment only if all inline threads associated with that older review are resolved.
+  - Use `Bash(gh api:*)` with GraphQL `minimizeComment` on the review-level comment node ID.
+  - Use minimize reason `OUTDATED`.
+  - Do not minimize comments for reviews that still have unresolved associated threads.
 - After processing prior threads from `CONTEXT.bot_login`, review existing inline threads from other authors.
   - If you agree with a subtle bug or major concern, it is okay to reply on the same thread with additional useful context.
   - If you agree with a minor issue and have no meaningful addition, do not reply.
