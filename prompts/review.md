@@ -151,9 +151,12 @@ Publish all feedback as a pull request review (never as an issue comment).
   - Reply on the thread with `mcp__github__add_reply_to_pull_request_comment`.
   - Resolve the thread via GraphQL:
     `gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{isResolved}}}' -f threadId='<THREAD_NODE_ID>'`
-- For threads authored by `cursor[bot]`:
-  - If you agree with the feedback, leave the thread intact and do not duplicate it.
-  - If you disagree, reply on that same thread with your reasoning.
+- Consider all existing inline threads except those authored by `CONTEXT.bot_login`.
+  - If you agree with a subtle bug or major concern, it is okay to reply on the same thread with additional useful context.
+  - If you agree with a minor issue and have no meaningful addition, do not reply.
+  - If you agree and can add meaningful context (for example, scope, impact, or a concrete fix), reply on the same thread.
+  - If you disagree, reply on the same thread with clear reasoning.
+  - Do not post "me too" comments that add no new value.
 - Never resolve threads unless they were started by the login in `CONTEXT.bot_login`.
 - Do not duplicate unresolved prior threads that already capture the same concern.
 - Only submit a new review when there is meaningful new feedback to publish.
