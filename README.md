@@ -2,23 +2,17 @@
 
 Shared GitHub Actions workflows and prompts for the Foxglove organization.
 
-## PR Review Workflows
+## PR Review Workflow
 
-### Technical Review (`review.yml`)
+### Review (`review.yml`)
 
-An AI-powered code review that acts as a technical reviewer (CTO persona). Focuses on correctness, architecture, performance, security, and code quality.
+An AI-powered PR review that combines technical and product perspectives in a single pass. Acts as a CTO who is both a technical leader and product steward — evaluating code quality, architecture, performance, and security alongside user-facing consistency, terminology, documentation, and UX.
 
 **Prompt:** [`prompts/review.md`](prompts/review.md)
 
-### Product Review (`product-review.yml`)
-
-An AI-powered product review that acts as a product manager. Focuses on user-facing consistency, terminology, documentation completeness, interaction patterns, and UX quality. Automatically skips PRs with no user-facing impact.
-
-**Prompt:** [`prompts/product-review.md`](prompts/product-review.md)
-
 ## Usage
 
-Add the workflows to your repository's `.github/workflows/` directory:
+Add the workflow to your repository's `.github/workflows/` directory:
 
 ```yaml
 # .github/workflows/review.yml
@@ -34,11 +28,6 @@ on:
 jobs:
   review:
     uses: foxglove/actions/.github/workflows/review.yml@main
-    secrets:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-
-  product-review:
-    uses: foxglove/actions/.github/workflows/product-review.yml@main
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
