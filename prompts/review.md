@@ -49,6 +49,7 @@ Treat a PR as **not low risk** if any of the following are true:
   - Operational interfaces: CLI flags, config/env contracts, file formats, or integration contracts.
 - Packages/modules intended for external use. Use repository metadata and package configuration to infer this; if external visibility is unclear, treat it as not low risk.
 - Any change with potentially broad blast radius, migration risk, or backwards-compatibility risk.
+- Any change to database schema or migrations.
 
 A PR is **low risk** when none of the above apply. Docs-only PRs are typically low risk.
 
