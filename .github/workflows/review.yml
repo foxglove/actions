@@ -35,8 +35,8 @@ jobs:
           repository: foxglove/actions
           path: .foxglove-actions
 
-      - name: Read review prompt file
-        id: prompt
+      - name: Prepare review configuration
+        id: config
         shell: bash
         run: |
           prompt_file=".foxglove-actions/prompts/review.md"
@@ -46,10 +46,58 @@ jobs:
           fi
 
           {
-            echo "content<<EOF"
+            echo "prompt<<PROMPT_EOF"
+            echo "CONTEXT:"
+            echo "  repo: ${REPO}"
+            echo "  pr_number: ${PR_NUMBER}"
+            echo "  base_branch: ${BASE_REF}"
+            echo "  is_draft: ${IS_DRAFT}"
+            echo "  bot_login: claude[bot]"
+            echo ""
             cat "$prompt_file"
-            echo "EOF"
+            echo "PROMPT_EOF"
           } >> "$GITHUB_OUTPUT"
+
+          allowed_tools=(
+            "Read"
+            "Glob"
+            "Grep"
+            "mcp__github__pull_request_read"
+            "mcp__github__pull_request_review_write"
+            "mcp__github__add_comment_to_pending_review"
+            "mcp__github__add_reply_to_pull_request_comment"
+            "mcp__github__get_pull_request"
+            "mcp__github__get_pull_request_files"
+            "mcp__github__get_pull_request_review_comments"
+            "mcp__github__get_pull_request_reviews"
+            "mcp__github__create_pending_pull_request_review"
+            "mcp__github__add_comment_to_pending_pull_request_review"
+            "mcp__github__submit_pending_pull_request_review"
+            "Bash(yarn:*)"
+            "Bash(git diff:*)"
+            "Bash(git fetch:*)"
+            "Bash(git lfs:*)"
+            "Bash(git log:*)"
+            "Bash(git show:*)"
+            "Bash(gh api:*)"
+            "Bash(gh pr diff:*)"
+            "Bash(gh pr view:*)"
+            "Bash(python3:*)"
+            "Bash(python:*)"
+          )
+          tools_csv=$(IFS=,; echo "${allowed_tools[*]}")
+
+          {
+            echo "claude-args<<ARGS_EOF"
+            echo "--model claude-opus-4-6"
+            echo "--allowedTools \"${tools_csv}\""
+            echo "ARGS_EOF"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
 
       - name: Clean up prior reviews
         uses: actions/github-script@v7
@@ -92,20 +140,8 @@ jobs:
           track_progress: false
           use_sticky_comment: false
           allowed_bots: cursor[bot]
-
-          prompt: |
-            CONTEXT:
-              repo: ${{ github.repository }}
-              pr_number: ${{ github.event.pull_request.number }}
-              base_branch: ${{ github.event.pull_request.base.ref }}
-              is_draft: ${{ github.event.pull_request.draft }}
-              bot_login: claude[bot]
-
-            ${{ steps.prompt.outputs.content }}
-
-          claude_args: |
-            --model claude-opus-4-6
-            --allowedTools "Read,Glob,Grep,mcp__github__pull_request_read,mcp__github__pull_request_review_write,mcp__github__add_comment_to_pending_review,mcp__github__add_reply_to_pull_request_comment,mcp__github__get_pull_request,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_pull_request_review,mcp__github__submit_pending_pull_request_review,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*)"
+          prompt: ${{ steps.config.outputs.prompt }}
+          claude_args: ${{ steps.config.outputs.claude-args }}
 
       - name: Retry Claude review on failure
         if: steps.review.outcome == 'failure'
@@ -115,17 +151,5 @@ jobs:
           track_progress: false
           use_sticky_comment: false
           allowed_bots: cursor[bot]
-
-          prompt: |
-            CONTEXT:
-              repo: ${{ github.repository }}
-              pr_number: ${{ github.event.pull_request.number }}
-              base_branch: ${{ github.event.pull_request.base.ref }}
-              is_draft: ${{ github.event.pull_request.draft }}
-              bot_login: claude[bot]
-
-            ${{ steps.prompt.outputs.content }}
-
-          claude_args: |
-            --model claude-opus-4-6
-            --allowedTools "Read,Glob,Grep,mcp__github__pull_request_read,mcp__github__pull_request_review_write,mcp__github__add_comment_to_pending_review,mcp__github__add_reply_to_pull_request_comment,mcp__github__get_pull_request,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_pull_request_review,mcp__github__submit_pending_pull_request_review,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*)"
+          prompt: ${{ steps.config.outputs.prompt }}
+          claude_args: ${{ steps.config.outputs.claude-args }}
