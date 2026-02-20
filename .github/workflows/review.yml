@@ -128,10 +128,14 @@ jobs:
             --model claude-opus-4-6
             --allowedTools "${{ env.CLAUDE_ALLOWED_TOOLS }}"
 
-      - name: Mark success
+      - name: Create success marker
+        if: steps.check-success.outcome != 'success' && success()
+        run: echo "success" > success-marker.txt
+
+      - name: Upload success marker
         if: steps.check-success.outcome != 'success' && success()
         uses: actions/upload-artifact@v4
         with:
           name: review-success-marker
-          path: .gitignore
+          path: success-marker.txt
           retention-days: 1
