@@ -19,7 +19,7 @@ Add the workflow to your repository's `.github/workflows/` directory:
 name: PR Review
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review]
   pull_request_review_comment:
     types: [created]
   issue_comment:
