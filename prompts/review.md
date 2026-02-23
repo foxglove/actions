@@ -59,7 +59,7 @@ TypeScript package visibility rule:
 - If `private: true`, treat export-surface changes as low risk by default because usage is expected to stay within the same repository.
 - If `private` is missing or not `true`, treat export/interface changes as public-interface changes (not low risk).
 - If repository boundaries are unclear, default to not low risk and require human approval.
-- The `private: true` default does not override other high-risk signals (for example, customer-facing behavior changes or broad blast radius).
+- The `private: true` default does not override other high-risk signals. Internal API changes that affect user-facing behavior (e.g. interfacing with other platforms, auth, or external services). Same for customer-facing behavior changes or broad blast radius.
 
 If risk classification is uncertain, default to **not low risk** and require human approval.
 
