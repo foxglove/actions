@@ -12,21 +12,23 @@ An AI-powered PR review that combines technical and product perspectives in a si
 
 ## Usage
 
-Add the workflow to your repository's `.github/workflows/` directory:
+Add this workflow to your repository's `.github/workflows/` directory:
 
 ```yaml
-# .github/workflows/review.yml
+# .github/workflows/pr-review.yml
 name: PR Review
+
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-  pull_request_review_comment:
-    types: [created]
-  issue_comment:
-    types: [created]
+  pull_request: {}
 
 jobs:
   review:
+    if: ${{ !github.event.pull_request.head.repo.fork }}
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+      id-token: write
     uses: foxglove/actions/.github/workflows/review.yml@main
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
