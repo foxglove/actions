@@ -21,12 +21,6 @@ name: PR Review
 on:
   pull_request: {}
 
-permissions:
-  actions: read
-  contents: read
-  pull-requests: write
-  id-token: write
-
 jobs:
   review:
     if: ${{ !github.event.pull_request.head.repo.fork }}
@@ -39,3 +33,13 @@ jobs:
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
+
+> **Note:** If your repository restricts the default `GITHUB_TOKEN` permissions, you may also need to add a top-level `permissions` block to the workflow. Job-level permissions can only narrow the workflow-level permissions, not expand them beyond the defaults.
+>
+> ```yaml
+> permissions:
+>   actions: read
+>   contents: read
+>   pull-requests: write
+>   id-token: write
+> ```
