@@ -21,6 +21,12 @@ name: PR Review
 on:
   pull_request: {}
 
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+  id-token: write
+
 jobs:
   review:
     if: ${{ !github.event.pull_request.head.repo.fork }}
