@@ -23,6 +23,7 @@ on:
 
 permissions:
   actions: read
+  contents: read
   pull-requests: write
   id-token: write
 
