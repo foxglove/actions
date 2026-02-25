@@ -34,7 +34,7 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-> **Note:** If your repository restricts the default `GITHUB_TOKEN` permissions, you may also need to add a top-level `permissions` block to the workflow. Job-level permissions can only narrow the workflow-level permissions, not expand them beyond the defaults.
+> **Note:** If your repository restricts the default `GITHUB_TOKEN` permissions, you may also need to add a top-level `permissions` block to the workflow. Without one, the job-level permissions cannot grant more access than the workflow-level default allows.
 >
 > ```yaml
 > permissions:
