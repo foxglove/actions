@@ -33,3 +33,13 @@ jobs:
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
+
+> **Note:** If your repository restricts the default `GITHUB_TOKEN` permissions, you may also need to add a top-level `permissions` block to explicitly grant the required access at the workflow level.
+>
+> ```yaml
+> permissions:
+>   actions: read
+>   contents: read
+>   pull-requests: write
+>   id-token: write
+> ```
