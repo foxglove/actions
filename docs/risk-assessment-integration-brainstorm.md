@@ -8,6 +8,8 @@ Our [Risk Management Policy](https://www.notion.so/foxglovehq/Risk-Management-Po
 
 Today the AI review prompt (`prompts/review.md`) is the only place risk classification happens. It tells Claude when to `APPROVE` vs `COMMENT`, but the result is buried in a natural-language review — no other workflow can consume it. Repositories cannot customize risk rules without forking the prompt, and there is no way to require additional approvals or gate deployments based on risk level.
 
+We recently shipped a machine-readable risk assessment format in the infra repo that aligns with the Risk Management Policy's three-tier model. That work validates the format and proves it out in one repo — the next step is extracting it into reusable actions here so every Foxglove repo can adopt the same structured risk assessment without reimplementing it.
+
 The Risk Management Policy scores risk as likelihood (1-3) x impact (1-3) and maps the product to three tiers:
 
 | Score | Tier | Definition |
