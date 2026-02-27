@@ -28,33 +28,39 @@ The current prompt's criteria map onto those tiers as follows:
 
 ## Solution
 
-Build a reusable AI agent risk assessor that runs on every PR, identifies net-new risks introduced by the change, classifies them using the policy's three-tier model, and creates follow-up actions for any moderate or high risks. This replaces the idea of a deterministic file-pattern classifier — experience over the past week has shown that heuristics like `private: true`, file paths, and directory conventions are poor proxies for actual risk. The agent can reason about what a change *does*, not just what files it touches.
+Build reusable AI agent actions for two modes of risk assessment, both grounded in the Risk Management Policy:
+
+- **Initial assessment** — Run when adopting a new tool, standing up a new product, or introducing a new system. Produces a full risk assessment artifact committed to the same repo as the thing being assessed. Creates Linear issues with due dates for any identified follow-ups.
+- **Incremental assessment** — Run on every PR. Scoped to only the changes in the PR, informed by the repo's existing risk assessment doc. Should rarely surface net-new findings, but determines the PR's risk tier so the review agent knows whether it can approve or must defer to a human.
+
+This replaces the idea of a deterministic file-pattern classifier — experience over the past week has shown that heuristics like `private: true`, file paths, and directory conventions are poor proxies for actual risk. The agent can reason about what a change *does*, not just what files it touches.
 
 ### Scope
 
-1. **Risk assessment agent action** — A reusable workflow that runs an AI agent on each PR. The agent reads the diff, evaluates it against the Risk Management Policy's likelihood × impact framework, and produces a structured risk assessment: tier (low/moderate/high), identified risk signals, and reasoning. For any net-new moderate or high risks, the agent creates follow-up actions (e.g., GitHub issues, review comments with required mitigations) so risks are tracked and addressed rather than just flagged.
+1. **Initial risk assessment agent** — A reusable workflow for comprehensive risk assessment of new products, tools, or systems. The agent evaluates the subject against the policy's likelihood x impact framework across all risk categories, produces a structured risk assessment artifact (committed to the repo alongside what it's assessing, not buried in infra), and creates Linear issues with due dates for any moderate or high follow-ups.
 
-2. **Risk assessment prompt** — A dedicated prompt (separate from the review prompt) that grounds the agent in the Risk Management Policy. Defines what constitutes a net-new risk, how to score likelihood and impact, and what follow-up actions to create for each tier. Lives in `prompts/risk-assessment.md` alongside the existing `prompts/review.md`.
+2. **Incremental risk assessment agent** — A reusable workflow that runs on each PR. The agent reads the diff and the repo's existing risk assessment doc, evaluates whether the change introduces net-new risks, and outputs a risk tier (low/moderate/high). New findings should be rare — most PRs operate within the risk profile already documented. When net-new risks are found, the agent creates Linear issues with due dates.
 
-3. **Update the review prompt to use low/moderate/high** — Replace the binary "low / not low risk" model in `prompts/review.md` with the three-tier model. Update the approval policy so Claude uses the tiers to decide `APPROVE` vs `COMMENT`. The review agent consumes the risk assessment output rather than re-deriving risk independently.
+3. **Risk assessment prompt** — A dedicated prompt (separate from the review prompt) grounded in the Risk Management Policy. Covers both initial and incremental modes: what constitutes a net-new risk, how to score likelihood and impact, when to create Linear follow-ups vs when to simply inform the review tier. Lives in `prompts/risk-assessment.md` alongside the existing `prompts/review.md`.
 
-4. **Risk label workflow** — A thin reusable workflow that consumes the agent's risk assessment output and applies `risk:low`, `risk:moderate`, or `risk:high` labels to PRs automatically.
+4. **Update the review prompt to use low/moderate/high** — Replace the binary "low / not low risk" model in `prompts/review.md` with the three-tier model. Approval policy: only low-risk PRs with no blockers may receive `APPROVE`; anything moderate or high gets `COMMENT` so a human must approve. The review agent consumes the incremental risk assessment output rather than re-deriving risk independently.
+
+5. **Risk label workflow** — A thin reusable workflow that consumes the incremental agent's output and applies `risk:low`, `risk:moderate`, or `risk:high` labels to PRs automatically.
 
 ### Out of scope
 
 - Deterministic file-pattern-based risk classification. Not useful in practice.
-- Risk-gated approval enforcement (status checks that block merge based on tier). Natural follow-on once the agent is proven.
 - Deployment gate workflows. Depends on per-repo CD pipeline structure.
 - Non-technical risk categories (Reputational, Contractual, Regulatory, etc.) from the policy.
 
 ### Metrics
 
 - **Coverage**: percentage of PRs across Foxglove repos that receive an automated risk assessment.
-- **Follow-up rate**: percentage of moderate/high risk assessments that result in a tracked follow-up action.
-- **Review efficiency**: change in time-to-first-human-review for moderate and high PRs after risk labels and follow-up actions ship.
+- **Follow-up rate**: percentage of initial assessments and net-new incremental findings that result in a tracked Linear issue with a due date.
+- **Review efficiency**: change in time-to-first-human-review for moderate and high PRs after risk assessment informs the review agent's approval decisions.
 
 ## Potential risks, dependencies & blockers
 
-- Running an additional AI agent per PR adds cost and latency. Need to evaluate whether the risk assessment agent can share a workflow run with the existing review agent or must run separately.
-- Updating the review prompt from binary to three-tier changes approval behavior. Needs careful rollout — a miscalibrated moderate threshold could either auto-approve things that shouldn't be or create unnecessary friction.
-- Follow-up action format needs to align with whatever the infra repo is already producing so we don't end up with two competing formats.
+- Running an additional AI agent per PR adds cost and latency. Need to evaluate whether the incremental risk assessment can share a workflow run with the existing review agent or must run separately.
+- The incremental agent depends on a risk assessment doc existing in the repo. Repos that haven't done an initial assessment yet will have no baseline — the incremental agent needs a sensible fallback (e.g., treat everything as moderate until an initial assessment is completed).
+- Linear integration requires API access from GitHub Actions. Need to ensure the reusable workflow can accept a Linear API token as a secret.
