@@ -54,9 +54,10 @@ This replaces the idea of a deterministic file-pattern classifier — experience
 
 ### Metrics
 
-- **Coverage**: percentage of PRs across Foxglove repos that receive an automated risk assessment.
+- **Initial coverage**: percentage of products and tools with a documented initial risk assessment.
+- **Incremental coverage**: percentage of PRs across Foxglove repos that receive an automated incremental risk assessment.
 - **Follow-up rate**: percentage of initial assessments and net-new incremental findings that result in a tracked Linear issue with a due date.
-- **Review efficiency**: change in time-to-first-human-review for moderate and high PRs after risk assessment informs the review agent's approval decisions.
+- **Agent approval rate**: change in the rate at which the review agent approves PRs once risk assessment informs its approval decisions.
 
 ## Potential risks, dependencies & blockers
 
