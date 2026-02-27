@@ -6,11 +6,11 @@ Our [Risk Management Policy](https://www.notion.so/foxglovehq/Risk-Management-Po
 
 ## Context
 
-Today the AI review prompt (`prompts/review.md`) is the only place risk classification happens. It tells Claude when to `APPROVE` vs `COMMENT`, but the result is buried in a natural-language review — no other workflow can consume it. Repositories cannot customize risk rules without forking the prompt, and there is no way to require additional approvals or gate deployments based on risk level.
+Today the AI review prompt ([`prompts/review.md#L33-L72`](https://github.com/foxglove/actions/blob/d7ac809e519261864e315a2d8d15ea3daa3a4701/prompts/review.md#L33-L72)) is the only place risk classification happens. It tells Claude when to `APPROVE` vs `COMMENT`, but the result is buried in a natural-language review — no other workflow can consume it. Repositories cannot customize risk rules without forking the prompt, and there is no way to require additional approvals or gate deployments based on risk level.
 
-We recently shipped a machine-readable risk assessment format in the infra repo that aligns with the Risk Management Policy's three-tier model. That work validates the format and proves it out in one repo — the next step is extracting it into reusable actions here so every Foxglove repo can adopt the same structured risk assessment without reimplementing it.
+We recently shipped a [machine-readable risk assessment format in the infra repo](https://github.com/foxglove/infra/pull/923) that aligns with the Risk Management Policy's three-tier model. That work validates the format and proves it out in one repo — the next step is extracting it into reusable actions here so every Foxglove repo can adopt the same structured risk assessment without reimplementing it.
 
-The Risk Management Policy scores risk as likelihood (1-3) x impact (1-3) and maps the product to three tiers:
+The [Risk Management Policy appendix](https://www.notion.so/foxglovehq/Risk-Management-Policy-96c7f18abfe04fc1a796fcdf9ecf1c5d?source=copy_link#7bb90e829e89475fb9a8096eb689e25c) scores risk as likelihood (1-3) x impact (1-3) and maps the product to three tiers:
 
 | Score | Tier | Definition |
 |-------|------|------------|
