@@ -28,33 +28,33 @@ The current prompt's criteria map onto those tiers as follows:
 
 ## Solution
 
-Build a deterministic risk classifier and update the AI review so that every PR gets a structured, three-tier risk assessment aligned to the Risk Management Policy. Expose the result as a reusable action other workflows can consume for labeling, approval gating, and deployment control.
+Build a reusable AI agent risk assessor that runs on every PR, identifies net-new risks introduced by the change, classifies them using the policy's three-tier model, and creates follow-up actions for any moderate or high risks. This replaces the idea of a deterministic file-pattern classifier — experience over the past week has shown that heuristics like `private: true`, file paths, and directory conventions are poor proxies for actual risk. The agent can reason about what a change *does*, not just what files it touches.
 
 ### Scope
 
-1. **Deterministic risk classifier action** — A composite action that analyzes the PR diff against configurable file-path patterns (e.g., `**/migrations/**` = high, `**/components/**` = moderate, `docs/**` = low), checks `package.json` for `private: true`, and outputs a structured risk level plus a list of detected signals. Ships with sensible defaults derived from the policy; repos can override via `.github/risk-assessment.yml`.
+1. **Risk assessment agent action** — A reusable workflow that runs an AI agent on each PR. The agent reads the diff, evaluates it against the Risk Management Policy's likelihood × impact framework, and produces a structured risk assessment: tier (low/moderate/high), identified risk signals, and reasoning. For any net-new moderate or high risks, the agent creates follow-up actions (e.g., GitHub issues, review comments with required mitigations) so risks are tracked and addressed rather than just flagged.
 
-2. **Update the AI review prompt to use low/moderate/high** — Replace the binary "low / not low risk" model in `prompts/review.md` with the three-tier model. Update the approval policy so Claude uses the tiers to decide `APPROVE` vs `COMMENT`. Add a structured output block (HTML comment in the review body) so the risk assessment is machine-readable.
+2. **Risk assessment prompt** — A dedicated prompt (separate from the review prompt) that grounds the agent in the Risk Management Policy. Defines what constitutes a net-new risk, how to score likelihood and impact, and what follow-up actions to create for each tier. Lives in `prompts/risk-assessment.md` alongside the existing `prompts/review.md`.
 
-3. **Inject deterministic risk context into the AI review** — Run the classifier before the Claude review and pass its output as `CONTEXT.risk_assessment`. The deterministic classifier sets a floor; Claude can upgrade the tier but not downgrade it. This makes the AI review faster (less re-derivation) and provides a risk assessment even when the AI review is skipped or fails.
+3. **Update the review prompt to use low/moderate/high** — Replace the binary "low / not low risk" model in `prompts/review.md` with the three-tier model. Update the approval policy so Claude uses the tiers to decide `APPROVE` vs `COMMENT`. The review agent consumes the risk assessment output rather than re-deriving risk independently.
 
-4. **Risk label workflow** — A thin reusable workflow that consumes the classifier output and applies `risk:low`, `risk:moderate`, or `risk:high` labels to PRs automatically.
+4. **Risk label workflow** — A thin reusable workflow that consumes the agent's risk assessment output and applies `risk:low`, `risk:moderate`, or `risk:high` labels to PRs automatically.
 
 ### Out of scope
 
-- Risk-gated approval enforcement (status checks that block merge based on tier). Natural follow-on once the classifier is proven.
+- Deterministic file-pattern-based risk classification. Not useful in practice.
+- Risk-gated approval enforcement (status checks that block merge based on tier). Natural follow-on once the agent is proven.
 - Deployment gate workflows. Depends on per-repo CD pipeline structure.
-- Dynamic PR checklists scaled to risk tier.
 - Non-technical risk categories (Reputational, Contractual, Regulatory, etc.) from the policy.
 
 ### Metrics
 
-- **Coverage**: percentage of PRs across Foxglove repos that receive an automated risk classification.
-- **Accuracy**: rate at which the AI review agrees with the deterministic classifier's tier (measured by comparing the classifier output to Claude's structured risk output on the same PR).
-- **Review efficiency**: change in time-to-first-human-review for moderate and high PRs after labels ship (do labels help reviewers prioritize?).
+- **Coverage**: percentage of PRs across Foxglove repos that receive an automated risk assessment.
+- **Follow-up rate**: percentage of moderate/high risk assessments that result in a tracked follow-up action.
+- **Review efficiency**: change in time-to-first-human-review for moderate and high PRs after risk labels and follow-up actions ship.
 
 ## Potential risks, dependencies & blockers
 
-- The deterministic classifier is weakest in the **moderate** tier. File-path patterns can flag UI and API files, but cannot determine whether a change is actually customer-facing or breaking. The AI review is the backstop, but if it fails or is skipped, moderate-tier accuracy will be lower.
+- Running an additional AI agent per PR adds cost and latency. Need to evaluate whether the risk assessment agent can share a workflow run with the existing review agent or must run separately.
 - Updating the review prompt from binary to three-tier changes approval behavior. Needs careful rollout — a miscalibrated moderate threshold could either auto-approve things that shouldn't be or create unnecessary friction.
-- The classifier depends on repos having consistent directory conventions (e.g., migrations in a `migrations/` directory). Repos with non-standard layouts will need overrides from day one.
+- Follow-up action format needs to align with whatever the infra repo is already producing so we don't end up with two competing formats.
