@@ -37,15 +37,11 @@ This replaces the idea of a deterministic file-pattern classifier — experience
 
 ### Scope
 
-1. **Initial risk assessment agent** — A reusable workflow for comprehensive risk assessment of new products, tools, or systems. The agent evaluates the subject against the policy's likelihood x impact framework across all risk categories, produces a structured risk assessment artifact (committed to the repo alongside what it's assessing, not buried in infra), and creates Linear issues with due dates for any moderate or high follow-ups.
+1. **Initial risk assessment agent** — A dedicated prompt, agent, and reusable workflow for comprehensive risk assessment of new products, tools, or systems. Triggered ad-hoc (e.g., `workflow_dispatch`) when needed. The agent evaluates the subject against the policy's likelihood x impact framework across all risk categories, produces a structured risk assessment artifact (committed to the repo alongside what it's assessing, not buried in infra), and creates Linear issues with due dates for any moderate or high follow-ups. Prompt lives in `prompts/risk-assessment.md`.
 
-2. **Incremental risk assessment agent** — A reusable workflow that runs on each PR. The agent reads the diff and the repo's existing risk assessment doc, evaluates whether the change introduces net-new risks, and outputs a risk tier (low/moderate/high). New findings should be rare — most PRs operate within the risk profile already documented. When net-new risks are found, the agent creates Linear issues with due dates.
+2. **Update the review prompt for incremental risk assessment** — Fold incremental risk assessment into the existing `prompts/review.md`. Replace the binary "low / not low risk" model with the three-tier model. The review agent reads the repo's existing risk assessment doc, evaluates whether the PR introduces net-new risks, and outputs a risk tier. New findings should be rare — most PRs operate within the risk profile already documented. When net-new risks are found, the agent creates Linear issues with due dates. Approval policy: only low-risk PRs with no blockers may receive `APPROVE`; anything moderate or high gets `COMMENT` so a human must approve.
 
-3. **Risk assessment prompt** — A dedicated prompt (separate from the review prompt) grounded in the Risk Management Policy. Covers both initial and incremental modes: what constitutes a net-new risk, how to score likelihood and impact, when to create Linear follow-ups vs when to simply inform the review tier. Lives in `prompts/risk-assessment.md` alongside the existing `prompts/review.md`.
-
-4. **Update the review prompt to use low/moderate/high** — Replace the binary "low / not low risk" model in `prompts/review.md` with the three-tier model. Approval policy: only low-risk PRs with no blockers may receive `APPROVE`; anything moderate or high gets `COMMENT` so a human must approve. The review agent consumes the incremental risk assessment output rather than re-deriving risk independently.
-
-5. **Risk label workflow** — A thin reusable workflow that consumes the incremental agent's output and applies `risk:low`, `risk:moderate`, or `risk:high` labels to PRs automatically.
+3. **Risk label workflow** — A thin reusable workflow that consumes the review agent's risk tier output and applies `risk:low`, `risk:moderate`, or `risk:high` labels to PRs automatically.
 
 ### Out of scope
 
