@@ -51,7 +51,6 @@ This replaces the idea of a deterministic file-pattern classifier — experience
 
 - Deterministic file-pattern-based risk classification. Not useful in practice.
 - Deployment gate workflows. Depends on per-repo CD pipeline structure.
-- Non-technical risk categories (Reputational, Contractual, Regulatory, etc.) from the policy.
 
 ### Metrics
 
