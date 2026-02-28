@@ -167,11 +167,7 @@ For any PR that touches user-facing behavior, apply the full product lens:
 - REST semantics, status codes, schema/request/response clarity, public vs internal surface
 - Config hygiene: centralized env/config, explicit naming and units
 - Comment quality: ask for _why_ on non-obvious logic, invariants, perf decisions
-- Migration and rollout risks: deployments are not instantaneous — database migrations, backend services, and frontend assets roll out at different times. A single PR must not bundle changes that span these layers when the later-deployed layer depends on the earlier one. During the rollout window, a newly deployed frontend may call an older backend that doesn't yet support the new request shapes or endpoints, and a newly deployed backend may run against a database whose schema hasn't been migrated yet.
-  - **Database migrations** must be in their own PR. Merge and fully deploy the migration before merging any backend code that depends on the new schema.
-  - **Backend / API changes** must be in their own PR. Merge and fully deploy the backend before merging any frontend code that depends on new or changed endpoints, response shapes, or behaviors.
-  - **Frontend changes** that depend on backend work should only be merged after the backend PR is deployed.
-  - Flag as a blocker any PR that combines changes across two or more of these layers (database, backend, frontend) when there is a runtime dependency between them. Additive, backwards-compatible changes (e.g., a new nullable column with a default, or a new endpoint that nothing calls yet) may coexist with other layers only if the deploy order cannot cause breakage.
+- Deployment ordering: frontend and backend changes do not deploy simultaneously — a newly deployed frontend may make requests to an older backend that doesn't yet support them. Frontend changes that depend on new or changed backend endpoints, response shapes, or behaviors must be in a separate PR, merged only after the backend PR is deployed. Flag as a blocker any PR that bundles both sides of such a dependency.
 
 ## Output Format
 
