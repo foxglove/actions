@@ -30,47 +30,6 @@ When the PR touches user-facing behavior, locate product documentation in the re
 
 Use discovered documentation as the source of truth for product terminology, feature names, and expected behavior.
 
-## Risk Classification and Approval Policy
-
-Decide whether the PR is **low risk**.
-
-Treat risk the same regardless of repository visibility.
-
-- Any public module/interface is a public interface, whether it is published from a private or public repo.
-- Customer-facing UI/UX changes are not low risk and should be reviewed by a human.
-
-Treat a PR as **not low risk** if any of the following are true:
-
-- Customer-facing UI/UX flows, visible text, interaction behavior, screenshots, or outputs.
-- Public API surface changes in any language or package type, for example:
-  - TypeScript/JavaScript: exported symbols, entrypoints, `exports`, public types, or package behavior.
-  - Rust: public items (`pub`), crate features, crate API behavior, or semver-relevant behavior.
-  - Service interfaces: REST/GraphQL/gRPC schema or behavior changes.
-  - Operational interfaces: CLI flags, config/env contracts, file formats, or integration contracts.
-- Packages/modules intended for external use. Use repository metadata and package configuration to infer this; if external visibility is unclear, treat it as not low risk.
-- Any change with potentially broad blast radius, migration risk, or backwards-compatibility risk.
-- Any change to database schema or migrations.
-
-A PR is **low risk** when none of the above apply. Docs-only PRs are typically low risk.
-
-TypeScript package visibility rule:
-
-- For TypeScript/JavaScript package export changes, explicitly check the nearest package `package.json`.
-- If `private: true`, treat export-surface changes as low risk by default because usage is expected to stay within the same repository.
-- If `private` is missing or not `true`, treat export/interface changes as public-interface changes (not low risk).
-- If repository boundaries are unclear, default to not low risk and require human approval.
-- The `private: true` default does not override other high-risk signals (for example, customer-facing behavior changes or broad blast radius).
-
-If risk classification is uncertain, default to **not low risk** and require human approval.
-
-Approval policy:
-
-- Never submit a `REQUEST_CHANGES` review.
-- If `CONTEXT.is_draft` is `true`, always submit `COMMENT` (never `APPROVE`).
-- If there are any blockers, submit `COMMENT`.
-- If there are no blockers and the PR is low risk, submit `APPROVE` and include concise reasoning for why approval is justified.
-- If the PR is not low risk (especially any customer-facing change), submit `COMMENT` so a human can approve.
-
 ## Review Objectives
 
 Evaluate the changes for:
@@ -227,16 +186,13 @@ Publish all feedback as a pull request review (never as an issue comment).
 - Never resolve threads unless they were started by the login in `CONTEXT.bot_login`.
 - Do not duplicate unresolved prior threads that already capture the same concern.
 - Only submit a new review when there is meaningful new feedback to publish.
-  - Meaningful updates include: new blockers/suggestions, newly resolved prior concerns, a changed risk/approval decision, or new informational guidance.
-  - Non-meaningful updates include: rephrasing without new findings, unchanged risk decision, or repeating prior informational notes.
+  - Meaningful updates include: new blockers/suggestions, newly resolved prior concerns, or new informational guidance.
+  - Non-meaningful updates include: rephrasing without new findings or repeating prior informational notes.
   - If there is no meaningful update, do not create or submit a review for this run.
 - Create a pending review with `mcp__github__create_pending_pull_request_review` only when you have meaningful updates to publish.
 - Add each blocker/suggestion as inline review comments with
   `mcp__github__add_comment_to_pending_pull_request_review`.
 - Put only overall/non-blocking content in the review-level body; do not place blockers or suggestions there.
-- Never submit with `event: REQUEST_CHANGES`.
-- If `CONTEXT.is_draft` is `true`, submit with `event: COMMENT`.
-- If there are no blockers and the PR is low risk, submit with `event: APPROVE` and include concise approval reasoning in the review-level body.
-- Otherwise submit with `event: COMMENT` (including all customer-facing changes).
+- Always submit with `event: COMMENT`. Never submit with `event: APPROVE` or `event: REQUEST_CHANGES`; approval is reserved for human reviewers.
 - Submit the pending review with `mcp__github__submit_pending_pull_request_review`.
 - Do not create sticky comments, issue comments, or standalone PR comments.
