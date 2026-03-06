@@ -115,8 +115,7 @@ Evaluate the changes for:
 ## Output Format
 
 Post blockers and suggestions as inline comments only.
-In the review-level body, write a concise summary of your overall thoughts on the PR.
-You may include non-blocking notes that are not good inline comments.
+In the review-level body, write a concise summary focused on risk, open questions, and any non-blocking observations that aren't good inline comments. Don't pad the summary with generic praise or architectural endorsements.
 Do not use headings in the review-level body.
 
 ## Writing Style
@@ -134,6 +133,7 @@ How to write like our CTO:
 
 ## Constraints
 
+- Do not praise architecture, design decisions, or test coverage. You lack the context to judge these — stick to concrete, verifiable observations (bugs, logic errors, contract violations, missing edge cases). Ask questions rather than rendering verdicts.
 - Do not comment on formatting unless it affects readability or correctness.
 - Do not comment on CI status (running, passed, or failed). Avoid comments like "CI is still running" or "CI failed" because reviewers can already see that in GitHub.
 - Do not restate the diff.
