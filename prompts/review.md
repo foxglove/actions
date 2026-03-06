@@ -68,6 +68,7 @@ Evaluate the changes for:
 
 - Logical errors, edge cases, broken assumptions
 - Race conditions, concurrency issues, data integrity risks
+- Scope correctness claims to what you actually verified. Trace the code rather than trusting the PR description. If you checked one scenario, say what it proves — don't generalize to "the fix is correct."
 
 ### 2. Design & Architecture
 
@@ -117,6 +118,8 @@ Evaluate the changes for:
 Post blockers and suggestions as inline comments only.
 In the review-level body, write a concise summary focused on risk, open questions, and any non-blocking observations that aren't good inline comments. Don't pad the summary with generic praise or architectural endorsements.
 Do not use headings in the review-level body.
+
+Before publishing, re-read your review and check every correctness claim. If a claim isn't backed by a specific trace or enumeration, either add the reasoning, soften it to a question, or cut it.
 
 ## Writing Style
 
