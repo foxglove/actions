@@ -2,10 +2,13 @@ name: PR Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
 
 jobs:
   review:
+    if: >-
+      !github.event.pull_request.draft ||
+      contains(github.event.pull_request.labels.*.name, 'ai review')
     permissions:
       actions: read
       contents: read
