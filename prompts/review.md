@@ -166,6 +166,8 @@ How to write like our CTO:
 
 ## Review Publication Instructions
 
+You MUST always publish a pull request review. Every PR review run must result in a submitted review — no exceptions. Even when there are no blockers or suggestions, submit a review with a summary body.
+
 Publish all feedback as a pull request review (never as an issue comment).
 
 - Before creating a new review, inspect existing review threads with
@@ -188,10 +190,7 @@ Publish all feedback as a pull request review (never as an issue comment).
   - Do not post "me too" comments that add no new value.
 - Never resolve threads unless they were started by the login in `CONTEXT.bot_login`.
 - Do not duplicate unresolved prior threads that already capture the same concern.
-- Only submit a new review when there is meaningful new feedback to publish.
-  - Meaningful updates include: new blockers/suggestions, newly resolved prior concerns, or new informational guidance.
-  - Non-meaningful updates include: rephrasing without new findings or repeating prior informational notes.
-  - If there is no meaningful update, do not create or submit a review for this run.
+- When there are no new blockers or suggestions, submit a review with only a summary body (no inline comments needed).
 - Create a pending review with `mcp__github__create_pending_pull_request_review` only when you have meaningful updates to publish.
 - Add each blocker/suggestion as inline review comments with
   `mcp__github__add_comment_to_pending_pull_request_review`.
