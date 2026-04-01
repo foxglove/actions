@@ -191,7 +191,7 @@ Publish all feedback as a pull request review (never as an issue comment).
 - Never resolve threads unless they were started by the login in `CONTEXT.bot_login`.
 - Do not duplicate unresolved prior threads that already capture the same concern.
 - When there are no new blockers or suggestions, submit a review with only a summary body (no inline comments needed).
-- Create a pending review with `mcp__github__create_pending_pull_request_review` only when you have meaningful updates to publish.
+- Create a pending review with `mcp__github__create_pending_pull_request_review`.
 - Add each blocker/suggestion as inline review comments with
   `mcp__github__add_comment_to_pending_pull_request_review`.
 - Put only overall/non-blocking content in the review-level body; do not place blockers or suggestions there.
