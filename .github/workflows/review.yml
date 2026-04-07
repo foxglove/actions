@@ -160,7 +160,7 @@ jobs:
             --model claude-opus-4-6
             --allowedTools "${{ env.CLAUDE_ALLOWED_TOOLS }}"
 
-      - name: Fail if all attempts failed
+      - name: Verify success
         if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure' && steps.attempt3.outcome == 'failure'
         run: |
           echo "Claude review failed after 3 attempts."
