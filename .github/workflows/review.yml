@@ -38,8 +38,8 @@ jobs:
           repository: foxglove/actions
           path: .foxglove-actions
 
-      - name: Read review prompt file
-        id: prompt
+      - name: Build Claude inputs
+        id: claude-inputs
         shell: bash
         run: |
           prompt_file=".foxglove-actions/prompts/review.md"
@@ -49,8 +49,22 @@ jobs:
           fi
 
           {
-            echo "content<<EOF"
+            echo "prompt<<EOF"
+            cat <<'PROMPT_HEADER'
+            CONTEXT:
+              repo: ${{ github.repository }}
+              pr_number: ${{ github.event.pull_request.number }}
+              base_branch: ${{ github.event.pull_request.base.ref }}
+              is_draft: ${{ github.event.pull_request.draft }}
+              bot_login: claude[bot]
+
+            PROMPT_HEADER
             cat "$prompt_file"
+            echo "EOF"
+
+            echo "claude_args<<EOF"
+            echo "--model claude-opus-4-6"
+            echo "--allowedTools \"${CLAUDE_ALLOWED_TOOLS}\""
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -96,19 +110,8 @@ jobs:
           use_sticky_comment: false
           allowed_bots: cursor[bot]
 
-          prompt: |
-            CONTEXT:
-              repo: ${{ github.repository }}
-              pr_number: ${{ github.event.pull_request.number }}
-              base_branch: ${{ github.event.pull_request.base.ref }}
-              is_draft: ${{ github.event.pull_request.draft }}
-              bot_login: claude[bot]
-
-            ${{ steps.prompt.outputs.content }}
-
-          claude_args: |
-            --model claude-opus-4-6
-            --allowedTools "${{ env.CLAUDE_ALLOWED_TOOLS }}"
+          prompt: ${{ steps.claude-inputs.outputs.prompt }}
+          claude_args: ${{ steps.claude-inputs.outputs.claude_args }}
 
       - name: Run Claude review (attempt 2)
         id: attempt2
@@ -121,19 +124,8 @@ jobs:
           use_sticky_comment: false
           allowed_bots: cursor[bot]
 
-          prompt: |
-            CONTEXT:
-              repo: ${{ github.repository }}
-              pr_number: ${{ github.event.pull_request.number }}
-              base_branch: ${{ github.event.pull_request.base.ref }}
-              is_draft: ${{ github.event.pull_request.draft }}
-              bot_login: claude[bot]
-
-            ${{ steps.prompt.outputs.content }}
-
-          claude_args: |
-            --model claude-opus-4-6
-            --allowedTools "${{ env.CLAUDE_ALLOWED_TOOLS }}"
+          prompt: ${{ steps.claude-inputs.outputs.prompt }}
+          claude_args: ${{ steps.claude-inputs.outputs.claude_args }}
 
       - name: Run Claude review (attempt 3)
         id: attempt3
@@ -146,19 +138,8 @@ jobs:
           use_sticky_comment: false
           allowed_bots: cursor[bot]
 
-          prompt: |
-            CONTEXT:
-              repo: ${{ github.repository }}
-              pr_number: ${{ github.event.pull_request.number }}
-              base_branch: ${{ github.event.pull_request.base.ref }}
-              is_draft: ${{ github.event.pull_request.draft }}
-              bot_login: claude[bot]
-
-            ${{ steps.prompt.outputs.content }}
-
-          claude_args: |
-            --model claude-opus-4-6
-            --allowedTools "${{ env.CLAUDE_ALLOWED_TOOLS }}"
+          prompt: ${{ steps.claude-inputs.outputs.prompt }}
+          claude_args: ${{ steps.claude-inputs.outputs.claude_args }}
 
       - name: Verify success
         if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure' && steps.attempt3.outcome == 'failure'
