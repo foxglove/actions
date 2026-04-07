@@ -111,6 +111,39 @@ jobs:
           prompt: ${{ steps.claude-inputs.outputs.prompt }}
           claude_args: ${{ steps.claude-inputs.outputs.claude_args }}
 
+      - name: Clean up prior reviews (before attempt 2)
+        if: steps.attempt1.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+
+            for (const review of reviews) {
+              const reviewerLogin = review.user?.login;
+              if (reviewerLogin !== "claude[bot]" || review.state !== "PENDING") {
+                continue;
+              }
+
+              try {
+                await github.rest.pulls.deletePendingReview({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.payload.pull_request.number,
+                  review_id: review.id,
+                });
+                core.info(`Deleted pending review ${review.id} from ${reviewerLogin}`);
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                core.warning(`Failed to delete pending review ${review.id} from ${reviewerLogin}: ${message}`);
+              }
+            }
+
       - name: Run Claude review (attempt 2)
         id: attempt2
         if: steps.attempt1.outcome == 'failure'
@@ -124,6 +157,39 @@ jobs:
 
           prompt: ${{ steps.claude-inputs.outputs.prompt }}
           claude_args: ${{ steps.claude-inputs.outputs.claude_args }}
+
+      - name: Clean up prior reviews (before attempt 3)
+        if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+
+            for (const review of reviews) {
+              const reviewerLogin = review.user?.login;
+              if (reviewerLogin !== "claude[bot]" || review.state !== "PENDING") {
+                continue;
+              }
+
+              try {
+                await github.rest.pulls.deletePendingReview({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.payload.pull_request.number,
+                  review_id: review.id,
+                });
+                core.info(`Deleted pending review ${review.id} from ${reviewerLogin}`);
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                core.warning(`Failed to delete pending review ${review.id} from ${reviewerLogin}: ${message}`);
+              }
+            }
 
       - name: Run Claude review (attempt 3)
         id: attempt3
