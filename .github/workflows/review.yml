@@ -14,7 +14,8 @@ jobs:
   claude:
     if: >-
       github.event.pull_request != null &&
-      github.actor != 'dependabot[bot]'
+      github.actor != 'dependabot[bot]' &&
+      !contains(github.event.pull_request.labels.*.name, 'skip-claude-review')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
