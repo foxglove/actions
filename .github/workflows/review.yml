@@ -50,15 +50,13 @@ jobs:
 
           {
             echo "prompt<<EOF"
-            cat <<'PROMPT_HEADER'
-            CONTEXT:
-              repo: ${{ github.repository }}
-              pr_number: ${{ github.event.pull_request.number }}
-              base_branch: ${{ github.event.pull_request.base.ref }}
-              is_draft: ${{ github.event.pull_request.draft }}
-              bot_login: claude[bot]
-
-            PROMPT_HEADER
+            echo "CONTEXT:"
+            echo "  repo: ${{ github.repository }}"
+            echo "  pr_number: ${{ github.event.pull_request.number }}"
+            echo "  base_branch: ${{ github.event.pull_request.base.ref }}"
+            echo "  is_draft: ${{ github.event.pull_request.draft }}"
+            echo "  bot_login: claude[bot]"
+            echo
             cat "$prompt_file"
             echo "EOF"
 
