@@ -72,14 +72,9 @@ jobs:
         with:
           github-token: ${{ github.token }}
           script: |
-            const path = require("node:path");
-            const cleanupPendingReviews = require(path.join(
-              process.env.GITHUB_WORKSPACE,
-              ".foxglove-actions",
-              ".github",
-              "scripts",
-              "cleanup-pending-reviews.js",
-            ));
+            const cleanupPendingReviews = require(
+              `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/cleanup-pending-reviews.js`,
+            );
             await cleanupPendingReviews({ github, context, core });
 
       - name: Run Claude review (attempt 1)
@@ -101,14 +96,9 @@ jobs:
         with:
           github-token: ${{ github.token }}
           script: |
-            const path = require("node:path");
-            const cleanupPendingReviews = require(path.join(
-              process.env.GITHUB_WORKSPACE,
-              ".foxglove-actions",
-              ".github",
-              "scripts",
-              "cleanup-pending-reviews.js",
-            ));
+            const cleanupPendingReviews = require(
+              `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/cleanup-pending-reviews.js`,
+            );
             await cleanupPendingReviews({ github, context, core });
 
       - name: Run Claude review (attempt 2)
@@ -131,14 +121,9 @@ jobs:
         with:
           github-token: ${{ github.token }}
           script: |
-            const path = require("node:path");
-            const cleanupPendingReviews = require(path.join(
-              process.env.GITHUB_WORKSPACE,
-              ".foxglove-actions",
-              ".github",
-              "scripts",
-              "cleanup-pending-reviews.js",
-            ));
+            const cleanupPendingReviews = require(
+              `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/cleanup-pending-reviews.js`,
+            );
             await cleanupPendingReviews({ github, context, core });
 
       - name: Run Claude review (attempt 3)
