@@ -109,7 +109,7 @@ jobs:
 
       - name: Run Claude review
         if: steps.check-success.outcome != 'success'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@v1.0.88
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: false
