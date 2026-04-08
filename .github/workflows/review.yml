@@ -17,7 +17,7 @@ jobs:
       github.actor != 'dependabot[bot]' &&
       !contains(github.event.pull_request.labels.*.name, 'skip-claude-review')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     env:
       CLAUDE_ALLOWED_TOOLS: "Read,Glob,Grep,mcp__github__pull_request_read,mcp__github__pull_request_review_write,mcp__github__add_comment_to_pending_review,mcp__github__add_reply_to_pull_request_comment,mcp__github__get_pull_request,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_pull_request_review,mcp__github__submit_pending_pull_request_review,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*)"
     permissions:
@@ -25,41 +25,22 @@ jobs:
       contents: read
       pull-requests: write
       id-token: write
-    continue-on-error: true
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        attempt: [1, 2, 3]
 
     steps:
-      - name: Check if already succeeded
-        id: check-success
-        uses: actions/download-artifact@v4
-        with:
-          name: review-success-marker
-        continue-on-error: true
-
-      - name: Skip notice
-        if: steps.check-success.outcome == 'success'
-        run: echo "✅ Previous attempt succeeded — skipping this attempt."
-
       - name: Checkout project repository
-        if: steps.check-success.outcome != 'success'
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Checkout workflow repository
-        if: steps.check-success.outcome != 'success'
         uses: actions/checkout@v6
         with:
           repository: foxglove/actions
           path: .foxglove-actions
+          ref: ${{ github.repository == 'foxglove/actions' && github.sha || 'main' }}
 
-      - name: Read review prompt file
-        if: steps.check-success.outcome != 'success'
-        id: prompt
+      - name: Build Claude inputs
+        id: claude-inputs
         shell: bash
         run: |
           prompt_file=".foxglove-actions/prompts/review.md"
@@ -69,46 +50,36 @@ jobs:
           fi
 
           {
-            echo "content<<EOF"
+            echo "prompt<<__CLAUDE_PROMPT__"
+            echo "CONTEXT:"
+            echo "  repo: ${{ github.repository }}"
+            echo "  pr_number: ${{ github.event.pull_request.number }}"
+            echo "  base_branch: ${{ github.event.pull_request.base.ref }}"
+            echo "  is_draft: ${{ github.event.pull_request.draft }}"
+            echo "  bot_login: claude[bot]"
+            echo
             cat "$prompt_file"
-            echo "EOF"
+            echo "__CLAUDE_PROMPT__"
+
+            echo "claude_args<<__CLAUDE_ARGS__"
+            echo "--model claude-opus-4-6"
+            echo "--allowedTools \"${CLAUDE_ALLOWED_TOOLS}\""
+            echo "__CLAUDE_ARGS__"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Clean up prior reviews
-        if: steps.check-success.outcome != 'success'
+      - name: Clean up prior reviews (before attempt 1)
         uses: actions/github-script@v7
         with:
           github-token: ${{ github.token }}
           script: |
-            const reviews = await github.paginate(github.rest.pulls.listReviews, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number,
-              per_page: 100,
-            });
+            const cleanupPendingReviews = require(
+              `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/cleanup-pending-reviews.js`,
+            );
+            await cleanupPendingReviews({ github, context, core });
 
-            for (const review of reviews) {
-              const reviewerLogin = review.user?.login;
-              if (reviewerLogin !== "claude[bot]" || review.state !== "PENDING") {
-                continue;
-              }
-
-              try {
-                await github.rest.pulls.deletePendingReview({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: context.payload.pull_request.number,
-                  review_id: review.id,
-                });
-                core.info(`Deleted pending review ${review.id} from ${reviewerLogin}`);
-              } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                core.warning(`Failed to delete pending review ${review.id} from ${reviewerLogin}: ${message}`);
-              }
-            }
-
-      - name: Run Claude review
-        if: steps.check-success.outcome != 'success'
+      - name: Run Claude review (attempt 1)
+        id: attempt1
+        continue-on-error: true
         uses: anthropics/claude-code-action@v1.0.88
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -116,39 +87,61 @@ jobs:
           use_sticky_comment: false
           allowed_bots: cursor[bot]
 
-          prompt: |
-            CONTEXT:
-              repo: ${{ github.repository }}
-              pr_number: ${{ github.event.pull_request.number }}
-              base_branch: ${{ github.event.pull_request.base.ref }}
-              is_draft: ${{ github.event.pull_request.draft }}
-              bot_login: claude[bot]
+          prompt: ${{ steps.claude-inputs.outputs.prompt }}
+          claude_args: ${{ steps.claude-inputs.outputs.claude_args }}
 
-            ${{ steps.prompt.outputs.content }}
-
-          claude_args: |
-            --model claude-opus-4-6
-            --allowedTools "${{ env.CLAUDE_ALLOWED_TOOLS }}"
-
-      - name: Create success marker
-        if: steps.check-success.outcome != 'success' && success()
-        run: echo "success" > success-marker.txt
-
-      - name: Upload success marker
-        if: steps.check-success.outcome != 'success' && success()
-        uses: actions/upload-artifact@v4
+      - name: Clean up prior reviews (before attempt 2)
+        if: steps.attempt1.outcome == 'failure'
+        uses: actions/github-script@v7
         with:
-          name: review-success-marker
-          path: success-marker.txt
-          retention-days: 1
+          github-token: ${{ github.token }}
+          script: |
+            const cleanupPendingReviews = require(
+              `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/cleanup-pending-reviews.js`,
+            );
+            await cleanupPendingReviews({ github, context, core });
 
-  review-result:
-    runs-on: ubuntu-latest
-    needs: claude
-    permissions:
-      actions: read
-    steps:
-      - name: Download success marker
-        uses: actions/download-artifact@v4
+      - name: Run Claude review (attempt 2)
+        id: attempt2
+        if: steps.attempt1.outcome == 'failure'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1.0.88
         with:
-          name: review-success-marker
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: false
+          use_sticky_comment: false
+          allowed_bots: cursor[bot]
+
+          prompt: ${{ steps.claude-inputs.outputs.prompt }}
+          claude_args: ${{ steps.claude-inputs.outputs.claude_args }}
+
+      - name: Clean up prior reviews (before attempt 3)
+        if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const cleanupPendingReviews = require(
+              `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/cleanup-pending-reviews.js`,
+            );
+            await cleanupPendingReviews({ github, context, core });
+
+      - name: Run Claude review (attempt 3)
+        id: attempt3
+        if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1.0.88
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: false
+          use_sticky_comment: false
+          allowed_bots: cursor[bot]
+
+          prompt: ${{ steps.claude-inputs.outputs.prompt }}
+          claude_args: ${{ steps.claude-inputs.outputs.claude_args }}
+
+      - name: Verify success
+        if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure' && steps.attempt3.outcome == 'failure'
+        run: |
+          echo "Claude review failed after 3 attempts."
+          exit 1
