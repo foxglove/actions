@@ -50,7 +50,7 @@ jobs:
           fi
 
           {
-            echo "prompt<<EOF"
+            echo "prompt<<__CLAUDE_PROMPT__"
             echo "CONTEXT:"
             echo "  repo: ${{ github.repository }}"
             echo "  pr_number: ${{ github.event.pull_request.number }}"
@@ -59,12 +59,12 @@ jobs:
             echo "  bot_login: claude[bot]"
             echo
             cat "$prompt_file"
-            echo "EOF"
+            echo "__CLAUDE_PROMPT__"
 
-            echo "claude_args<<EOF"
+            echo "claude_args<<__CLAUDE_ARGS__"
             echo "--model claude-opus-4-6"
             echo "--allowedTools \"${CLAUDE_ALLOWED_TOOLS}\""
-            echo "EOF"
+            echo "__CLAUDE_ARGS__"
           } >> "$GITHUB_OUTPUT"
 
       - name: Clean up prior reviews
