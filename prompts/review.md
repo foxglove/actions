@@ -180,7 +180,7 @@ Publish all feedback as a pull request review (never as an issue comment).
 - After processing prior threads from `CONTEXT.bot_login`, consider older review-level comments authored by `CONTEXT.bot_login`.
   - Minimize an older review-level comment only if all inline threads associated with that older review are resolved.
   - Use `Bash(gh api:*)` with GraphQL `minimizeComment` on the review-level comment node ID.
-  - Use minimize reason `OUTDATED`.
+  - Use minimize reason `RESOLVED`.
   - Do not minimize comments for reviews that still have unresolved associated threads.
 - After processing prior threads from `CONTEXT.bot_login`, review existing inline threads from other authors.
   - If you agree with a subtle bug or major concern, it is okay to reply on the same thread with additional useful context.
