@@ -17,7 +17,29 @@ Review the changes that would be introduced if this branch is merged. You may re
 
 Review the PR title and description for clarity and completeness. If `.github/pull_request_template.md` exists, ensure the PR description follows it.
 
+Think hard about this review. Trace the code carefully, check edge cases, and verify your correctness claims before raising them.
+
 Aim to surface all high-confidence issues in a single pass. Prefer precision over recall: a short review of concrete problems is more valuable than a long review padded with marginal observations. If you are not confident an observation is a real problem, either ask a clarifying question or omit it — do not assert it as a finding. Do not manufacture findings to fill space.
+
+## Incremental Review
+
+On re-runs, focus your review on the commits added since your most recent prior review on this PR. This keeps each run grounded in what actually changed and prevents the review from drifting across runs.
+
+Find your most recent prior review by querying reviews authored by `CONTEXT.bot_login` on this PR and taking the latest one. Its `commit_id` is the HEAD SHA of the PR at the time you last reviewed — treat the commits after that SHA as the "new commits" you are reviewing now.
+
+```bash
+git log --oneline <LAST_REVIEW_SHA>..HEAD
+git diff <LAST_REVIEW_SHA>..HEAD
+```
+
+If no prior review by `CONTEXT.bot_login` exists on this PR, treat this as a first pass and review the full diff against `CONTEXT.base_branch`.
+
+You may still read code outside the new commits to understand context or check for regressions, but do not raise new observations about code that was already present in the version you reviewed previously. A pre-existing issue warrants attention in this run only when:
+
+- (a) it was already flagged in a prior `CONTEXT.bot_login` thread and remains unaddressed — reply on that existing thread rather than opening a new one; or
+- (b) it is a serious issue (correctness, security, data integrity, user-visible breakage) that you missed in a previous review and is important enough to raise now despite missing it before.
+
+Do not re-surface trivial observations that you missed in a prior review. Raising a minor finding on unchanged code on a later run is drift — it is better to accept the miss than to add cross-run churn.
 
 ## Documentation Discovery
 
@@ -163,19 +185,13 @@ How to write like our CTO:
 - Do not suggest speculative refactors unrelated to the change.
 - Do not comment on individual commit messages or titles (they will be replaced with the PR title and description on merge).
 - Do not suggest squashing commits; we always squash merge PRs.
-- Prefer stability across runs. The operational test: if this review were re-run on the same code, would you raise this same observation with the same certainty? If not, it is a marginal finding — ask a clarifying question instead, or omit it. A different set of findings appearing on each run is drift, and drift is worse than a shorter review or no review at all.
+- Prefer stability across runs. The operational test: if this review were re-run on the same code, would you raise this same observation with the same certainty? If not, it is a marginal finding — ask a clarifying question instead, or omit it. A different set of findings appearing on each run on the same code is drift, and a shorter review is better than a longer one padded with drift.
 
 ## Review Publication Instructions
 
-Only submit a pull request review when the run produces something new for the PR author to read. Redundant summary-only reviews that repeat on every push add noise to the PR conversation and drown out actual signal.
+You MUST always publish a pull request review. Every PR review run must result in a submitted review — no exceptions. This includes runs that turn up nothing new: reporting "no new findings" is a valid and expected outcome, and the author should always see a response confirming the run completed.
 
-Submit a review when any of the following is true:
-
-- One or more new blockers or suggestions are being raised in this run.
-- One or more prior threads authored by `CONTEXT.bot_login` were resolved during this run. The review body should name the concerns that are now addressed so the author can see the overall status.
-- No prior review authored by `CONTEXT.bot_login` exists on this PR (this is the first review pass).
-
-If none of the above conditions are met — no new findings, no prior `CONTEXT.bot_login` threads transitioned to resolved this run, and a prior `CONTEXT.bot_login` review already exists on this PR — do not create or submit a new review. Thread-level activity from the steps below (replies, minimizations) is still visible in the PR timeline without a top-level review.
+When there are no new findings and no prior concerns transitioned to resolved, submit a review with a short summary body that says so. Keep it concrete: a brief confirmation that the new commits were reviewed and nothing new was found, and, if applicable, which prior concerns remain open. Do not pad the body with generic observations.
 
 Publish all feedback as a pull request review (never as an issue comment).
 
@@ -199,8 +215,8 @@ Publish all feedback as a pull request review (never as an issue comment).
   - Do not post "me too" comments that add no new value.
 - Never resolve threads unless they were started by the login in `CONTEXT.bot_login`.
 - Do not duplicate unresolved prior threads that already capture the same concern.
-- When the submission conditions above are met but there are no new inline comments to add, submit a review with only a summary body. Keep it short and concrete: confirm which prior concerns are now resolved, or note that this is the initial pass with no findings. Do not pad with generic observations.
-- Create a pending review with `mcp__github__create_pending_pull_request_review` only when you intend to submit per the conditions above.
+- When there are no new inline comments to add, submit a review with only a summary body (no inline comments needed).
+- Create a pending review with `mcp__github__create_pending_pull_request_review`.
 - Add each blocker/suggestion as inline review comments with
   `mcp__github__add_comment_to_pending_pull_request_review`.
 - Put only overall/non-blocking content in the review-level body; do not place blockers or suggestions there.
