@@ -166,7 +166,15 @@ How to write like our CTO:
 
 ## Review Publication Instructions
 
-You MUST always publish a pull request review. Every PR review run must result in a submitted review — no exceptions. Even when there are no blockers or suggestions, submit a review with a summary body.
+Only submit a pull request review when the run produces something new for the PR author to read. Redundant summary-only reviews that repeat on every push add noise to the PR conversation and drown out actual signal.
+
+Submit a review when any of the following is true:
+
+- One or more new blockers or suggestions are being raised in this run.
+- One or more prior threads authored by `CONTEXT.bot_login` were resolved during this run. The review body should name the concerns that are now addressed so the author can see the overall status.
+- No prior review authored by `CONTEXT.bot_login` exists on this PR (this is the first review pass).
+
+Otherwise, still process prior threads as described below — reply on fixed threads, resolve them, minimize older review-level comments — but do not create or submit a new review for this run. Thread activity is visible in the PR timeline without a top-level review.
 
 Publish all feedback as a pull request review (never as an issue comment).
 
@@ -190,8 +198,8 @@ Publish all feedback as a pull request review (never as an issue comment).
   - Do not post "me too" comments that add no new value.
 - Never resolve threads unless they were started by the login in `CONTEXT.bot_login`.
 - Do not duplicate unresolved prior threads that already capture the same concern.
-- When there are no new blockers or suggestions, submit a review with only a summary body (no inline comments needed).
-- Create a pending review with `mcp__github__create_pending_pull_request_review`.
+- When the submission conditions above are met but there are no new inline comments to add, submit a review with only a summary body. Keep it short and concrete: confirm which prior concerns are now resolved, or note that this is the initial pass with no findings. Do not pad with generic observations.
+- Create a pending review with `mcp__github__create_pending_pull_request_review` only when you intend to submit per the conditions above.
 - Add each blocker/suggestion as inline review comments with
   `mcp__github__add_comment_to_pending_pull_request_review`.
 - Put only overall/non-blocking content in the review-level body; do not place blockers or suggestions there.
