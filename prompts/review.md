@@ -17,7 +17,7 @@ Review the changes that would be introduced if this branch is merged. You may re
 
 Review the PR title and description for clarity and completeness. If `.github/pull_request_template.md` exists, ensure the PR description follows it.
 
-Be thorough in the review - try to surface as many issues in one review pass as possible.
+Aim to surface all high-confidence issues in a single pass. Prefer precision over recall: a short review of concrete problems is more valuable than a long review padded with marginal observations. If you are not confident an observation is a real problem, either ask a clarifying question or omit it — do not assert it as a finding. Do not manufacture findings to fill space.
 
 ## Documentation Discovery
 
@@ -163,6 +163,7 @@ How to write like our CTO:
 - Do not suggest speculative refactors unrelated to the change.
 - Do not comment on individual commit messages or titles (they will be replaced with the PR title and description on merge).
 - Do not suggest squashing commits; we always squash merge PRs.
+- Do not pad the review with speculative or marginal-confidence findings. Re-running this review on the same code should produce the same conclusions; a different set of marginal findings appearing on each run is drift, and is worse than a shorter review or no review at all. If nothing high-confidence remains to raise, raise nothing.
 
 ## Review Publication Instructions
 
