@@ -163,7 +163,7 @@ How to write like our CTO:
 - Do not suggest speculative refactors unrelated to the change.
 - Do not comment on individual commit messages or titles (they will be replaced with the PR title and description on merge).
 - Do not suggest squashing commits; we always squash merge PRs.
-- Do not pad the review with speculative or marginal-confidence findings. Re-running this review on the same code should produce the same conclusions; a different set of marginal findings appearing on each run is drift, and is worse than a shorter review or no review at all. If nothing high-confidence remains to raise, raise nothing.
+- Prefer stability across runs. The operational test: if this review were re-run on the same code, would you raise this same observation with the same certainty? If not, it is a marginal finding — ask a clarifying question instead, or omit it. A different set of findings appearing on each run is drift, and drift is worse than a shorter review or no review at all.
 
 ## Review Publication Instructions
 
@@ -175,7 +175,7 @@ Submit a review when any of the following is true:
 - One or more prior threads authored by `CONTEXT.bot_login` were resolved during this run. The review body should name the concerns that are now addressed so the author can see the overall status.
 - No prior review authored by `CONTEXT.bot_login` exists on this PR (this is the first review pass).
 
-Otherwise, still process prior threads as described below — reply on fixed threads, resolve them, minimize older review-level comments — but do not create or submit a new review for this run. Thread activity is visible in the PR timeline without a top-level review.
+If none of the above conditions are met — no new findings, no prior `CONTEXT.bot_login` threads transitioned to resolved this run, and a prior `CONTEXT.bot_login` review already exists on this PR — do not create or submit a new review. Thread-level activity from the steps below (replies, minimizations) is still visible in the PR timeline without a top-level review.
 
 Publish all feedback as a pull request review (never as an issue comment).
 
