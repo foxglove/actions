@@ -129,6 +129,7 @@ For any PR that touches user-facing behavior, apply the full product lens:
 - Config hygiene: centralized env/config, explicit naming and units
 - Comment quality: ask for _why_ on non-obvious logic, invariants, perf decisions
 - Deployment ordering: frontend and backend changes do not deploy simultaneously. A frontend change that depends on new or changed backend endpoints, response shapes, or behaviors must be in a separate PR, merged only after the backend PR is deployed. Flag as a blocker any PR that bundles frontend and backend changes that depend on each other.
+- Database migrations: if the PR introduces database migrations, verify it does not also introduce application code that depends on those migrations having already run. Migrations are not run automatically, but deploys are, so code can deploy before the migration has been applied. Flag migration-dependent code in the same PR as a blocker unless the code is safely compatible with both the pre- and post-migration schema.
 
 ## Output Format
 
