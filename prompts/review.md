@@ -133,8 +133,18 @@ For any PR that touches user-facing behavior, apply the full product lens:
 ## Output Format
 
 Post blockers and suggestions as inline comments only.
-In the review-level body, write a concise summary focused on risk, open questions, and any non-blocking observations that aren't good inline comments. Don't pad the summary with generic praise or architectural endorsements.
-Do not use headings in the review-level body.
+Treat each review run as a distinct review round for the current head commit. The review-level body should make it easy to tell what came from the latest run versus earlier bot feedback.
+
+In the review-level body, write a concise summary focused on:
+
+- Latest review `<HEAD_SHA>`: new risks, open questions, and non-blocking observations from this run that aren't good inline comments.
+- Prior bot feedback: unresolved concerns from earlier `CONTEXT.bot_login` reviews that still apply after re-checking the current code, summarized by count or short reference rather than restated in full.
+- Resolved since prior review: earlier `CONTEXT.bot_login` concerns that this push appears to have fixed.
+
+If a category has nothing useful to say, omit it. Don't pad the summary with generic praise or architectural endorsements.
+Use short plain-text labels when they improve scanability, but do not use Markdown headings in the review-level body.
+When there are several items, include compact status and severity counts so reviewers can scan the review round quickly, for example: `Latest review <HEAD_SHA>: 2 new blockers, 1 new suggestion; prior bot feedback: 1 still applies, 3 resolved`.
+If multiple categories are involved, group the summary by product risk, correctness, security, performance, accessibility, testing, or documentation only where those labels reduce ambiguity.
 
 Before publishing, re-read your review and check every correctness claim. If a claim isn't backed by a specific trace or enumeration, either add the reasoning, soften it to a question, or cut it.
 
@@ -170,6 +180,16 @@ You MUST always publish a pull request review. Every PR review run must result i
 
 Publish all feedback as a pull request review (never as an issue comment).
 
+Treat each submitted review as the latest review round for the current head commit:
+
+- Identify the current head commit before publishing.
+- Anchor the review round to the diff under review and judge the work product, not prior session history or assumptions from older bot reviews.
+- Check whether `CONTEXT.bot_login` already submitted a review for the same head commit. If it did, do not repost the same findings; submit only genuinely new information or a compact summary that points to the existing review for that commit.
+- In the review-level body, distinguish new findings from prior unresolved bot-authored findings.
+- Do not copy older unresolved feedback into new inline comments. Reference the existing thread from the summary instead.
+- If an old concern still applies but the latest diff changes the diagnosis or reveals a new occurrence, post a new inline comment only for the new information and explicitly distinguish it from the older thread.
+- If a prior bot-authored concern is now fixed, reply to and resolve the original thread instead of announcing the fix as a new finding.
+
 - Before creating a new review, inspect existing review threads with
   `mcp__github__get_pull_request_review_comments`, and identify threads authored by
   `CONTEXT.bot_login`.
@@ -182,6 +202,12 @@ Publish all feedback as a pull request review (never as an issue comment).
   - Use `Bash(gh api:*)` with GraphQL `minimizeComment` on the review-level comment node ID.
   - Use minimize reason `RESOLVED`.
   - Do not minimize comments for reviews that still have unresolved associated threads.
+- For remaining unresolved threads authored by `CONTEXT.bot_login`, re-verify each concern against the current code and classify it for this run:
+  - Still applies: the issue exists in the current code.
+  - Fixed and resolved: the issue existed before but no longer exists.
+  - Invalid or outdated: the prior review was based on a misunderstanding, stale context, or a line that no longer maps to the current code.
+  - Superseded: the old thread is better represented by a new finding with different scope or diagnosis.
+  - Ambiguous: the current code does not prove whether the concern is resolved; mention it as an open question rather than reposting it as a fresh finding.
 - After processing prior threads from `CONTEXT.bot_login`, review existing inline threads from other authors.
   - If you agree with a subtle bug or major concern, it is okay to reply on the same thread with additional useful context.
   - If you agree with a minor issue and have no meaningful addition, do not reply.
