@@ -182,9 +182,9 @@ Publish all feedback as a pull request review (never as an issue comment).
 
 Treat each submitted review as the latest review round for the current head commit:
 
-- Identify the current head commit before publishing with `git rev-parse --short HEAD`, and substitute that short SHA anywhere `<HEAD_SHA>` appears in the review body.
+- Identify the PR head commit before publishing, using GitHub PR metadata rather than local `HEAD`, and substitute the short SHA anywhere `<HEAD_SHA>` appears in the review body. For example, use `mcp__github__get_pull_request` and read `head.sha`, or use `gh api repos/<owner>/<repo>/pulls/<number> --jq '.head.sha[:7]'`.
 - Anchor the review round to the diff under review and judge the work product, not prior session history or assumptions from older bot reviews.
-- Check whether `CONTEXT.bot_login` already submitted a review for the same head commit. If it did, skip inline comments and submit a one-line summary that points to the existing review for that commit, unless there is genuinely new context outside the unchanged diff.
+- Check whether `CONTEXT.bot_login` already submitted a review for the same head commit. If it did, skip inline comments and submit a one-line summary that points to the existing review for that commit.
 - In the review-level body, distinguish new findings from prior unresolved bot-authored findings.
 - Do not copy older unresolved feedback into new inline comments. Reference the existing thread from the summary instead.
 - If an old concern still applies but the latest diff changes the diagnosis or reveals a new occurrence, post a new inline comment only for the new information and explicitly distinguish it from the older thread.
@@ -205,8 +205,8 @@ Treat each submitted review as the latest review round for the current head comm
 - For remaining unresolved threads authored by `CONTEXT.bot_login`, re-verify each concern against the current code and classify it for this run:
   - Still applies: the issue exists in the current code.
   - Invalid or outdated: the prior review was based on a misunderstanding, stale context, or a line that no longer maps to the current code.
-  - Superseded: the old thread is better represented by a new finding with different scope or diagnosis.
-  - Ambiguous: the current code does not prove whether the concern is resolved; mention it as an open question rather than reposting it as a fresh finding.
+  - Superseded: the old thread is better represented by a new finding with different scope or diagnosis. Post the new-scope finding inline, and reference the old thread from the review-level summary.
+  - Ambiguous: the current code does not prove whether the concern is resolved; raise it as an open question in the review-level summary, not as a new inline comment.
 - After processing prior threads from `CONTEXT.bot_login`, review existing inline threads from other authors.
   - If you agree with a subtle bug or major concern, it is okay to reply on the same thread with additional useful context.
   - If you agree with a minor issue and have no meaningful addition, do not reply.
