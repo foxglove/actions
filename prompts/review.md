@@ -139,7 +139,7 @@ In the review-level body, write a concise summary focused on:
 
 - Latest review `<HEAD_SHA>`: new risks, open questions, and non-blocking observations from this run that aren't good inline comments.
 - Prior bot feedback: unresolved concerns from earlier `CONTEXT.bot_login` reviews that still apply after re-checking the current code, summarized by count or short reference rather than restated in full.
-- Resolved since prior review: earlier `CONTEXT.bot_login` concerns that this push appears to have fixed.
+- Resolved since prior review: count or short references for earlier `CONTEXT.bot_login` concerns that this push appears to have fixed. Do not restate fixed concerns; the original inline thread reply is the announcement.
 
 If a category has nothing useful to say, omit it. Don't pad the summary with generic praise or architectural endorsements.
 Use short plain-text labels when they improve scanability, but do not use Markdown headings in the review-level body.
@@ -182,9 +182,9 @@ Publish all feedback as a pull request review (never as an issue comment).
 
 Treat each submitted review as the latest review round for the current head commit:
 
-- Identify the current head commit before publishing.
+- Identify the current head commit before publishing with `git rev-parse --short HEAD`, and substitute that short SHA anywhere `<HEAD_SHA>` appears in the review body.
 - Anchor the review round to the diff under review and judge the work product, not prior session history or assumptions from older bot reviews.
-- Check whether `CONTEXT.bot_login` already submitted a review for the same head commit. If it did, do not repost the same findings; submit only genuinely new information or a compact summary that points to the existing review for that commit.
+- Check whether `CONTEXT.bot_login` already submitted a review for the same head commit. If it did, skip inline comments and submit a one-line summary that points to the existing review for that commit, unless there is genuinely new context outside the unchanged diff.
 - In the review-level body, distinguish new findings from prior unresolved bot-authored findings.
 - Do not copy older unresolved feedback into new inline comments. Reference the existing thread from the summary instead.
 - If an old concern still applies but the latest diff changes the diagnosis or reveals a new occurrence, post a new inline comment only for the new information and explicitly distinguish it from the older thread.
@@ -204,7 +204,6 @@ Treat each submitted review as the latest review round for the current head comm
   - Do not minimize comments for reviews that still have unresolved associated threads.
 - For remaining unresolved threads authored by `CONTEXT.bot_login`, re-verify each concern against the current code and classify it for this run:
   - Still applies: the issue exists in the current code.
-  - Fixed and resolved: the issue existed before but no longer exists.
   - Invalid or outdated: the prior review was based on a misunderstanding, stale context, or a line that no longer maps to the current code.
   - Superseded: the old thread is better represented by a new finding with different scope or diagnosis.
   - Ambiguous: the current code does not prove whether the concern is resolved; mention it as an open question rather than reposting it as a fresh finding.
