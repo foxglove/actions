@@ -44,6 +44,24 @@ jobs:
         shell: bash
         run: |
           prompt_file=".foxglove-actions/prompts/review.md"
+          prompt_source="foxglove/actions default"
+          repo_prompt_file=".github/foxglove-review.md"
+
+          if [ -f "$repo_prompt_file" ]; then
+            if [ "${{ github.repository }}" = "foxglove/actions" ]; then
+              echo "Repo-local review prompts are only supported in downstream private Foxglove repositories" >&2
+              exit 1
+            fi
+
+            if [ "${{ github.event.repository.private }}" != "true" ] || [ "${{ github.repository_owner }}" != "foxglove" ]; then
+              echo "Repo-local review prompts are only supported in downstream private Foxglove repositories" >&2
+              exit 1
+            fi
+
+            prompt_file="$repo_prompt_file"
+            prompt_source="$repo_prompt_file"
+          fi
+
           if [ ! -f "$prompt_file" ]; then
             echo "Missing required review prompt file: $prompt_file" >&2
             exit 1
@@ -57,6 +75,7 @@ jobs:
             echo "  base_branch: ${{ github.event.pull_request.base.ref }}"
             echo "  is_draft: ${{ github.event.pull_request.draft }}"
             echo "  bot_login: claude[bot]"
+            echo "  review_prompt_source: $prompt_source"
             echo
             cat "$prompt_file"
             echo "__CLAUDE_PROMPT__"

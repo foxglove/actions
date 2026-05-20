@@ -43,3 +43,15 @@ jobs:
 >   pull-requests: write
 >   id-token: write
 > ```
+
+## Testing Prompt Changes
+
+Pull requests in private Foxglove downstream repositories can temporarily test review prompt changes without changing their workflow file. Add a repo-local prompt file:
+
+> `.github/foxglove-review.md`
+
+When present, `review.yml` uses that file as the Claude review prompt for the pull request. If the file is absent, the workflow uses [`prompts/review.md`](prompts/review.md) from this repository.
+
+Before merging the downstream pull request, move the accepted prompt changes back to this repository and remove the repo-local prompt file unless that repository intentionally needs a permanent override.
+
+Repo-local prompts are restricted to downstream private repositories owned by `foxglove`. They only replace the prompt text; workflow code, helper scripts, action versions, and token handling continue to come from `foxglove/actions`.
