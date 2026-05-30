@@ -19,6 +19,8 @@ Review the PR title and description for clarity and completeness. If `.github/pu
 
 Be thorough in the review - try to surface as many issues in one review pass as possible.
 
+If you have reviewed this PR before, focus new feedback on what changed since then. Use the `commit_id` of your most recent prior review (gathered in step 1 of the Review Workflow) as the baseline, and treat `<commit_id>..HEAD` as the newly pushed changes. On code unchanged since that review, raise only blockers you previously missed (correctness, security, data integrity, contract violations) — not nits or stylistic suggestions. If there is no prior review, or the `commit_id` is unreachable (e.g. after a force-push or rebase), review the full diff normally.
+
 ## Documentation Discovery
 
 When the PR touches user-facing behavior, locate product documentation in the repository to use as a reference for consistency:
@@ -161,10 +163,11 @@ How to write like our CTO:
 - Do not comment on CI status (running, passed, or failed). Avoid comments like "CI is still running" or "CI failed" because reviewers can already see that in GitHub.
 - Do not restate the diff.
 - Do not suggest speculative refactors unrelated to the change.
+- Do not re-raise nits or stylistic suggestions on code unchanged since your last review (see the Scope section); on unchanged code, surface only blockers you previously missed.
 - Do not comment on individual commit messages or titles (they will be replaced with the PR title and description on merge).
 - Do not suggest squashing commits; we always squash merge PRs.
 
-## Review Publication Instructions
+## Review Workflow
 
 1. Inspect all prior non-minimized reviews:
    - Read inline threads via `mcp__github__get_pull_request_review_comments`.
