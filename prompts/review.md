@@ -168,7 +168,7 @@ How to write like our CTO:
 
 ## Review Workflow
 
-1. Inspect all prior non-minimized reviews:
+1. Inspect all prior reviews:
    - Read inline threads via `mcp__github__get_pull_request_review_comments`.
    - Read review-level bodies via `mcp__github__get_pull_request_reviews`.
 2. For each of your prior threads (`CONTEXT.bot_login`) that is now fixed:
@@ -186,7 +186,7 @@ How to write like our CTO:
 5. Publish the new review:
    - Create a pending review with `mcp__github__create_pending_pull_request_review`.
    - Add an inline comment for each new blocker/suggestion via `mcp__github__add_comment_to_pending_pull_request_review`. Only for new findings — do not open one where an unresolved thread already covers the issue.
-   - In the review body, restate any still-unaddressed items from prior review bodies, since minimizing those reviews hides them. You need not re-document still-open inline threads — they stay visible — but may summarize them (e.g., "2 new findings, plus 3 unresolved prior threads"). When there are no new findings, the body is the whole review.
+   - In the review body, restate any still-unaddressed items from prior reviews. You need not re-document still-open inline threads — they stay visible — but may summarize them (e.g., "2 new findings, plus 3 unresolved prior threads"). When there are no new findings, the body is the whole review.
    - Before submitting, re-read your review and check every correctness claim. If a claim isn't backed by a specific trace or enumeration, either add the reasoning, soften it to a question, or cut it.
    - Always submit a review — every run, no exceptions, even with no blockers or suggestions. Submit with `mcp__github__submit_pending_pull_request_review` using `event: COMMENT`; never `APPROVE` or `REQUEST_CHANGES` (approval is reserved for human reviewers).
    - Never post sticky comments, issue comments, or standalone PR comments.
