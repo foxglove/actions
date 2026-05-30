@@ -176,7 +176,7 @@ How to write like our CTO:
    - Resolve it via GraphQL: `gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{isResolved}}}' -f threadId='<THREAD_NODE_ID>'`
 3. Minimize your prior review-level comments (`CONTEXT.bot_login`):
    - Minimize every one EXCEPT those whose review still has at least one unresolved inline thread.
-   - Use `Bash(gh api:*)` with GraphQL `minimizeComment` on the review-level comment node ID, reason `OUTDATED`.
+   - Use `Bash(gh api:*)` with GraphQL `minimizeComment` on the review-level comment node ID, reason `OUTDATED`. Check `isMinimized` first and skip ones already minimized.
 4. Engage with other authors' inline threads:
    - Never resolve other authors' threads — only resolve your own (`CONTEXT.bot_login`) threads.
    - If you agree with an issue but have no meaningful addition, do not reply.
@@ -186,7 +186,7 @@ How to write like our CTO:
 5. Publish the new review:
    - Create a pending review with `mcp__github__create_pending_pull_request_review`.
    - Add an inline comment for each new blocker/suggestion via `mcp__github__add_comment_to_pending_pull_request_review`. Only for new findings — do not open one where an unresolved thread already covers the issue.
-   - In the review body, restate any still-unaddressed items from prior reviews. You need not re-document still-open inline threads — they stay visible — but may summarize them (e.g., "2 new findings, plus 3 unresolved prior threads"). When there are no new findings, the body is the whole review.
+   - In the review body, carry forward any still-unaddressed items from your prior review bodies (minimized or not). You need not re-document still-open inline threads — they stay visible — but may summarize them (e.g., "2 new findings, plus 3 unresolved prior threads"). When there are no new findings, the body is the whole review.
    - Before submitting, re-read your review and check every correctness claim. If a claim isn't backed by a specific trace or enumeration, either add the reasoning, soften it to a question, or cut it.
    - Always submit a review — every run, no exceptions, even with no blockers or suggestions. Submit with `mcp__github__submit_pending_pull_request_review` using `event: COMMENT`; never `APPROVE` or `REQUEST_CHANGES` (approval is reserved for human reviewers).
    - Never post sticky comments, issue comments, or standalone PR comments.
