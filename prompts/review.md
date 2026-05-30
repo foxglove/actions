@@ -134,9 +134,10 @@ For any PR that touches user-facing behavior, apply the full product lens:
 
 ## Output Format
 
-Post new blockers and suggestions as inline comments only.
-In the review body, write a concise summary focused on risk, open questions, and any non-blocking observations that aren't good inline comments. Don't pad the summary with generic praise or architectural endorsements.
-Do not use headings in the review body.
+- Post new blockers and suggestions as inline comments only.
+- In the review body, write a concise summary focused on risk, open questions, and any non-blocking observations that aren't good inline comments.
+- Don't pad the summary with generic praise or architectural endorsements.
+- Do not use headings in the review body.
 
 ## Writing Style
 
