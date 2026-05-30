@@ -166,31 +166,24 @@ How to write like our CTO:
 
 ## Review Publication Instructions
 
-You MUST always publish a pull request review. Every PR review run must result in a submitted review — no exceptions. Even when there are no blockers or suggestions, submit a review with a summary body.
-
-Publish all feedback as a pull request review (never as an issue comment).
-
-- Before creating a new review, inspect existing review threads with
-  `mcp__github__get_pull_request_review_comments`, and identify threads authored by
-  `CONTEXT.bot_login`.
-- If one of those prior concerns (authored by `CONTEXT.bot_login`) is now fixed:
-  - Reply on the thread with `mcp__github__add_reply_to_pull_request_comment`.
-  - Resolve the thread via GraphQL:
-    `gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{isResolved}}}' -f threadId='<THREAD_NODE_ID>'`
-- After resolving fixed threads, minimize prior review-level comments authored by `CONTEXT.bot_login`.
-  - Minimize (collapse) every prior review-level comment from `CONTEXT.bot_login` EXCEPT those whose review still has at least one unresolved inline thread. A review with no unresolved inline threads must be minimized.
-  - Use `Bash(gh api:*)` with GraphQL `minimizeComment` on the review-level comment node ID, reason `OUTDATED`.
-- Review existing inline threads from other authors.
-  - If you agree with a subtle bug or major concern, it is okay to reply on the same thread with additional useful context.
-  - If you agree with a minor issue and have no meaningful addition, do not reply.
-  - If you agree and can add meaningful context (for example, scope, impact, or a concrete fix), reply on the same thread.
-  - If you disagree, reply on the same thread with clear reasoning.
-  - Do not post "me too" comments that add no new value.
-- Never resolve threads unless they were started by the login in `CONTEXT.bot_login`.
-- Always leave a new review, even when there are no new blockers or suggestions (submit it with just a summary body).
-  - In the body, restate any still-unaddressed items from prior review bodies, since minimizing those reviews hides them. You need not re-document still-open inline threads — they stay visible — but may summarize them (e.g., "2 new findings, plus 3 unresolved prior threads").
-  - Add new inline comment threads only for new findings; do not open one where an unresolved thread already covers the issue.
-  - Create a pending review with `mcp__github__create_pending_pull_request_review`.
-  - Add each blocker/suggestion as an inline review comment with `mcp__github__add_comment_to_pending_pull_request_review`.
-  - Submit with `mcp__github__submit_pending_pull_request_review` using `event: COMMENT`. Never `APPROVE` or `REQUEST_CHANGES`; approval is reserved for human reviewers.
-- Do not create sticky comments, issue comments, or standalone PR comments.
+1. Inspect all prior non-minimized reviews:
+   - Read inline threads via `mcp__github__get_pull_request_review_comments`.
+   - Read review-level bodies via `mcp__github__get_pull_request_reviews`.
+2. For each of your prior threads (`CONTEXT.bot_login`) that is now fixed:
+   - Reply on the thread with `mcp__github__add_reply_to_pull_request_comment`.
+   - Resolve it via GraphQL: `gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{isResolved}}}' -f threadId='<THREAD_NODE_ID>'`
+3. Minimize your prior review-level comments (`CONTEXT.bot_login`):
+   - Minimize every one EXCEPT those whose review still has at least one unresolved inline thread.
+   - Use `Bash(gh api:*)` with GraphQL `minimizeComment` on the review-level comment node ID, reason `OUTDATED`.
+4. Engage with other authors' inline threads:
+   - Never resolve other authors' threads — only resolve your own (`CONTEXT.bot_login`) threads.
+   - If you agree with an issue but have no meaningful addition, do not reply.
+   - If you agree and can add additional useful context (e.g. scope, impact, subtle nuance, or a concrete fix), reply.
+   - If you disagree, reply with clear reasoning.
+   - Do not post "me too" comments that add no new value.
+5. Publish the new review:
+   - Create a pending review with `mcp__github__create_pending_pull_request_review`.
+   - Add an inline comment for each new blocker/suggestion via `mcp__github__add_comment_to_pending_pull_request_review`. Only for new findings — do not open one where an unresolved thread already covers the issue.
+   - In the review body, restate any still-unaddressed items from prior review bodies, since minimizing those reviews hides them. You need not re-document still-open inline threads — they stay visible — but may summarize them (e.g., "2 new findings, plus 3 unresolved prior threads"). When there are no new findings, the body is the whole review.
+   - Always submit a review — every run, no exceptions, even with no blockers or suggestions. Submit with `mcp__github__submit_pending_pull_request_review` using `event: COMMENT`; never `APPROVE` or `REQUEST_CHANGES` (approval is reserved for human reviewers).
+   - Never post sticky comments, issue comments, or standalone PR comments.
