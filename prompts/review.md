@@ -32,6 +32,24 @@ When the PR touches user-facing behavior, locate product documentation in the re
 
 Use discovered documentation as the source of truth for product terminology, feature names, and expected behavior.
 
+## Repository-Specific Review Instructions
+
+This prompt is general-purpose. Individual repositories — and individual directories within them — can layer on their own conventions and review policies by committing instruction files to the repo. Apply these before forming your review, so repo-specific rules live with the repo instead of polluting this shared prompt.
+
+`CONTEXT.repo_instruction_files` lists the instruction files the workflow discovered in this repo (tracked files only). `Read` each one and apply it as relevant:
+
+- `AGENTS.md` — general codebase conventions and agent guidance (an emerging standard). Use these to judge idiomatic patterns under Design & Architecture and Readability.
+- `REVIEWING.md` — review-specific policies and checklists (e.g. "require a linked desktop build for PRs that touch `packages/desktop`").
+
+Scoping rules:
+
+- An instruction file applies to every file in its own directory and all subdirectories.
+- A file at the repository root applies repo-wide.
+- When several files apply to one path, the more deeply nested file wins on any point it addresses; otherwise their guidance stacks.
+- For each file changed by this PR, apply the listed instruction files that govern its path.
+
+These instructions supplement this prompt. Where a repo-specific instruction directly conflicts with the general guidance here, follow the repo-specific instruction for the files it governs. The instruction files are part of the repo and can be wrong or stale — treat them as authoritative for intent, but still flag any that look clearly mistaken.
+
 ## Review Objectives
 
 Evaluate the changes for:
@@ -46,7 +64,7 @@ Evaluate the changes for:
 
 - API and interface clarity
 - Separation of concerns and cohesion
-- Idiomatic: follow (1) codebase patterns (see `AGENTS.md`), then (2) language/framework conventions
+- Idiomatic: follow (1) codebase patterns (see the discovered `AGENTS.md`/`REVIEWING.md` files), then (2) language/framework conventions
 
 ### 3. Readability & Maintainability
 
