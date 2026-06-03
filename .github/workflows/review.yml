@@ -67,9 +67,7 @@ jobs:
             echo "  bot_login: claude[bot]"
             echo "  repo_instruction_files:"
             if [ -n "$instruction_files" ]; then
-              while IFS= read -r f; do
-                echo "    - $f"
-              done <<< "$instruction_files"
+              echo "$instruction_files" | sed 's/^/    - /'
             else
               echo "    []"
             fi
