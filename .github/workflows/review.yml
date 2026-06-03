@@ -49,6 +49,12 @@ jobs:
             exit 1
           fi
 
+          # Deterministically discover repo-specific review instruction files.
+          # git ls-files only lists tracked, first-party paths, so this skips the
+          # .foxglove-actions/ self-checkout and any untracked/gitignored trees.
+          instruction_files="$(git ls-files -- '*AGENTS.md' '*REVIEWING.md' \
+            | grep -E '(^|/)(AGENTS|REVIEWING)\.md$' | sort || true)"
+
           {
             echo "prompt<<__CLAUDE_PROMPT__"
             echo "CONTEXT:"
@@ -57,6 +63,14 @@ jobs:
             echo "  base_branch: ${{ github.event.pull_request.base.ref }}"
             echo "  is_draft: ${{ github.event.pull_request.draft }}"
             echo "  bot_login: claude[bot]"
+            echo "  repo_instruction_files:"
+            if [ -n "$instruction_files" ]; then
+              while IFS= read -r f; do
+                echo "    - $f"
+              done <<< "$instruction_files"
+            else
+              echo "    []"
+            fi
             echo
             cat "$prompt_file"
             echo "__CLAUDE_PROMPT__"

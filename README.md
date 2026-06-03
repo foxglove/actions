@@ -17,7 +17,7 @@ The shared prompt stays general-purpose. To add conventions or review policies s
 - **`AGENTS.md`** — general codebase conventions and agent guidance ([an emerging standard](https://agents.md/)). Used to judge idiomatic patterns.
 - **`REVIEWING.md`** — review-specific policies and checklists (e.g. "require a linked desktop build for PRs that touch `packages/desktop`").
 
-Each file applies to its own directory and all subdirectories; a file at the repo root applies repo-wide. When multiple files apply to a path, the more deeply nested one takes precedence. The reviewer discovers these files automatically and applies them on top of the general guidance, so repo-specific rules don't have to live in this shared prompt.
+Each file applies to its own directory and all subdirectories; a file at the repo root applies repo-wide. When multiple files apply to a path, the more deeply nested one takes precedence. The workflow discovers these files automatically (tracked files only) and the reviewer applies them on top of the general guidance, so repo-specific rules don't have to live in this shared prompt.
 
 ## Usage
 

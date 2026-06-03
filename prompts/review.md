@@ -23,19 +23,19 @@ If you have reviewed this PR before, focus new feedback on what changed since th
 
 ## Repository-Specific Review Instructions
 
-This prompt is general-purpose. Individual repositories — and individual directories within them — can layer on their own conventions and review policies by committing instruction files to the repo. Discover and apply these before forming your review, so repo-specific rules live with the repo instead of polluting this shared prompt.
+This prompt is general-purpose. Individual repositories — and individual directories within them — can layer on their own conventions and review policies by committing instruction files to the repo. Apply these before forming your review, so repo-specific rules live with the repo instead of polluting this shared prompt.
 
-Use `Glob` to find every instruction file in the checked-out repository:
+`CONTEXT.repo_instruction_files` lists the instruction files the workflow discovered in this repo (tracked files only). `Read` each one and apply it as relevant:
 
-- `**/AGENTS.md` — general codebase conventions and agent guidance (an emerging standard). Use these to judge idiomatic patterns under Design & Architecture and Readability.
-- `**/REVIEWING.md` — review-specific policies and checklists (e.g. "require a linked desktop build for PRs that touch `packages/desktop`").
+- `AGENTS.md` — general codebase conventions and agent guidance (an emerging standard). Use these to judge idiomatic patterns under Design & Architecture and Readability.
+- `REVIEWING.md` — review-specific policies and checklists (e.g. "require a linked desktop build for PRs that touch `packages/desktop`").
 
 Scoping rules:
 
 - An instruction file applies to every file in its own directory and all subdirectories.
 - A file at the repository root applies repo-wide.
 - When several files apply to one path, the more deeply nested file wins on any point it addresses; otherwise their guidance stacks.
-- For each file changed by this PR, `Read` the instruction files that govern its path and apply them to that change.
+- For each file changed by this PR, apply the listed instruction files that govern its path.
 
 These instructions supplement this prompt. Where a repo-specific instruction directly conflicts with the general guidance here, follow the repo-specific instruction for the files it governs. The instruction files are part of the repo and can be wrong or stale — treat them as authoritative for intent, but still flag any that look clearly mistaken.
 
