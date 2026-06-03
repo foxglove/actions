@@ -52,8 +52,11 @@ jobs:
           # Deterministically discover repo-specific review instruction files.
           # git ls-files only lists tracked, first-party paths, so this skips the
           # .foxglove-actions/ self-checkout and any untracked/gitignored trees.
-          instruction_files="$(git ls-files -- '*AGENTS.md' '*REVIEWING.md' \
-            | grep -E '(^|/)(AGENTS|REVIEWING)\.md$' | sort || true)"
+          # ':(icase)' makes matching case-insensitive; anchoring each basename
+          # (root + '*/name') avoids matching decoys like 'NOTAGENTS.md'.
+          instruction_files="$(git ls-files -- \
+            ':(icase)AGENTS.md' ':(icase)*/AGENTS.md' \
+            ':(icase)REVIEWING.md' ':(icase)*/REVIEWING.md' | sort)"
 
           {
             echo "prompt<<__CLAUDE_PROMPT__"
