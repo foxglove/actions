@@ -21,6 +21,24 @@ Be thorough in the review — try to surface as many issues in one review pass a
 
 If you have reviewed this PR before, focus new feedback on what changed since then. Use the `commit_id` of your most recent prior review (gathered in step 1 of the Review Workflow) as the baseline, and treat `<commit_id>..HEAD` as the newly pushed changes. On code unchanged since that review, raise only blockers you previously missed (correctness, security, data integrity, contract violations) — not nits or stylistic suggestions. If there is no prior review, or the `commit_id` is unreachable (e.g. after a force-push or rebase), review the full diff normally.
 
+## Repository-Specific Review Instructions
+
+This prompt is general-purpose. Individual repositories — and individual directories within them — can layer on their own conventions and review policies by committing instruction files to the repo. Discover and apply these before forming your review, so repo-specific rules live with the repo instead of polluting this shared prompt.
+
+Use `Glob` to find every instruction file in the checked-out repository:
+
+- `**/AGENTS.md` — general codebase conventions and agent guidance (an emerging standard). Use these to judge idiomatic patterns under Design & Architecture and Readability.
+- `**/REVIEWING.md` — review-specific policies and checklists (e.g. "require a linked desktop build for PRs that touch `packages/desktop`").
+
+Scoping rules:
+
+- An instruction file applies to every file in its own directory and all subdirectories.
+- A file at the repository root applies repo-wide.
+- When several files apply to one path, the more deeply nested file wins on any point it addresses; otherwise their guidance stacks.
+- For each file changed by this PR, `Read` the instruction files that govern its path and apply them to that change.
+
+These instructions supplement this prompt. Where a repo-specific instruction directly conflicts with the general guidance here, follow the repo-specific instruction for the files it governs. The instruction files are part of the repo and can be wrong or stale — treat them as authoritative for intent, but still flag any that look clearly mistaken.
+
 ## Documentation Discovery
 
 When the PR touches user-facing behavior, locate product documentation in the repository to use as a reference for consistency:
@@ -46,7 +64,7 @@ Evaluate the changes for:
 
 - API and interface clarity
 - Separation of concerns and cohesion
-- Idiomatic: follow (1) codebase patterns (see `AGENTS.md`), then (2) language/framework conventions
+- Idiomatic: follow (1) codebase patterns (see the discovered `AGENTS.md`/`REVIEWING.md` files), then (2) language/framework conventions
 
 ### 3. Readability & Maintainability
 
