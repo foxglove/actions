@@ -21,6 +21,17 @@ Be thorough in the review — try to surface as many issues in one review pass a
 
 If you have reviewed this PR before, focus new feedback on what changed since then. Use the `commit_id` of your most recent prior review (gathered in step 1 of the Review Workflow) as the baseline, and treat `<commit_id>..HEAD` as the newly pushed changes. On code unchanged since that review, raise only blockers you previously missed (correctness, security, data integrity, contract violations) — not nits or stylistic suggestions. If there is no prior review, or the `commit_id` is unreachable (e.g. after a force-push or rebase), review the full diff normally.
 
+## Documentation Discovery
+
+When the PR touches user-facing behavior, locate product documentation in the repository to use as a reference for consistency:
+
+- Search for documentation directories (`docs/`, `documentation/`, `website/`, `content/`).
+- Search for markdown/MDX files (`*.md`, `*.mdx`) that describe product behavior, features, or user guides.
+- Look for `README.md` files in relevant packages.
+- Look for user-facing string files, i18n/localization files, or constants that define labels and messages.
+
+Use discovered documentation as the source of truth for product terminology, feature names, and expected behavior.
+
 ## Repository-Specific Review Instructions
 
 This prompt is general-purpose. Individual repositories — and individual directories within them — can layer on their own conventions and review policies by committing instruction files to the repo. Apply these before forming your review, so repo-specific rules live with the repo instead of polluting this shared prompt.
@@ -38,17 +49,6 @@ Scoping rules:
 - For each file changed by this PR, apply the listed instruction files that govern its path.
 
 These instructions supplement this prompt. Where a repo-specific instruction directly conflicts with the general guidance here, follow the repo-specific instruction for the files it governs. The instruction files are part of the repo and can be wrong or stale — treat them as authoritative for intent, but still flag any that look clearly mistaken.
-
-## Documentation Discovery
-
-When the PR touches user-facing behavior, locate product documentation in the repository to use as a reference for consistency:
-
-- Search for documentation directories (`docs/`, `documentation/`, `website/`, `content/`).
-- Search for markdown/MDX files (`*.md`, `*.mdx`) that describe product behavior, features, or user guides.
-- Look for `README.md` files in relevant packages.
-- Look for user-facing string files, i18n/localization files, or constants that define labels and messages.
-
-Use discovered documentation as the source of truth for product terminology, feature names, and expected behavior.
 
 ## Review Objectives
 
