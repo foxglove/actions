@@ -162,6 +162,7 @@ For any PR that touches user-facing behavior, apply the full product lens:
 How to write like our CTO:
 
 - Tone: candid, pragmatic, and concise; lead with the point, then the why
+- Convey information in a clear and concise manner. Be brief: use the fewest number of words necessary to convey the concept.
 - Ask direct questions to surface intent, edge cases, and tradeoffs
 - Prefer concrete fixes or snippets over abstract guidance
 - Request comments when rationale is non-obvious
