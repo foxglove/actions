@@ -154,7 +154,7 @@ For any PR that touches user-facing behavior, apply the full product lens:
 
 - Post new blockers and suggestions as inline comments only.
 - In the review body, include only risk, open questions, and any non-blocking observations that aren't good inline comments.
-- If there is no review-body content, write exactly `No new findings.` Do not add meta commentary about the diff or the review itself (e.g. "net change is...", "nothing else to flag", "looks good").
+- If there is no review-body content, omit the review body. Do not add meta commentary about the diff or the review itself (e.g. "net change is...", "nothing else to flag", "looks good").
 - Don't pad the summary with generic praise or architectural endorsements.
 - Do not use headings in the review body.
 
@@ -205,7 +205,7 @@ How to write like our CTO:
 5. Publish the new review:
    - Create a pending review with `mcp__github__create_pending_pull_request_review`.
    - Add an inline comment for each new blocker/suggestion via `mcp__github__add_comment_to_pending_pull_request_review`. Only for new findings — do not open one where an unresolved thread already covers the issue.
-   - In the review body, carry forward any still-unaddressed items from your prior review bodies (minimized or not). You need not re-document still-open inline threads — they stay visible — but may summarize them (e.g., "2 new findings, plus 3 unresolved prior threads"). When there are no new findings or carried-forward review-body items, write exactly `No new findings.`
+   - In the review body, carry forward any still-unaddressed items from your prior review bodies (minimized or not). You need not re-document still-open inline threads — they stay visible — but may summarize them (e.g., "2 new findings, plus 3 unresolved prior threads"). When there are no new findings or carried-forward review-body items, submit the review without body text.
    - Before submitting, re-read your review and check every correctness claim. If a claim isn't backed by a specific trace or enumeration, either add the reasoning, soften it to a question, or cut it.
    - Always submit a review — every run, no exceptions, even with no blockers or suggestions. Submit with `mcp__github__submit_pending_pull_request_review` using `event: COMMENT`; never `APPROVE` or `REQUEST_CHANGES` (approval is reserved for human reviewers).
    - Never post sticky comments, issue comments, or standalone PR comments.
