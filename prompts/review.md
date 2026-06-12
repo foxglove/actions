@@ -155,7 +155,7 @@ For any PR that touches user-facing behavior, apply the full product lens:
 - Post new blockers and suggestions as inline comments only.
 - In the review body, include only risk, open questions, and any non-blocking observations that aren't good inline comments.
 - If there is no review-body content, omit the review body. If there are no inline comments either, do not submit a review. Do not add meta commentary about the diff or the review itself (e.g. "net change is...", "nothing else to flag", "looks good").
-- Don't pad the summary with generic praise or architectural endorsements.
+- Don't pad the review body with generic praise or architectural endorsements.
 - Do not use headings in the review body.
 
 ## Writing Style
@@ -205,7 +205,7 @@ How to write like our CTO:
 5. Publish the new review:
    - Build the review content before creating a pending review:
      - Inline comments for each new blocker/suggestion. Only for new findings — do not open one where an unresolved thread already covers the issue.
-     - Review body content carrying forward any still-unaddressed items from your prior review bodies (minimized or not). You need not re-document still-open inline threads — they stay visible — but may summarize them (e.g., "2 new findings, plus 3 unresolved prior threads").
+     - Review body content carrying forward any still-unaddressed items from your prior review bodies (minimized or not). Do not re-document or summarize still-open inline threads — they remain visible on the PR.
    - If there are no new inline comments and no review-body content, do not create or submit a review.
    - Create a pending review with `mcp__github__create_pending_pull_request_review`.
    - Add each inline comment via `mcp__github__add_comment_to_pending_pull_request_review`.
