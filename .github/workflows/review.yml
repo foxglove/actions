@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      CLAUDE_ALLOWED_TOOLS: "Read,Glob,Grep,mcp__github__pull_request_read,mcp__github__pull_request_review_write,mcp__github__add_comment_to_pending_review,mcp__github__add_reply_to_pull_request_comment,mcp__github__get_pull_request,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_pull_request_review,mcp__github__submit_pending_pull_request_review,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*)"
+      CLAUDE_ALLOWED_TOOLS: "Read,Glob,Grep,mcp__github__pull_request_read,mcp__github__pull_request_review_write,mcp__github__add_comment_to_pending_review,mcp__github__add_reply_to_pull_request_comment,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*)"
     permissions:
       actions: read
       contents: read
@@ -95,7 +95,7 @@ jobs:
       - name: Run Claude review (attempt 1)
         id: attempt1
         continue-on-error: true
-        uses: anthropics/claude-code-action@v1.0.109
+        uses: anthropics/claude-code-action@v1.0.150
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: false
@@ -120,7 +120,7 @@ jobs:
         id: attempt2
         if: steps.attempt1.outcome == 'failure'
         continue-on-error: true
-        uses: anthropics/claude-code-action@v1.0.109
+        uses: anthropics/claude-code-action@v1.0.150
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: false
@@ -145,7 +145,7 @@ jobs:
         id: attempt3
         if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
         continue-on-error: true
-        uses: anthropics/claude-code-action@v1.0.109
+        uses: anthropics/claude-code-action@v1.0.150
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: false
