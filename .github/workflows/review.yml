@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      CLAUDE_ALLOWED_TOOLS: "Read,Glob,Grep,mcp__github__pull_request_read,mcp__github__pull_request_review_write,mcp__github__add_comment_to_pending_review,mcp__github__add_reply_to_pull_request_comment,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*)"
+      CLAUDE_ALLOWED_TOOLS: "Read,Glob,Grep,mcp__github__get_pull_request,mcp__github__get_pull_request_files,mcp__github__get_pull_request_reviews,mcp__github__get_pull_request_review_comments,mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_review,mcp__github__submit_pending_pull_request_review,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*)"
     permissions:
       actions: read
       contents: read
