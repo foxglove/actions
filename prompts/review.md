@@ -72,7 +72,6 @@ Evaluate the changes for:
 - Unnecessary complexity or duplication
 - Dead code in the change, or code the change orphans
 - Code comments should be concise and evergreen — they must describe the code as it is, not the development process (e.g., avoid "changed this from X", "not sure about this", "WIP", "TODO", or references to the PR itself)
-- Avoid `eslint-disable` and `eslint-disable-next-line` comments. When a change uses one, it MUST include a concise justification.
 
 ### 4. Performance & Scalability
 
@@ -145,10 +144,9 @@ For any PR that touches user-facing behavior, apply the full product lens:
 ### 8. API and Operations
 
 - REST semantics, status codes, schema/request/response clarity, public vs internal surface
-- Migration and rollout risks: deploy order, compatibility, flags, backfills. If the PR introduces database migrations in the `foxglove/app` repo, read `packages/api/README.md#zero-downtime-migrations` and flag as a blocker if the migration does not follow those principles.
+- Migration and rollout risks: deploy order, compatibility, flags, backfills
 - Config hygiene: centralized env/config, explicit naming and units
 - Comment quality: ask for _why_ on non-obvious logic, invariants, perf decisions
-- Deployment ordering: frontend and backend changes do not deploy simultaneously. A frontend change that depends on new or changed backend endpoints, response shapes, or behaviors must be in a separate PR, merged only after the backend PR deploys. Flag as a blocker any PR that bundles frontend and backend changes that depend on each other.
 
 ## Output Format
 
