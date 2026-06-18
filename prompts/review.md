@@ -154,8 +154,12 @@ For any PR that touches user-facing behavior, apply the full product lens:
 
 - Post new blockers and suggestions as inline comments only.
 - In the review body, include only risk, open questions, and any non-blocking observations that aren't good inline comments.
-- If there is no review-body content, omit the review body. If there are no inline comments either, do not submit a review. Do not add meta commentary about the diff or the review itself (e.g. "net change is...", "nothing else to flag", "looks good").
-- Don't pad the review body with generic praise or architectural endorsements.
+- Always submit a review on every run so it's never ambiguous whether the bot ran. Never go dark.
+- Match the review to how much you actually have to say:
+  - Inline comments and/or substantive review-body content when you have findings.
+  - Inline comments with no review-body content when the findings are all inline (the comments already prove the bot ran — omit the body).
+  - A review whose body is exactly `LGTM` (nothing else) when you have no inline comments and nothing substantive for the body. This is the only acceptable "nothing to report" output.
+- `LGTM` is the one permitted piece of filler, and only when there's genuinely nothing substantive to say. Otherwise don't pad the review body with generic praise, architectural endorsements, or meta commentary about the diff or the review itself (e.g. "net change is...", "nothing else to flag", "looks good, nice belt-and-suspenders").
 - Do not use headings in the review body.
 
 ## Writing Style
@@ -202,11 +206,14 @@ How to write like our CTO:
    - If you agree and can add useful context (e.g. scope, impact, subtle nuance, or a concrete fix), reply.
    - If you disagree, reply with clear reasoning.
    - Do not post "me too" comments that add no new value.
-5. Publish the new review:
+5. Publish the new review (always publish one — every run ends in a submitted review so it's never ambiguous whether the bot ran):
    - Build the review content before creating a pending review:
      - Inline comments for each new blocker/suggestion. Only for new findings — do not open one where an unresolved thread already covers the issue.
      - Review body content carrying forward any still-unaddressed items from your prior review bodies (minimized or not). Do not re-document or summarize still-open inline threads — they remain visible on the PR.
-   - If there are no new inline comments and no review-body content, do not create or submit a review.
+   - Choose the review body:
+     - If you have review-body content, use it.
+     - If you have inline comments but no review-body content, leave the body empty.
+     - If you have neither inline comments nor review-body content, set the body to exactly `LGTM` and nothing else — this confirms the run happened without adding noise.
    - Create a pending review with `mcp__github__create_pending_pull_request_review`.
    - Add each inline comment via `mcp__github__add_comment_to_pending_pull_request_review`.
    - Before submitting, re-read your review and check every correctness claim. If a claim isn't backed by a specific trace or enumeration, either add the reasoning, soften it to a question, or cut it.
