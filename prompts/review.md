@@ -72,7 +72,6 @@ Evaluate the changes for:
 - Unnecessary complexity or duplication
 - Dead code in the change, or code the change orphans
 - Code comments should be concise and evergreen — they must describe the code as it is, not the development process (e.g., avoid "changed this from X", "not sure about this", "WIP", "TODO", or references to the PR itself)
-- Avoid `eslint-disable` and `eslint-disable-next-line` comments. When a change uses one, it MUST include a concise justification.
 
 ### 4. Performance & Scalability
 
