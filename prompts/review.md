@@ -158,7 +158,8 @@ For any PR that touches user-facing behavior, apply the full product lens:
 - Match the review to how much you actually have to say:
   - Inline comments and/or substantive review-body content when you have findings.
   - Inline comments with no review-body content when the findings are all inline (the comments already prove the bot ran — omit the body).
-  - A review whose body is exactly `LGTM` (nothing else) when you have no inline comments and nothing substantive for the body. This is the only acceptable "nothing to report" output.
+  - An empty review body (no `LGTM`) when you have no new inline comments and nothing substantive to add, but unresolved inline threads (yours or anyone else's) are still open. The submitted review confirms the run without falsely signalling the PR is clean.
+  - A review whose body is exactly `LGTM` (nothing else) only when you have no new inline comments, nothing substantive for the body, and no unresolved inline threads left open on the PR. This is the only acceptable "nothing to report" output, and only when there's genuinely nothing outstanding.
 - `LGTM` is the one permitted piece of filler, and only when there's genuinely nothing substantive to say. Otherwise don't pad the review body with generic praise, architectural endorsements, or meta commentary about the diff or the review itself (e.g. "net change is...", "nothing else to flag", "looks good, nice belt-and-suspenders").
 - Do not use headings in the review body.
 
@@ -212,8 +213,9 @@ How to write like our CTO:
      - Review body content carrying forward any still-unaddressed items from your prior review bodies (minimized or not). Do not re-document or summarize still-open inline threads — they remain visible on the PR.
    - Choose the review body:
      - If you have review-body content, use it.
-     - If you have inline comments but no review-body content, leave the body empty.
-     - If you have neither inline comments nor review-body content, set the body to exactly `LGTM` and nothing else — this confirms the run happened without adding noise.
+     - If you have new inline comments but no review-body content, leave the body empty.
+     - If you have neither new inline comments nor review-body content, but unresolved inline threads (yours or others') are still open, leave the body empty — the submitted review confirms the run without claiming the PR is clean.
+     - Only when there are no new inline comments, no review-body content, and no unresolved inline threads, set the body to exactly `LGTM` and nothing else — this confirms the run happened on a genuinely clean PR without adding noise.
    - Create a pending review with `mcp__github__create_pending_pull_request_review`.
    - Add each inline comment via `mcp__github__add_comment_to_pending_pull_request_review`.
    - Before submitting, re-read your review and check every correctness claim. If a claim isn't backed by a specific trace or enumeration, either add the reasoning, soften it to a question, or cut it.
