@@ -13,7 +13,7 @@ git log --oneline --graph origin/<BASE_BRANCH>..HEAD
 git diff --merge-base origin/<BASE_BRANCH>
 ```
 
-Review the changes that would be introduced if this branch is merged. You may review files and code outside of the diff to look for unintentional regressions, but do not comment on existing code.
+Review the changes this branch introduces when merged. You may read files and code outside of the diff to look for unintentional regressions, but keep comments scoped to changed lines.
 
 Review the PR title and description for clarity and completeness. If `.github/pull_request_template.md` exists, ensure the PR description follows it.
 
@@ -46,7 +46,7 @@ Scoping rules:
 - An instruction file applies to every file in its own directory and all subdirectories.
 - A file at the repository root applies repo-wide.
 - When several files apply to one path, the more deeply nested file wins on any point it addresses; otherwise their guidance stacks.
-- For each file changed by this PR, apply the listed instruction files that govern its path.
+- For each file this PR changes, apply the listed instruction files that govern its path.
 
 These instructions supplement this prompt. Where a repo-specific instruction directly conflicts with the general guidance here, follow the repo-specific instruction for the files it governs. The instruction files are part of the repo and can be wrong or stale — treat them as authoritative for intent, but still flag any that look clearly mistaken.
 
@@ -70,15 +70,15 @@ Evaluate the changes for:
 
 - Naming, structure, and clarity
 - Unnecessary complexity or duplication
-- Dead code in the change, or orphaned by it
+- Dead code in the change, or code the change orphans
 - Code comments should be concise and evergreen — they must describe the code as it is, not the development process (e.g., avoid "changed this from X", "not sure about this", "WIP", "TODO", or references to the PR itself)
-- `eslint-disable` and `eslint-disable-next-line` comments are discouraged. If used, they MUST include a concise justification.
+- Avoid `eslint-disable` and `eslint-disable-next-line` comments. When a change uses one, it MUST include a concise justification.
 
 ### 4. Performance & Scalability
 
 - Obvious inefficiencies or regressions
 - Hot paths, memory usage, I/O considerations
-- Module-level computations: code that runs at the top level of a module executes on import, blocking other code until complete. Flag expensive computations (complex loops, heavy object construction, I/O) that should be deferred or lazily initialized. Simple allocations (constants, static config) are acceptable.
+- Module-level computations: code that runs at the top level of a module executes on import, blocking other code until complete. Flag expensive computations (complex loops, heavy object construction, I/O) that you should defer or lazily initialize. Simple allocations (constants, static config) are acceptable.
 
 ### 5. Security & Safety
 
@@ -118,28 +118,28 @@ For any PR that touches user-facing behavior, apply the full product lens:
 
 **Documentation completeness:**
 
-- If the PR introduces a new feature or changes existing behavior, is documentation updated?
-- Are new configuration options, settings, or preferences documented?
-- If a public-facing API or integration point changed, are docs or examples updated?
+- If the PR introduces a new feature or changes existing behavior, does it update the documentation?
+- Does the PR document new configuration options, settings, or preferences?
+- If a public-facing API or integration point changed, does the PR update docs or examples?
 - Flag missing or stale documentation.
 
 **Backwards compatibility (user perspective):**
 
 - Will existing users notice a disruption? Renamed settings, moved menus, changed defaults?
-- If behavior changed, is there a migration path or is the change communicated to users?
-- Are saved user preferences, layouts, or configurations affected?
+- If behavior changed, does the PR provide a migration path or communicate the change to users?
+- Does the change affect saved user preferences, layouts, or configurations?
 
 **Accessibility:**
 
 - Do new interactive elements have appropriate labels for screen readers?
-- Is color used as the sole indicator of state? (It shouldn't be.)
-- Are keyboard navigation patterns maintained?
-- Are new images or icons accompanied by alt text or aria labels?
+- Does the change use color as the sole indicator of state? (It shouldn't.)
+- Does the change maintain keyboard navigation patterns?
+- Do new images or icons include alt text or aria labels?
 
 **Visual & layout consistency:**
 
-- If screenshots or videos are provided, do new UI elements match the existing visual style?
-- If no screenshots are provided for a UI change, request them.
+- If the PR provides screenshots or videos, do new UI elements match the existing visual style?
+- If the PR provides no screenshots for a UI change, request them.
 - Flag obvious layout inconsistencies (spacing, alignment, sizing) visible in screenshots.
 
 ### 8. API and Operations
@@ -148,7 +148,7 @@ For any PR that touches user-facing behavior, apply the full product lens:
 - Migration and rollout risks: deploy order, compatibility, flags, backfills. If the PR introduces database migrations in the `foxglove/app` repo, read `packages/api/README.md#zero-downtime-migrations` and flag as a blocker if the migration does not follow those principles.
 - Config hygiene: centralized env/config, explicit naming and units
 - Comment quality: ask for _why_ on non-obvious logic, invariants, perf decisions
-- Deployment ordering: frontend and backend changes do not deploy simultaneously. A frontend change that depends on new or changed backend endpoints, response shapes, or behaviors must be in a separate PR, merged only after the backend PR is deployed. Flag as a blocker any PR that bundles frontend and backend changes that depend on each other.
+- Deployment ordering: frontend and backend changes do not deploy simultaneously. A frontend change that depends on new or changed backend endpoints, response shapes, or behaviors must be in a separate PR, merged only after the backend PR deploys. Flag as a blocker any PR that bundles frontend and backend changes that depend on each other.
 
 ## Output Format
 
@@ -180,6 +180,7 @@ How to write like our CTO:
 - Do not pad the review body with generic praise, architectural endorsements, or meta commentary about the diff or the review itself (e.g. "net change is...", "nothing else to flag", "looks good, nice belt-and-suspenders"). The sole exception is the `LGTM` body, permitted only per the guidelines in Review Workflow step 5.
 - Do not comment on formatting unless it affects readability or correctness.
 - Do not comment on CI status (running, passed, or failed). Avoid comments like "CI is still running" or "CI failed" because reviewers can already see that in GitHub.
+- Keep comments scoped to the PR's changed lines; do not comment on code outside of the PR changes.
 - Do not restate the diff.
 - Do not suggest speculative refactors unrelated to the change.
 - Do not re-raise nits or stylistic suggestions on code unchanged since your last review (see the Scope section); on unchanged code, surface only blockers you previously missed.
@@ -207,7 +208,7 @@ How to write like our CTO:
    - Build the review content before creating a pending review:
      - Inline comments for each new blocker/suggestion. Only for new findings — do not open one where an unresolved thread already covers the issue.
      - Review body content carrying forward any still-unaddressed items from your prior review bodies (minimized or not). Do not re-document or summarize still-open inline threads — they remain visible on the PR.
-   - Choose the body. A submitted review must carry a body or at least one inline comment (a review with both empty is rejected by the API and the bot goes dark), so pick the lightest body that fits:
+   - Choose the body. A submitted review must carry a body or at least one inline comment (the GitHub API rejects a review with both empty), so pick the lightest body that fits:
      - Review-body content, if you have any.
      - Empty, if you have new inline comments but nothing for the body (the comments already prove the run).
      - A one-line pointer (e.g. `Prior unresolved thread(s) still open — see above.`) if you have no new inline comments and nothing substantive, but unresolved inline threads (yours or others') remain open. Don't re-document the threads, and don't use `LGTM` — it would falsely signal the PR is clean.
