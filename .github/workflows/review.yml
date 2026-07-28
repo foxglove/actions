@@ -40,14 +40,17 @@ jobs:
           ref: ${{ github.repository == 'foxglove/actions' && github.sha || 'main' }}
 
       # Give the reviewer a working JS runtime so it can check claims by running them instead of
-      # reasoning from the spec. Dependencies are deliberately NOT installed here: most reviews
-      # never need them, and the reviewer can run `yarn install` itself on the rare one that
-      # does. Each step is guarded on what it actually needs, and both are best-effort: the
-      # retry ladder below exists so reviews never go dark, so a setup step must not be able to
-      # fail the job before Claude starts.
+      # reasoning from the spec. Dependencies are deliberately not installed: most reviews never
+      # need them, and the reviewer can run `yarn install` itself on the rare one that does.
+      # Both steps are best-effort, because the retry ladder below exists so reviews never go
+      # dark and a setup step must not be able to fail the job before Claude starts. The
+      # tradeoff is that a failed setup leaves the image's Node on PATH with nothing announcing
+      # it, so a version-sensitive claim could be checked against the wrong major.
       #
-      # Node goes first so Corepack writes its shims into the pinned install rather than the
-      # image's, which keeps `node` and `yarn` coming from the same place.
+      # Node is set up before Corepack so the shims land in the pinned install rather than the
+      # image's. `cache: yarn` is omitted: the restore is a fixed cost on every review to save
+      # roughly three times as much on the rare one that installs, and its post-step writes
+      # under a lockfile-keyed name CI restores from, which a partial node_modules would poison.
       - name: Set up Node
         if: hashFiles('.node-version', '.nvmrc') != ''
         continue-on-error: true
