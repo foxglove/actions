@@ -25,9 +25,9 @@ If you have reviewed this PR before, focus new feedback on what changed since th
 
 You have a shell. Prefer running a check over reasoning about one whenever a finding turns on behavior you can observe.
 
-On Node repos, the runtime is set up and matches the version the repo pins, so `node -e '...'` is available immediately and costs nothing. Use it for anything self-contained: what a regex matches, whether a string parses, how a date or number formats, what a selector or grammar accepts.
+On Node repos, `node -e '...'` is available immediately and costs nothing. Use it for anything self-contained: what a regex matches, whether a string parses, how a date or number formats, what a selector or grammar accepts. It is normally the version the repo pins, but check `node -v` before resting a claim on version-specific behavior.
 
-Dependencies are **not** installed. If a finding genuinely turns on running the repo's own code — a unit test, a lint rule under test — install them yourself (for a Yarn repo, `yarn install --immutable --mode skip-build`; adapt for other package managers). It takes a minute or two, which is cheap against a wrong review comment. Spend it when the result would change what you post; don't spend it to re-confirm something you already traced, and don't install speculatively at the start of every review.
+Dependencies are **not** installed. If a finding genuinely turns on running the repo's own code — a unit test, a lint rule under test — install them yourself with `yarn install --immutable --mode skip-build` (only Yarn is available; npm and pnpm are not in the tool allowlist). It takes a minute or two, which is cheap against a wrong review comment. Spend it when the result would change what you post; don't spend it to re-confirm something you already traced, and don't install speculatively at the start of every review. Read any change to `.yarnrc.yml` or `.yarn/` before installing: Yarn executes `yarnPath` from the branch under review, so a diff touching those is something to review rather than to run.
 
 Some things stay out of reach: suites needing a database or other services, browsers, and rendered screenshots. Say so plainly on the specific claim it limits.
 

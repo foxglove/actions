@@ -39,16 +39,20 @@ jobs:
           path: .foxglove-actions
           ref: ${{ github.repository == 'foxglove/actions' && github.sha || 'main' }}
 
-      # Give the reviewer a working JS runtime on Node repos so it can check claims by running
-      # them instead of reasoning from the spec. Dependencies are deliberately NOT installed
-      # here: most reviews never need them, and the reviewer can run `yarn install` itself on
-      # the rare one that does. Both steps no-op on repos that aren't Node.
+      # Give the reviewer a working JS runtime so it can check claims by running them instead of
+      # reasoning from the spec. Dependencies are deliberately NOT installed here: most reviews
+      # never need them, and the reviewer can run `yarn install` itself on the rare one that
+      # does. Each step is guarded on what it actually needs, and both are best-effort: the
+      # retry ladder below exists so reviews never go dark, so a setup step must not be able to
+      # fail the job before Claude starts.
       - name: Enable Corepack
-        if: hashFiles('.node-version', '.nvmrc') != '' && hashFiles('yarn.lock') != ''
+        if: hashFiles('yarn.lock') != ''
+        continue-on-error: true
         run: corepack enable
 
       - name: Set up Node
-        if: hashFiles('.node-version', '.nvmrc') != '' && hashFiles('yarn.lock') != ''
+        if: hashFiles('.node-version', '.nvmrc') != ''
+        continue-on-error: true
         uses: actions/setup-node@v6
         with:
           node-version-file: ${{ hashFiles('.node-version') != '' && '.node-version' || '.nvmrc' }}
