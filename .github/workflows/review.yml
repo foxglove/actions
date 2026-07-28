@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      CLAUDE_ALLOWED_TOOLS: "Read,Glob,Grep,mcp__github__pull_request_read,mcp__github__pull_request_review_write,mcp__github__add_comment_to_pending_review,mcp__github__add_reply_to_pull_request_comment,mcp__github__get_pull_request,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_pull_request_review,mcp__github__submit_pending_pull_request_review,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*)"
+      CLAUDE_ALLOWED_TOOLS: "Read,Glob,Grep,mcp__github__pull_request_read,mcp__github__pull_request_review_write,mcp__github__add_comment_to_pending_review,mcp__github__add_reply_to_pull_request_comment,mcp__github__get_pull_request,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_pull_request_review,mcp__github__submit_pending_pull_request_review,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*),Bash(node:*)"
     permissions:
       actions: read
       contents: read
@@ -38,6 +38,20 @@ jobs:
           repository: foxglove/actions
           path: .foxglove-actions
           ref: ${{ github.repository == 'foxglove/actions' && github.sha || 'main' }}
+
+      # Give the reviewer a working JS runtime on Node repos so it can check claims by running
+      # them instead of reasoning from the spec. Dependencies are deliberately NOT installed
+      # here: most reviews never need them, and the reviewer can run `yarn install` itself on
+      # the rare one that does. Both steps no-op on repos that aren't Node.
+      - name: Enable Corepack
+        if: hashFiles('.node-version', '.nvmrc') != '' && hashFiles('yarn.lock') != ''
+        run: corepack enable
+
+      - name: Set up Node
+        if: hashFiles('.node-version', '.nvmrc') != '' && hashFiles('yarn.lock') != ''
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ${{ hashFiles('.node-version') != '' && '.node-version' || '.nvmrc' }}
 
       - name: Build Claude inputs
         id: claude-inputs
