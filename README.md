@@ -10,6 +10,8 @@ An AI-powered PR review that combines technical and product perspectives in a si
 
 **Prompt:** [`prompts/review.md`](prompts/review.md)
 
+**Job environment:** the reviewer runs with a shell and can execute commands to check its own claims rather than reasoning from the spec. Repos with a `.node-version` or `.nvmrc` get that Node version installed; repos with a `yarn.lock` get Corepack enabled. Dependencies are not installed, so a review that needs to run the repo's own code installs them itself. Both setup steps are best-effort and skip on repos that don't need them.
+
 ### Repository-specific review instructions
 
 The shared prompt stays general-purpose. To add conventions or review policies specific to a repo (or a subtree within it), commit instruction files alongside the code — no workflow changes needed:
