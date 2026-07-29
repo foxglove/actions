@@ -100,8 +100,8 @@ jobs:
             echo "__CLAUDE_PROMPT__"
 
             echo "claude_args<<__CLAUDE_ARGS__"
-            echo "--model claude-opus-5"
-            echo "--effort high"
+            echo "--model claude-opus-4-8"
+            echo "--effort xhigh"
             echo "--allowedTools \"${CLAUDE_ALLOWED_TOOLS}\""
             echo "__CLAUDE_ARGS__"
           } >> "$GITHUB_OUTPUT"
