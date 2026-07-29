@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      CLAUDE_ALLOWED_TOOLS: "Read,Glob,Grep,mcp__github__pull_request_read,mcp__github__pull_request_review_write,mcp__github__add_comment_to_pending_review,mcp__github__add_reply_to_pull_request_comment,mcp__github__get_pull_request,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_pull_request_review,mcp__github__submit_pending_pull_request_review,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*)"
+      CLAUDE_ALLOWED_TOOLS: "Read,Glob,Grep,mcp__github__pull_request_read,mcp__github__pull_request_review_write,mcp__github__add_comment_to_pending_review,mcp__github__add_reply_to_pull_request_comment,mcp__github__get_pull_request,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_pull_request_review,mcp__github__submit_pending_pull_request_review,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*),Bash(node:*)"
     permissions:
       actions: read
       contents: read
@@ -38,6 +38,30 @@ jobs:
           repository: foxglove/actions
           path: .foxglove-actions
           ref: ${{ github.repository == 'foxglove/actions' && github.sha || 'main' }}
+
+      # Give the reviewer a working JS runtime so it can check claims by running them instead of
+      # reasoning from the spec. Dependencies are deliberately not installed: most reviews never
+      # need them, and the reviewer can run `yarn install` itself on the rare one that does.
+      # Both steps are best-effort, because the retry ladder below exists so reviews never go
+      # dark and a setup step must not be able to fail the job before Claude starts. The
+      # tradeoff is that a failed setup leaves the image's Node on PATH with nothing announcing
+      # it, so a version-sensitive claim could be checked against the wrong major.
+      #
+      # Node is set up before Corepack so the shims land in the pinned install rather than the
+      # image's. `cache: yarn` is omitted: the restore is a fixed cost on every review to save
+      # roughly three times as much on the rare one that installs, and its post-step writes
+      # under a lockfile-keyed name CI restores from, which a partial node_modules would poison.
+      - name: Set up Node
+        if: hashFiles('.node-version', '.nvmrc') != ''
+        continue-on-error: true
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ${{ hashFiles('.node-version') != '' && '.node-version' || '.nvmrc' }}
+
+      - name: Enable Corepack
+        if: hashFiles('yarn.lock') != ''
+        continue-on-error: true
+        run: corepack enable
 
       - name: Build Claude inputs
         id: claude-inputs
