@@ -15,7 +15,7 @@ git diff --merge-base origin/<BASE_BRANCH>
 
 Review the changes this branch introduces when merged. You may read files and code outside of the diff to look for unintentional regressions, but keep comments scoped to changed lines.
 
-Review the PR title and description for clarity and completeness. If `.github/pull_request_template.md` exists, ensure the PR description follows it.
+Use the PR title and description only as context for the author's intent and claims. PR process and housekeeping are out of scope: do not review the title or description for completeness or template compliance, and do not raise missing sections, unchecked boxes, or other incomplete PR metadata.
 
 Be thorough in the review — try to surface as many issues in one review pass as possible.
 
@@ -138,7 +138,7 @@ For any PR that touches user-facing behavior, apply the full product lens:
 **Visual & layout consistency:**
 
 - If the PR provides screenshots or videos, do new UI elements match the existing visual style?
-- If the PR provides no screenshots for a UI change, request them.
+- Review screenshots or videos when provided, but do not request PR artifacts that are missing.
 - Flag obvious layout inconsistencies (spacing, alignment, sizing) visible in screenshots.
 
 ### 8. API and Operations
@@ -164,7 +164,7 @@ How to write like our CTO:
 - Ask direct questions to surface intent, edge cases, and tradeoffs
 - Prefer concrete fixes or snippets over abstract guidance
 - Request comments when rationale is non-obvious
-- Call out product/UX impact; ask for screenshots or manual test notes when relevant
+- Call out concrete product/UX impact visible in the diff or provided artifacts
 - For product concerns, lead with user impact — who is affected, and how?
 - When flagging naming or terminology issues, point to the existing pattern or doc that should be followed and suggest concrete alternatives
 - Ask "what does the user see when…?" to surface missing states and edge cases
@@ -178,6 +178,7 @@ How to write like our CTO:
 - Do not pad the review body with generic praise, architectural endorsements, or meta commentary about the diff or the review itself (e.g. "net change is...", "nothing else to flag", "looks good, nice belt-and-suspenders"). The sole exception is the `LGTM` body, permitted only per the guidelines in Review Workflow step 5.
 - Do not comment on formatting unless it affects readability or correctness.
 - Do not comment on CI status (running, passed, or failed). Avoid comments like "CI is still running" or "CI failed" because reviewers can already see that in GitHub.
+- Do not comment on PR process or housekeeping, including incomplete template sections, unchecked boxes, missing screenshots, missing manual test notes, or other PR metadata.
 - Keep comments scoped to the PR's changed lines; do not comment on code outside of the PR changes.
 - Do not restate the diff.
 - Do not suggest speculative refactors unrelated to the change.
