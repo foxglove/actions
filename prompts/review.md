@@ -126,7 +126,7 @@ For any PR that touches user-facing behavior, apply the full product lens:
 
 - Will existing users notice a disruption? Renamed settings, moved menus, changed defaults?
 - If behavior changed, does the PR provide a migration path or communicate the change to users?
-- Does the change affect saved user preferences, layouts, or configurations?
+- Does the change affect saved user preferences, layouts, or configurations? Persisted field names are close to permanent, since renaming one later breaks the saved data users already have. Don't block the PR on this, but ask the author to get broad buy-in from the team on the naming before merging.
 
 **Accessibility:**
 
