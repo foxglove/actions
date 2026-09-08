@@ -6,7 +6,7 @@ Shared GitHub Actions workflows and prompts for the Foxglove organization.
 
 ### Review (`review.yml`)
 
-An AI-powered PR review that combines technical and product perspectives in a single pass. Acts as a CTO who is both a technical leader and product steward — evaluating code quality, architecture, performance, and security alongside user-facing consistency, terminology, documentation, and UX.
+An AI-powered PR review that combines technical and product perspectives in a single pass. Acts as a CTO who is both a technical leader and product steward — evaluating code quality, architecture, performance, and security alongside user-facing consistency, terminology, documentation, and UX. Review comments use ASD-STE100 Simplified Technical English. They do not use personality, humor, or rhetorical filler.
 
 **Prompt:** [`prompts/review.md`](prompts/review.md)
 
