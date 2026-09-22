@@ -100,7 +100,7 @@ jobs:
             echo "__CLAUDE_PROMPT__"
 
             echo "claude_args<<__CLAUDE_ARGS__"
-            echo "--model claude-opus-4-8"
+            echo "--model claude-opus-5-5"
             echo "--effort xhigh"
             echo "--allowedTools \"${CLAUDE_ALLOWED_TOOLS}\""
             echo "__CLAUDE_ARGS__"
@@ -119,7 +119,7 @@ jobs:
       - name: Run Claude review (attempt 1)
         id: attempt1
         continue-on-error: true
-        uses: anthropics/claude-code-action@v1.0.109
+        uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280, Agent SDK 0.3.280 (after v1.0.231)
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: false
@@ -144,7 +144,7 @@ jobs:
         id: attempt2
         if: steps.attempt1.outcome == 'failure'
         continue-on-error: true
-        uses: anthropics/claude-code-action@v1.0.109
+        uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280, Agent SDK 0.3.280 (after v1.0.231)
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: false
@@ -169,7 +169,7 @@ jobs:
         id: attempt3
         if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
         continue-on-error: true
-        uses: anthropics/claude-code-action@v1.0.109
+        uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280, Agent SDK 0.3.280 (after v1.0.231)
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: false
