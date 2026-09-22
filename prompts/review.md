@@ -225,7 +225,7 @@ If a phrase is figurative, emotional, or ornamental, do not use it. Write the fa
 1. Inspect all prior reviews and PR comments:
    - Read review threads via `mcp__github__get_pull_request_review_comments`.
    - Read review-level bodies via `mcp__github__get_pull_request_reviews`.
-   - Read conversation comments via `mcp__github__pull_request_read` with `method: get_comments`.
+   - Read conversation comments via `mcp__github__get_issue_comments`.
 2. For each of your prior threads (`CONTEXT.bot_login`) that is now fixed:
    - Reply on the thread with `mcp__github__add_reply_to_pull_request_comment`.
    - Resolve it via GraphQL: `gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{isResolved}}}' -f threadId='<THREAD_NODE_ID>'`
