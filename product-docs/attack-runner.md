@@ -27,7 +27,7 @@ We keep these settings separate so model or harness experiments do not change fi
 
 ### The first release assesses party with a maintained session
 
-Only explicitly authorized party targets are assessed. The run establishes a fresh session and maintains it throughout authenticated work. The first path is Authenticated Access Chains. Production assessment, deliberate anonymous phases, additional implemented paths, CI scanner gates, FOU CI-gap automation, and formal deployed-version tracking are outside this release.
+Only explicitly authorized party targets are assessed. The run establishes a fresh session and maintains it throughout authenticated work. The first path is Authenticated Access Chains. Production assessment, deliberate anonymous phases, additional implemented paths, CI scanner gates, automated ticketing for gaps in continuous integration checks, and formal deployed-version tracking are outside this release.
 
 This boundary keeps the first service focused on repeatable authenticated assessment. The path and adapter contracts still support future additions.
 
