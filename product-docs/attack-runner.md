@@ -49,6 +49,47 @@ The adapter exposes observations in a harness-independent form and reports actua
 
 A completed positive observation remains evidence when later work fails. Untested and interrupted work remains explicit. Run results distinguish assessment completion, reconciliation, and external delivery so an operator can retry a failed stage without claiming that a ticket already exists.
 
+### Run and session lifecycle
+
+Run completion, exploit observation, ticket state, and delivery status are separate. Ending a run never proves that an exploit is fixed.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Requested
+    Requested --> Configuring: Weekly or manual trigger
+    Configuring --> Ready: Resolve supported harness, model, path, and limits
+    Configuring --> FailedBeforeAssessment: Invalid or unsupported settings
+    Ready --> SigningIn: Worker ready, mint and retrieve fresh magic link
+    SigningIn --> Assessing: Redeem immediately once, store cookie, validate identity
+    SigningIn --> FailedBeforeAssessment: Issuance, login, or identity validation fails
+    Assessing --> Assessing: Maintain same cookie session every 300 seconds
+    Assessing --> Paused: Session validity unknown
+    Paused --> Assessing: Same session confirmed usable within bounded diagnosis
+    Paused --> Stopped: Session lost or diagnosis deadline reached
+    Assessing --> Stopped: Session loss, interruption, or assessment finishes
+    Assessing --> Stopped: Stop before spend or time limit
+    Paused --> Stopped: Stop before spend or time limit
+    Stopped --> Reconciling: Preserve completed evidence and unfinished coverage
+    Reconciling --> Delivering: Per-exploit decisions, with invalid items kept unresolved
+    Delivering --> Reporting: Actual, failed, and uncertain ticket changes recorded
+    FailedBeforeAssessment --> Reporting: Failure summary, no assessment
+    Reporting --> SummaryAvailable: Persist run summary artifact
+    Reporting --> ReportPending: Artifact write fails
+    ReportPending --> Reporting: Retry report without repeating ticket writes
+    SummaryAvailable --> [*]
+
+    note right of Assessing
+        Validate before high-impact chains too.
+        Retain server cookie updates beyond magic-link expiry.
+        Do not remint or continue anonymously.
+    end note
+    note right of Stopped
+        Reserve time for evidence and reporting within the job limit.
+        Valid positives survive a later interruption.
+        A failed report remains pending for a later recovery.
+    end note
+```
+
 ## Product dimensions
 
 | Dimension            | Decision                                                                                                                      | Source                                                                         |

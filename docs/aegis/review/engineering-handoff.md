@@ -6,7 +6,7 @@ This document translates the proposed product behavior into implementation bound
 
 ## Product contract
 
-Read [Attack runner](../../../product-docs/attack-runner.md), [Exploit findings](../../../product-docs/exploit-findings.md), [Attack sessions](../../../product-docs/attack-sessions.md), and [Attack paths](../../../product-docs/attack-paths.md), including their References. The [instructions file](../attacks/authenticated-access-chains/instructions.md) owns first-path mechanics. The [PR description](https://github.com/foxglove/actions/pull/48) presents the review context and state diagrams.
+Read [Attack runner](../../../product-docs/attack-runner.md), [Exploit findings](../../../product-docs/exploit-findings.md), [Attack sessions](../../../product-docs/attack-sessions.md), and [Attack paths](../../../product-docs/attack-paths.md), including their References. The [instructions file](../attacks/authenticated-access-chains/instructions.md) owns first-path mechanics. The product documents contain the [run/session lifecycle](../../../product-docs/attack-runner.md#run-and-session-lifecycle), [ticket lifecycle](../../../product-docs/exploit-findings.md#ticket-lifecycle), and [finding reconciliation and delivery](../../../product-docs/exploit-findings.md#finding-reconciliation-and-delivery) diagrams. The PR description provides proposal context, not the canonical behavioral contract.
 
 Preserve these invariants in implementation:
 
@@ -25,7 +25,7 @@ Build a small deterministic offline planner first. It consumes synthetic run obs
 | Stage                    | Deliverable                                                                                     | Exit evidence                                                                               |
 | ------------------------ | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Contract and feasibility | Concrete schema/entry point, representative fixtures, documented auth/harness findings          | No incompatible interface assumptions; unresolved dependencies explicit                     |
-| E1 offline planner       | Reconciliation code, synthetic fixtures, tests, and runnable examples                           | All E1 acceptance cases pass on the delivered revision                                      |
+| E1 offline planner       | Reconciliation code, synthetic fixtures, tests, and runnable examples                           | Planner acceptance cases pass; E1-16 records final-revision checks and review evidence      |
 | E2 integration           | Authentication and harness adapters, normalized observations, Linear delivery, summary artifact | Controlled integration acceptance, including retries and partial failures                   |
 | Release                  | Weekly/manual workflow, bounded operation, evidence handling                                    | Verified target scope, full-duration session continuity, usage limits, and end-to-end trace |
 
