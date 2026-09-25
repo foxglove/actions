@@ -80,6 +80,12 @@ A retry after an uncertain write and two independent runs racing to create the s
 
 Add a controlled concurrent-run test once the mechanism is defined: two runs identify the same new exploit, or both contradict a fix claim, while one delivery loses its acknowledgment. Verify ticket uniqueness, per-run counts, correct final lifecycle, and honest summaries. The current I-06 retry criterion does not by itself prove concurrent behavior. The concrete concurrency mechanism and additional test remain engineering work; no claim of verification is implied.
 
+## Failed stages and bounded reporting
+
+A complete reconciliation failure bypasses delivery and records no new ticket writes. Preserve available redacted evidence and report the failed stage. Persisting that failure summary does not make the workflow successful. Per-finding invalid inputs remain independent when the rest of the input is usable.
+
+Choose an explicit report retry limit, reserve reporting time within the total job budget, and stop retries at that limit or the job deadline. Reporting then terminates visibly as failed or timed out, with a redacted stage diagnostic when execution permits. Do not promise a later recovery worker. Retrying a report must not repeat ticket mutations; recovery requires original run/event identities and evidence that actually survived. Verify these paths with I-13 and I-14, including the distinction between a missing artifact and a persisted failure summary.
+
 ## Verification and completion
 
 Turn the [acceptance criteria](acceptance.md) into executable tests at the appropriate boundaries. Use semantic assertions and representative fixtures, including paraphrases, independent failures with similar titles, partial chains, replay, and resolved-ticket non-observation. Keep expected outcomes tied to the product rules rather than mirroring the implementation.

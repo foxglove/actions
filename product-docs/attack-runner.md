@@ -49,6 +49,14 @@ The adapter exposes observations in a harness-independent form and reports actua
 
 A completed positive observation remains evidence when later work fails. Untested and interrupted work remains explicit. Run results distinguish assessment completion, reconciliation, and external delivery so an operator can retry a failed stage without claiming that a ticket already exists.
 
+### Stage and reporting failures
+
+If the complete reconciliation stage fails, for example because its input is structurally unreadable, the runner skips ticket delivery, preserves available redacted evidence, and reports reconciliation failure. Independent invalid findings still use per-finding triage when the rest of the input is usable. A successfully written failure summary does not turn a failed stage into a successful workflow result.
+
+Report retries are bounded by an explicit retry limit and the remaining job time. If retries are exhausted or the job deadline is reached, reporting ends in `ReportFailed` and the workflow fails visibly. The operator sees failed or timed-out workflow status; when execution can still emit a diagnostic, its logs identify the reporting stage, run ID, cause, and summary unavailability without credentials or raw sensitive evidence. A hard timeout is itself visible even if it prevents the final diagnostic.
+
+Summary non-observation and coverage records are not considered retained unless artifact persistence succeeds. If reporting fails, the operator must not infer a clean result or that the full record survived. Existing ticket writes are not repeated to regenerate a report. Any retry needs the original run/event identities and surviving evidence; unavailable evidence remains explicitly unavailable. No later automatic reporting-recovery process is part of this release. These visible failures remain non-gating for unrelated merges.
+
 ### Run and session lifecycle
 
 Run completion, exploit observation, ticket state, and delivery status are separate. Ending a run never proves that an exploit is fixed.
@@ -71,11 +79,16 @@ stateDiagram-v2
     Paused --> Stopped: Stop before spend or time limit
     Stopped --> Reconciling: Preserve completed evidence and unfinished coverage
     Reconciling --> Delivering: Per-exploit decisions, with invalid items kept unresolved
+    Reconciling --> ReconciliationFailed: Whole-stage failure before delivery
+    ReconciliationFailed --> Reporting: Preserve available evidence, no new ticket writes
     Delivering --> Reporting: Actual, failed, and uncertain ticket changes recorded
     FailedBeforeAssessment --> Reporting: Failure summary, no assessment
     Reporting --> SummaryAvailable: Persist run summary artifact
     Reporting --> ReportPending: Artifact write fails
-    ReportPending --> Reporting: Retry report without repeating ticket writes
+    ReportPending --> Reporting: Retry within attempt and time bounds, no repeated ticket writes
+    ReportPending --> ReportFailed: Retries exhausted or job deadline reached
+    Reporting --> ReportFailed: Job deadline reached during report write
+    ReportFailed --> [*]: Visible workflow failure or timeout
     SummaryAvailable --> [*]
 
     note right of Assessing
@@ -83,10 +96,14 @@ stateDiagram-v2
         Retain server cookie updates beyond magic-link expiry.
         Do not remint or continue anonymously.
     end note
+    note right of SummaryAvailable
+        A persisted summary can describe a failed run.
+        Earlier stage failures remain workflow failures.
+    end note
     note right of Stopped
         Reserve time for evidence and reporting within the job limit.
         Valid positives survive a later interruption.
-        A failed report remains pending for a later recovery.
+        Reporting failure ends visibly; no later recovery is assumed.
     end note
 ```
 
