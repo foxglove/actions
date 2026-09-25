@@ -32,7 +32,7 @@ The runner resolves the selected Git revision and committed-content hash, copies
 
 ### Path inputs and outputs
 
-Inputs include the authorized target set and identity, resolved runtime limits, evidence destination, and authentication/maintenance profile. Missing required inputs cause preflight failure.
+Inputs include the authorized target set and identity, resolved runtime limits, private local evidence directory, edge-access policy and classification signals, and authentication/maintenance profile. The trusted runner, not the harness, holds private-storage credentials and persists evidence under its guarded storage policy. Missing required inputs cause preflight failure.
 
 Outputs contain preflight, session maintenance, findings, ordered chains, dangerous actions not executed, coverage, and available time/spend information. Interrupted work is explicit. Every actionable exploit includes evidence, remediation, and end-to-end re-test expectations.
 

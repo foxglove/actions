@@ -29,6 +29,10 @@ The worker does not reopen the magic link, clear cookies, sign out, switch to Go
 
 When session validity becomes unknown, active work pauses while bounded diagnosis runs. Confirmed loss stops active assessment, records `SESSION_LOST_NEED_FRESH_MAGIC_LINK`, and preserves completed evidence and unfinished coverage. The assessment never silently continues anonymously. This prevents evidence from being attributed to the wrong security context.
 
+### Edge denial is distinct from session loss
+
+The adapter classifies edge challenges/blocks separately from application sign-in or authorization failures. Do not infer that a session expired from a challenge page or a generic HTTP error. A confirmed edge denial records `EDGE_CONTROL_BLOCKED`; insufficient evidence records `ACCESS_FAILURE_UNCLASSIFIED`. Stop active assessment with incomplete coverage when bounded diagnosis cannot establish application reachability, preserving prior confirmed observations. Do not remint or repeatedly redeem a magic link to work around an edge denial. A scoped party traffic policy must be supplied by the environment owner and recorded by the runner; this adapter cannot change edge controls itself.
+
 ### Credentials remain ephemeral
 
 Live links, cookies, and authentication headers stay in the private run context. They are absent from committed files, retained reports, tickets, and logs. Run-local credential material is removed during cleanup. Evidence records the validation result without credential values.

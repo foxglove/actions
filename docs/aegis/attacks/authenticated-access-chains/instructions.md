@@ -8,7 +8,7 @@ This path assesses authorization boundaries and connected exploit chains from on
 
 ## Inputs and preconditions
 
-The runner provides the authorized party targets/test identity, resolved limits, evidence location, and a fresh magic link in a private run-local copy. The committed file retains this placeholder:
+The runner provides the authorized party targets/test identity, resolved limits, a private run-local evidence directory, the approved edge-access profile and a fresh magic link in a private run-local copy. The trusted runner owns guarded artifact persistence; do not request storage credentials or publish evidence to public workflow artifacts, logs, job summaries or comments. The committed file retains this placeholder:
 
 REPLACE_WITH_FRESH_MAGIC_LINK
 
@@ -22,7 +22,7 @@ Open the freshly issued magic link immediately in the prepared sandbox/headless 
 
 Retain the issued session cookie in this run's browser context/cookie jar. Use the application's real session-cookie mechanism, preserving HttpOnly/domain/path/security behavior; the magic-link JWT is not the session credential.
 
-Validate the expected authenticated non-admin developer identity using the configured party session endpoint (initially /v1/me). A sign-in error, expired/invalid link, wrong identity/role, or failed validation is PREFLIGHT_FAILED. Stop the assessment. Do not continue anonymously.
+Validate the expected authenticated non-admin developer identity using the configured party session endpoint (initially /v1/me). An application sign-in error, expired/invalid link, wrong identity/role, or failed validation is PREFLIGHT_FAILED. Classify an edge challenge/block separately as described below; an edge response alone does not prove invalid credentials. On failed validation or unresolved edge access, stop the assessment. Do not continue anonymously.
 
 Do not log the live magic link, cookie, or authentication headers. Evidence should report identity/role validation without credential values.
 
@@ -35,6 +35,10 @@ The runner/adapter supplies the verified application maintenance operation. Defa
 Do not re-open the original magic link, mint another link to imitate session continuity, clear cookies, sign out, or use Google SSO during this run. A replacement cookie issued by the server as part of normal session maintenance is retained in the same jar.
 
 If maintenance fails or session validity becomes unknown, suspend active assessment while the runner diagnoses within its bounded policy. A confirmed lost/revoked session emits SESSION_LOST_NEED_FRESH_MAGIC_LINK and stops active work. Preserve completed observations and unfinished coverage. A new login requires a separately identified restart and fresh preflight; never silently substitute an anonymous run.
+
+### Edge-access failures
+
+Use the runner's response classification. A confirmed edge challenge/block emits EDGE_CONTROL_BLOCKED; insufficient attribution emits ACCESS_FAILURE_UNCLASSIFIED. A generic 403/429 is not by itself proof of Cloudflare blocking or application denial. Preserve the phase, affected surface, redacted signal/request identifier and observed counts for the private summary. Suspend work and use only the runner's bounded diagnosis policy; if application reachability remains unavailable, stop with incomplete coverage. Do not evade challenges, change edge policy, repeatedly redeem links or continue anonymously. Preserve completed positive evidence, and never turn an edge block into a no-issue result or an exploit ticket by itself.
 
 ## 3. Follow the authenticated attack path
 
@@ -76,6 +80,7 @@ Retain the source report sections:
 
 - Preflight — PASS/FAIL and redacted identity/role validation.
 - Session keep-alive — mechanism, cadence, checks, and loss events.
+- Edge access — approved policy reference, observed challenge/block/unclassified-failure counts, phase, available request identifiers and affected coverage; omit sensitive request values.
 - Findings — actionable exploits and complete ticket material.
 - Chains — ordered demonstrated paths, prerequisites, blocked steps, and evidence.
 - Dangerous but not executed — reachable controls versus unperformed effects.
