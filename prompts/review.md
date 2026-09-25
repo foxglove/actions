@@ -202,16 +202,8 @@ If a phrase is figurative, emotional, rhetorical, or ornamental, do not use it. 
    - Read review-level bodies via `mcp__github__get_pull_request_reviews`.
    - Read conversation comments via `mcp__github__get_issue_comments`.
 2. For each of your prior threads (`CONTEXT.bot_login`) that is now fixed:
-   - Reply on the thread, where `<COMMENT_ID>` is the thread's first comment:
-
-     ```bash
-     gh api repos/<CONTEXT.repo>/pulls/<CONTEXT.pr_number>/comments/<COMMENT_ID>/replies -F body=@- <<'REPLY_EOF'
-     <REPLY>
-     REPLY_EOF
-     ```
-
+   - Reply on the thread with `gh api` to the replies endpoint of the thread's first comment. The GitHub MCP server has no reply tool.
    - Resolve it via GraphQL: `gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{isResolved}}}' -f threadId='<THREAD_NODE_ID>'`
-
 3. Minimize your prior review-level comments (`CONTEXT.bot_login`):
    - Minimize every one EXCEPT those whose review still has at least one unresolved review thread.
    - Use `Bash(gh api:*)` with GraphQL `minimizeComment` on the review-level comment node ID, reason `OUTDATED`. Check `isMinimized` first and skip ones already minimized.
