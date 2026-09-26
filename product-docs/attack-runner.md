@@ -33,6 +33,8 @@ Only explicitly authorized party targets are assessed. The run establishes a fre
 
 This boundary keeps the first service focused on repeatable authenticated assessment. The path and adapter contracts still support future additions.
 
+Authentication is automated through a separately deployed company-owned issuer and a private temporary handoff, as defined in [Attack sessions](attack-sessions.md). Attack Runner has no superadmin access and no dependency on an employee's login or mailbox. Operator availability is still required to observe and stop the assessment; it is not a weekly authentication step.
+
 ### Findings cross repository boundaries
 
 Linear holds exploit tickets. Each ticket includes the full activity chain, evidence, what must be fixed, and end-to-end verification expectations. The run summary output references the complete exploit-ticket list, including tickets actually opened, reopened, or updated. Slack delivery is deferred. Repository ownership is metadata, not a ticket eligibility filter.
@@ -61,6 +63,8 @@ The private summary records the failure phase, affected surface, classification/
 
 Each run records its unique ID, authorized environment/scope, pinned harness release or commit, provider/model and supported effort settings, attack-path ID, instructions Git revision and committed-content hash, money budget, time limit, responsible operator, edge-policy reference and access-failure observations, protected evidence destination/retention policy, coverage, stop reason, and evidence references. Secrets are excluded. The hash covers committed instructions, never a secret-bearing runtime copy.
 
+Authentication provenance records the adapter-verified session mode and its coverage limitations. For each authentication attempt, the summary also records a `handoffCleanup` snapshot: observed status (`pending`, `deleted`, `failed`, `not_created`, or `unknown` when unavailable), observation time, and a stable reference to the issuer-owned private cleanup record. The issuer record holds subsequent cleanup outcomes; a completed summary is not automatically rewritten and cannot certify future cleanup. See [Attack sessions](attack-sessions.md#credentials-remain-ephemeral) for the status and ownership contract.
+
 The adapter exposes observations in a harness-independent form and reports actual limit enforcement and usage availability. The runner stops new work before configured limits and reserves time to preserve evidence. A prompt telling a model to stay under budget is not enforcement.
 
 ### Evidence and delivery are separate results
@@ -88,7 +92,7 @@ stateDiagram-v2
     Configuring --> Ready: Validate profile, operator, private storage, and edge access
     Configuring --> FailedBeforeAssessment: Invalid settings or private storage unavailable
     Configuring --> AccessBlocked: Edge challenge or access failure
-    Ready --> SigningIn: Worker ready, mint and retrieve fresh magic link
+    Ready --> SigningIn: Separate issuer supplies fresh private handoff after readiness
     SigningIn --> Assessing: Redeem immediately once, store cookie, validate identity
     SigningIn --> FailedBeforeAssessment: Issuance, login, or identity validation fails
     SigningIn --> AccessBlocked: Edge challenge or access failure
