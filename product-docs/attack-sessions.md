@@ -28,7 +28,7 @@ The harness receives the test login material and session only. It receives neith
 
 Use a dedicated private temporary GCS bucket for login handoffs, separate from the evidence and durable reconciliation stores. Publish an immutable object per authorized run/attempt; do not use a shared latest-link object. Attack Runner can read only its assigned object for a bounded time, with no list, write, delete, bucket-administration or other-run access. A secret-looking object name alone is not access control.
 
-The handoff binds the link to its run, attempt, approved profile, expected member/org, authentication mode, and issuance/expiry times. The runner checks these against its independently authorized configuration, then verifies the actual identity after redemption. An untrusted payload cannot redefine the expected identity or target.
+The handoff binds the link to its run, attempt, approved profile, expected member/org, declared authentication mode, and issuance/expiry times. Before redemption, the trusted runner adapter checks these against its independently authorized configuration. After redemption, it verifies the actual identity and session mode using application-derived evidence before releasing attack work. The issuer's mode label is not proof of the resulting session mode. An untrusted payload cannot redefine the expected identity, mode or target.
 
 ### The ready worker logs in immediately
 
@@ -45,6 +45,8 @@ The default contract remains an ordinary non-admin developer login. Superadmin c
 **Decision pending app/auth review:** whether a separately issued impersonation session is acceptable for Authenticated Access Chains, and which sign-in or authorization checks it cannot cover. Until explicitly selected in the product contract and qualified, it is not a permitted substitution for ordinary login. If ordinary login is retained, the issuer needs a supported scoped mint operation or unattended company-owned mailbox integration. Both retain the same private handoff boundary.
 
 Record the selected mode and coverage limitations in private run provenance. A valid non-admin starting session that subsequently demonstrates privilege escalation remains exploit evidence; the starting-identity check must not discard that causal transition.
+
+The adapter must distinguish an impersonation session even when its envelope is incorrectly labelled ordinary. The inspected sign-in implementation emits an impersonation marker in its server response, but `/v1/me` does not expose session source. Capturing that response from the approved application in a fresh browser is a candidate mode check, not a qualified integration. Absence of a marker alone is not sufficient proof of ordinary login. Engineering must qualify both branches and ambiguous/missing evidence; if they cannot be distinguished, a session-bound application signal is a release dependency. Unknown or mismatched mode fails preflight. Worker instructions cannot replace this adapter gate.
 
 ### One logical session lasts for the assessment
 
@@ -68,7 +70,11 @@ Live links exist only in the isolated issuer, the temporary handoff and the priv
 
 An issuer-owned cleanup service deletes the exact handoff object after successful-login acknowledgment, cancellation or expiry; it also removes abandoned handoffs after crashes. Run-local link material is erased after use and other run-local credentials during cleanup. Temporary storage has no version history, soft-delete recovery or retention lock. Its settings do not change the separate evidence-retention policy.
 
-Storage reads are not single-use consumption; application redemption enforces link use. Deleting an object does not revoke an established session. Token expiry remains enforced by the application even if cleanup is delayed. Cleanup has bounded retries, a named owner and visible failure reporting; an expired link is not proof its stored bytes were deleted. A cleanup failure does not erase independently valid exploit evidence, and the overall result does not claim successful cleanup.
+Storage reads are not single-use consumption; application redemption enforces link use. Deleting an object does not revoke an established session. Token expiry remains enforced by the application even if cleanup is delayed. Cleanup has bounded retries, a named owner and visible failure reporting; an expired link is not proof its stored bytes were deleted. A cleanup failure does not erase independently valid exploit evidence.
+
+The issuer owns a durable private, credential-free cleanup record per run/attempt. It records the handoff reference/generation when known, status (`pending`, `deleted`, `failed`, or `not_created`), update time and sanitized failure reason. `deleted` requires confirmed absence of the expected object generation under the qualified storage policy; `not_created` requires a confirmed failure before publication. Uncertain publication or deletion is never reported as either. The record remains `pending` during bounded retries and becomes `failed` when its configured retry/deadline policy is exhausted. A later confirmed recovery updates that record while preserving the failure history.
+
+When writing its summary, the runner records the observed cleanup status, observation time and stable issuer-record reference for each attempt. An unavailable record is `unknown`, not successful cleanup. The summary is a snapshot: cleanup may finish later, and the issuer record is authoritative for that later outcome. This does not promise a rewrite of the completed summary or add cleanup to the assessment's synchronous lifecycle. Before recurring launch, the issuer team must configure and test a private operational failure destination and transport; their selection is an explicit release dependency. Assessment-summary delivery to Slack remains deferred.
 
 ## Contracts
 
@@ -87,34 +93,42 @@ sequenceDiagram
     participant G as Private temporary storage
     participant R as Attack Runner
     participant B as Prepared test browser
-    S->>R: Start authorized run and attempt
+    S->>R: Start authorized run and attempt, with stable cleanup-record reference
     R->>B: Prepare browser
     R-->>S: Authenticated readiness
     S->>I: Authorize fixed profile and attempt
     I->>I: Resolve allowed identity and mint fresh link
     I->>G: Create immutable handoff
+    G-->>I: Confirm object reference and generation
+    I-->>S: Published object reference and generation
     S-->>R: Assigned object and bounded read access
     R->>G: Read exact assigned object
     G-->>R: Link and run binding
-    alt Valid binding, mode and remaining lifetime
-        R->>B: Redeem once and validate actual identity
-        alt Login and identity validation succeed
+    alt Valid binding, declared mode and remaining lifetime
+        R->>B: Redeem once in prepared browser
+        B-->>R: Application sign-in and session evidence
+        R->>R: Validate actual identity and mode
+        alt Login, identity and mode validation succeed
             R-->>I: Authenticated success acknowledgment
             I->>G: Delete exact handoff
+            R-->>B: Release attack work after adapter preflight passes
             B->>B: Assess using maintained session cookie
-        else Login failed or redemption uncertain
+        else Login or validation failed, or redemption uncertain
             R-->>S: End attempt, no assessment
+            S->>I: Authenticated attempt termination
             I->>G: Cleanup abandoned handoff
         end
     else Missing, expired, cancelled or mismatched handoff
         R-->>S: Fail preflight, no assessment
+        S->>I: Authenticated attempt termination or cancellation
         I->>G: Cleanup handoff if present
     end
     Note over I,G: Expiry cleanup also covers crashes and missing acknowledgments
+    Note over I,R: Issuer owns cleanup record; summary records status as observed
     Note over R,B: No issuer authority in runner; no cloud credentials in harness
 ```
 
-Issuance/storage failure follows the failed-preflight path. The issuer authenticates acknowledgments against the authorized run/attempt; an acknowledgment cannot change the deletion target. Retry and cleanup failures follow the rules above, including visible failure without discarding completed evidence.
+Issuance/storage failure is reported by the issuer to the scheduler, which ends the attempt and tells the runner to fail preflight. External cancellation likewise travels from scheduler to both runner and issuer. Lost termination messages are covered by issuer-owned expiry cleanup. The scheduler supplies a stable per-attempt cleanup-record reference at initial bootstrap, even if issuance later fails, and passes the object reference/generation after publication. A missing issuer record remains unknown; it is not proof that no handoff exists. The issuer authenticates acknowledgments against the authorized run/attempt; an acknowledgment cannot change the deletion target. Cleanup records reflect the storage operation's confirmed outcome or explicit failure, not merely a sent delete request. Retry and cleanup failures follow the rules above, including visible failure without discarding completed evidence.
 
 ## Product dimensions
 

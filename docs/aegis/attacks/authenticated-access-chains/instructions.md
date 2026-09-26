@@ -24,7 +24,7 @@ Retain the issued session cookie in this run's browser context/cookie jar. Use t
 
 Validate the expected authenticated non-admin developer identity using the configured party session endpoint (initially /v1/me). An application sign-in error, expired/invalid link, wrong identity/role, or failed validation is PREFLIGHT_FAILED. Classify an edge challenge/block separately as described below; an edge response alone does not prove invalid credentials. On failed validation or unresolved edge access, stop the assessment. Do not continue anonymously.
 
-The session's authentication mode must match the qualified run profile. Do not substitute impersonation for ordinary login; record any approved mode's coverage limitations. A valid non-admin starting session that gains privileges through a demonstrated exploit remains exploit evidence, not an invalid starting identity.
+Before supplying this link, the trusted runner adapter checks the handoff's declared authentication mode against the authorized profile. After login, the adapter must verify the actual session mode and starting identity from application evidence, record mode/coverage limitations in private run provenance, and explicitly signal that preflight passed. Wait for that signal before any attack activity; a missing or failed signal stops assessment. The worker does not receive the handoff envelope or own this mode comparison. A valid non-admin starting session that gains privileges through a demonstrated exploit remains exploit evidence, not an invalid starting identity.
 
 Do not log the live magic link, cookie, or authentication headers. Evidence should report identity/role validation without credential values.
 
