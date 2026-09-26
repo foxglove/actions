@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "run": {
+    "id": "R-F1-NEW",
+    "environment": "party",
+    "authorizedTargets": ["https://qa-fixture.foxglove.party"],
+    "pathId": "authenticated-access-chains",
+    "instructionsRevision": "synthetic-fixture-revision",
+    "instructionsSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "harness": { "name": "strix", "revision": "synthetic-pinned-revision" },
+    "model": { "provider": "fixture", "id": "fixture-model" },
+    "budgetUsd": 100,
+    "deadline": "2030-01-07T18:00:00Z",
+    "operatorId": "synthetic-operator",
+    "evidencePrefix": "gs://synthetic-private-fixture/R-F1-NEW/",
+    "evidenceRetentionPolicyRef": "synthetic-30-day-policy",
+    "session": "validated",
+    "assessment": "completed"
+  },
+  "sessionEvents": [
+    {
+      "ref": "S-F1-VALIDATED",
+      "sequence": 1,
+      "state": "validated",
+      "actorRole": "non-admin-developer",
+      "partyRef": "tenant-A",
+      "jarRef": "J-F1"
+    }
+  ],
+  "coverage": [
+    {
+      "surface": "export-download",
+      "target": "https://qa-fixture.foxglove.party",
+      "status": "tested",
+      "attemptedOperations": [
+        "list-owned-exports",
+        "download-other-tenant-export"
+      ],
+      "conditions": ["synthetic non-admin tenant-A session"],
+      "evidenceRefs": ["E-F1-LIST", "E-F1-DOWNLOAD"]
+    }
+  ],
+  "retests": [],
+  "observations": [
+    {
+      "observationId": "O-F1",
+      "status": "confirmed",
+      "rawFindingRef": "synthetic-strix-vuln-1",
+      "sessionRef": "S-F1-VALIDATED",
+      "observedSequence": 2,
+      "environment": "party",
+      "surface": "export-download",
+      "violatedBoundary": "tenant ownership check on export download",
+      "transitions": [
+        {
+          "stepId": "list",
+          "actorCapability": "tenant-A non-admin developer",
+          "resourceRelation": "owns tenant-A exports only",
+          "targetClass": "export metadata",
+          "operation": "list exports",
+          "expectedBoundary": "only authorized metadata visible",
+          "observedEffect": "learned a synthetic tenant-B export identifier through an authorized prerequisite",
+          "prerequisiteStepIds": [],
+          "evidenceRefs": ["E-F1-LIST"]
+        },
+        {
+          "stepId": "download",
+          "actorCapability": "tenant-A non-admin developer",
+          "resourceRelation": "tenant-B export is not owned by tenant-A",
+          "targetClass": "export download API",
+          "operation": "download tenant-B export",
+          "expectedBoundary": "deny cross-tenant read",
+          "observedEffect": "synthetic tenant-B export content returned",
+          "prerequisiteStepIds": ["list"],
+          "evidenceRefs": ["E-F1-DOWNLOAD"]
+        }
+      ],
+      "preconditions": ["validated non-admin tenant-A session"],
+      "actorRole": "non-admin-developer",
+      "impact": "demonstrated cross-tenant read of synthetic export",
+      "severity": "high",
+      "productionImpact": {
+        "value": "unknown",
+        "rationale": "Only synthetic party fixture evidence is supplied."
+      },
+      "remediation": ["enforce tenant ownership on export download"],
+      "retest": [
+        "from tenant-A developer session, verify tenant-B export download is denied while owned export download remains allowed"
+      ],
+      "components": ["synthetic-export-service"],
+      "blockedSteps": [],
+      "dangerousNotExecuted": []
+    }
+  ],
+  "existing": [],
+  "processedActions": []
+}
