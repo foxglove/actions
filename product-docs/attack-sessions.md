@@ -28,6 +28,8 @@ The harness receives the test login material and session only. It receives neith
 
 Use a dedicated private temporary GCS bucket for login handoffs, separate from the evidence and durable reconciliation stores. Publish an immutable object per authorized run/attempt; do not use a shared latest-link object. Attack Runner can read only its assigned object for a bounded time, with no list, write, delete, bucket-administration or other-run access. A secret-looking object name alone is not access control.
 
+The runner may also read only the redacted cleanup-status record for its own authorized run/attempt. It cannot list other status records, read another attempt's status or handoff reference, or write/delete any status record. The issuer alone writes these records. This read-only status access grants no issuer-control or handoff-deletion authority; the harness receives neither status-store credentials nor access to other attempts.
+
 The handoff binds the link to its run, attempt, approved profile, expected member/org, declared authentication mode, and issuance/expiry times. Before redemption, the trusted runner adapter checks these against its independently authorized configuration. After redemption, it verifies the actual identity and session mode using application-derived evidence before releasing attack work. The issuer's mode label is not proof of the resulting session mode. An untrusted payload cannot redefine the expected identity, mode or target.
 
 ### The ready worker logs in immediately
@@ -72,9 +74,11 @@ An issuer-owned cleanup service deletes the exact handoff object after successfu
 
 Storage reads are not single-use consumption; application redemption enforces link use. Deleting an object does not revoke an established session. Token expiry remains enforced by the application even if cleanup is delayed. Cleanup has bounded retries, a named owner and visible failure reporting; an expired link is not proof its stored bytes were deleted. A cleanup failure does not erase independently valid exploit evidence.
 
-The issuer owns a durable private, credential-free cleanup record per run/attempt. It records the handoff reference/generation when known, status (`pending`, `deleted`, `failed`, or `not_created`), update time and sanitized failure reason. `deleted` requires confirmed absence of the expected object generation under the qualified storage policy; `not_created` requires a confirmed failure before publication. Uncertain publication or deletion is never reported as either. The record remains `pending` during bounded retries and becomes `failed` when its configured retry/deadline policy is exhausted. A later confirmed recovery updates that record while preserving the failure history.
+The issuer owns a durable private, credential-free cleanup record per run/attempt. Its stable reference is derived from the trusted configured issuer-status namespace and the scheduler's canonical run/attempt IDs, using the resource key `attempts/{runId}/{attemptId}/cleanup`. The IDs are encoded as individual path segments. Scheduler and issuer use this same rule; deriving a reference neither creates a record nor authorizes access. The issuer creates the record when it accepts issuance authorization, before minting. It records the handoff reference/generation when known, status (`pending`, `deleted`, `failed`, or `not_created`), update time and sanitized failure reason. `deleted` requires confirmed absence of the expected object generation under the qualified storage policy; `not_created` requires a confirmed failure before publication. Uncertain publication or deletion is never reported as either. The record remains `pending` during bounded retries and becomes `failed` when its configured retry/deadline policy is exhausted. A later confirmed recovery updates that record while preserving the failure history.
 
 When writing its summary, the runner records the observed cleanup status, observation time and stable issuer-record reference for each attempt. An unavailable record is `unknown`, not successful cleanup. The summary is a snapshot: cleanup may finish later, and the issuer record is authoritative for that later outcome. This does not promise a rewrite of the completed summary or add cleanup to the assessment's synchronous lifecycle. Before recurring launch, the issuer team must configure and test a private operational failure destination and transport; their selection is an explicit release dependency. Assessment-summary delivery to Slack remains deferred.
+
+If the attempt stops during bootstrap before the scheduler requests issuance, no issuer record or handoff exists. Its summary intentionally records cleanup status `unknown` because there is no issuer-owned outcome, with the failure phase/reason stating that issuance was never requested. It does not fabricate an issuer `not_created` result. Distinguish this known pre-issuance stop from a missing record after an issuance request, whose publication outcome may be uncertain.
 
 ## Contracts
 
@@ -93,10 +97,12 @@ sequenceDiagram
     participant G as Private temporary storage
     participant R as Attack Runner
     participant B as Prepared test browser
+    S->>S: Derive cleanup reference from configured namespace and run/attempt IDs
     S->>R: Start authorized run and attempt, with stable cleanup-record reference
     R->>B: Prepare browser
     R-->>S: Authenticated readiness
     S->>I: Authorize fixed profile and attempt
+    I->>I: Create pending cleanup record at derived reference
     I->>I: Resolve allowed identity and mint fresh link
     I->>G: Create immutable handoff
     G-->>I: Confirm object reference and generation
