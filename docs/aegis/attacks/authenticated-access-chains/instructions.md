@@ -12,7 +12,7 @@ The runner provides the authorized party targets/test identity, resolved limits,
 
 REPLACE_WITH_FRESH_MAGIC_LINK
 
-The runner owns unattended minting/retrieval and prepares the sandbox before obtaining the short-lived link. Do not invent a mint endpoint, use a test-only retrieval shortcut on party, or ask a human to log in on a different machine as a substitute. If required inputs are unavailable, report preflight failure.
+The runner prepares the sandbox, then retrieves this run's short-lived link from a private handoff supplied by a separate company-owned issuer. Attack Runner has no superadmin access. Do not request issuer or storage credentials, invent a mint endpoint, use a test-only retrieval shortcut on party, or ask a human to log in on a different machine as a substitute. If required inputs are unavailable, report preflight failure.
 
 The harness adapter must pass this file's resolved contents to the worker. The run record identifies the attack path, committed Git revision/content hash, and resolved harness/model configuration without exposing credentials.
 
@@ -23,6 +23,8 @@ Open the freshly issued magic link immediately in the prepared sandbox/headless 
 Retain the issued session cookie in this run's browser context/cookie jar. Use the application's real session-cookie mechanism, preserving HttpOnly/domain/path/security behavior; the magic-link JWT is not the session credential.
 
 Validate the expected authenticated non-admin developer identity using the configured party session endpoint (initially /v1/me). An application sign-in error, expired/invalid link, wrong identity/role, or failed validation is PREFLIGHT_FAILED. Classify an edge challenge/block separately as described below; an edge response alone does not prove invalid credentials. On failed validation or unresolved edge access, stop the assessment. Do not continue anonymously.
+
+The session's authentication mode must match the qualified run profile. Do not substitute impersonation for ordinary login; record any approved mode's coverage limitations. A valid non-admin starting session that gains privileges through a demonstrated exploit remains exploit evidence, not an invalid starting identity.
 
 Do not log the live magic link, cookie, or authentication headers. Evidence should report identity/role validation without credential values.
 

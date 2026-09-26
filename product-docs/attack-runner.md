@@ -33,6 +33,8 @@ Only explicitly authorized party targets are assessed. The run establishes a fre
 
 This boundary keeps the first service focused on repeatable authenticated assessment. The path and adapter contracts still support future additions.
 
+Authentication is automated through a separately deployed company-owned issuer and a private temporary handoff, as defined in [Attack sessions](attack-sessions.md). Attack Runner has no superadmin access and no dependency on an employee's login or mailbox. Operator availability is still required to observe and stop the assessment; it is not a weekly authentication step.
+
 ### Findings cross repository boundaries
 
 Linear holds exploit tickets. Each ticket includes the full activity chain, evidence, what must be fixed, and end-to-end verification expectations. The run summary output references the complete exploit-ticket list, including tickets actually opened, reopened, or updated. Slack delivery is deferred. Repository ownership is metadata, not a ticket eligibility filter.
@@ -88,7 +90,7 @@ stateDiagram-v2
     Configuring --> Ready: Validate profile, operator, private storage, and edge access
     Configuring --> FailedBeforeAssessment: Invalid settings or private storage unavailable
     Configuring --> AccessBlocked: Edge challenge or access failure
-    Ready --> SigningIn: Worker ready, mint and retrieve fresh magic link
+    Ready --> SigningIn: Separate issuer supplies fresh private handoff after readiness
     SigningIn --> Assessing: Redeem immediately once, store cookie, validate identity
     SigningIn --> FailedBeforeAssessment: Issuance, login, or identity validation fails
     SigningIn --> AccessBlocked: Edge challenge or access failure
