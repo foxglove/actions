@@ -93,14 +93,14 @@ A separate input component must remove secrets. It must also prove which session
 
 An exit code is the number that a command returns when it stops.
 
-| Exit code | Meaning                                                                                              |
-| --------- | ---------------------------------------------------------------------------------------------------- |
-| `0`       | The planner processed all items.                                                                     |
-| `1`       | The input file or shared run data is invalid. The planner does not produce a plan.                   |
-| `2`       | The planner produced a plan, but one or more items need review.                                      |
-| `3`       | The planner could not write the requested output file. It prints the exact reason to standard error. |
+| Exit code | Meaning                                                                                            |
+| --------- | -------------------------------------------------------------------------------------------------- |
+| `0`       | The planner processed all items.                                                                   |
+| `1`       | The input file or shared run data is invalid. The planner does not produce a plan.                 |
+| `2`       | The planner produced a plan, but one or more items need review.                                    |
+| `3`       | The planner could not write the requested output file. It prints the error code to standard error. |
 
-The planner does not replace an existing output file. It returns exit code `3` and leaves that file unchanged. Choose a new path or remove the existing file, and then run the command again. When `--output` is present, a write failure does not print the plan to standard output.
+The planner does not replace an existing output file. It returns exit code `3` and leaves that file unchanged. Choose a new path or remove the existing file, and then run the command again. If another write error occurs after the planner creates the output file, it removes that incomplete file. If removal also fails, the error says that incomplete output may remain. When `--output` is present, a write failure does not print the plan to standard output.
 
 ## How to review this packet
 

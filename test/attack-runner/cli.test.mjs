@@ -71,3 +71,24 @@ test("CLI exits 3 and keeps an existing output file unchanged", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("CLI exits 3 and identifies a missing output directory", () => {
+  const dir = mkdtempSync(join(tmpdir(), "attack-runner-cli-output-"));
+  try {
+    const input = join(dir, "input.json");
+    const output = join(dir, "missing", "plan.json");
+    writeFileSync(input, JSON.stringify(fixture));
+
+    const result = spawnSync(
+      process.execPath,
+      [cli, "plan", "--input", input, "--output", output],
+      { encoding: "utf8" },
+    );
+
+    assert.equal(result.status, 3);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /Cannot write output file \(ENOENT\)/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile, writeFile } from "node:fs/promises";
+import { open, readFile, unlink } from "node:fs/promises";
 import { plan } from "./planner.mjs";
 
 function usage() {
@@ -29,13 +29,28 @@ export async function main(args) {
   const result = plan(raw);
   const json = `${JSON.stringify(result, null, 2)}\n`;
   if (output) {
+    let file;
     try {
-      await writeFile(output, json, { flag: "wx" });
+      file = await open(output, "wx");
+      await file.writeFile(json);
+      await file.sync();
+      await file.close();
+      file = undefined;
     } catch (error) {
-      const message =
+      let cleanupError;
+      if (file) {
+        await file.close().catch(() => {});
+        await unlink(output).catch((caught) => {
+          if (caught.code !== "ENOENT") cleanupError = caught;
+        });
+      }
+      let message =
         error.code === "EEXIST"
           ? "Output file already exists. Choose a new path or remove the existing file."
-          : "Cannot write output file.";
+          : `Cannot write output file (${error.code ?? "unknown error"}).`;
+      if (cleanupError) {
+        message += ` Incomplete output may remain (${cleanupError.code ?? "unknown cleanup error"}).`;
+      }
       const outputError = new Error(message);
       outputError.exitCode = 3;
       throw outputError;
