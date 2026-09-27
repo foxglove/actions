@@ -2,6 +2,14 @@
   "name": "actions",
   "private": true,
   "packageManager": "yarn@4.12.0",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "attack-runner": "node src/attack-runner/cli.mjs",
+    "test:attack-runner": "node --test test/attack-runner/*.test.mjs",
+    "format:check": "prettier --check .github/workflows/attack-runner.yml docs/aegis/review/offline-planner.md package.json src/attack-runner test/attack-runner"
+  },
   "devDependencies": {
     "prettier": "3.8.1"
   }
