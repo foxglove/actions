@@ -47,3 +47,27 @@ test("CLI rejects malformed shared input and never echoes malformed source bytes
   assert.equal(shared.status, 1);
   assert.match(shared.stderr, /schemaVersion/);
 });
+
+test("CLI exits 3 and keeps an existing output file unchanged", () => {
+  const dir = mkdtempSync(join(tmpdir(), "attack-runner-cli-output-"));
+  try {
+    const input = join(dir, "input.json");
+    const output = join(dir, "plan.json");
+    const existing = "existing content\n";
+    writeFileSync(input, JSON.stringify(fixture));
+    writeFileSync(output, existing);
+
+    const result = spawnSync(
+      process.execPath,
+      [cli, "plan", "--input", input, "--output", output],
+      { encoding: "utf8" },
+    );
+
+    assert.equal(result.status, 3);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /Output file already exists/);
+    assert.equal(readFileSync(output, "utf8"), existing);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

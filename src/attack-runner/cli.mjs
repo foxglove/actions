@@ -28,8 +28,19 @@ export async function main(args) {
   }
   const result = plan(raw);
   const json = `${JSON.stringify(result, null, 2)}\n`;
-  if (output) await writeFile(output, json, { flag: "wx" });
-  else process.stdout.write(json);
+  if (output) {
+    try {
+      await writeFile(output, json, { flag: "wx" });
+    } catch (error) {
+      const message =
+        error.code === "EEXIST"
+          ? "Output file already exists. Choose a new path or remove the existing file."
+          : "Cannot write output file.";
+      const outputError = new Error(message);
+      outputError.exitCode = 3;
+      throw outputError;
+    }
+  } else process.stdout.write(json);
   return result.status === "planned" ? 0 : 2;
 }
 
@@ -41,6 +52,6 @@ if (
     process.exitCode = await main(process.argv.slice(2));
   } catch (e) {
     process.stderr.write(`Attack Runner planner: ${e.message}\n`);
-    process.exitCode = 1;
+    process.exitCode = e.exitCode ?? 1;
   }
 }
