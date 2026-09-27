@@ -5,6 +5,7 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeOutput } from "../../src/attack-runner/cli.mjs";
 
 const cli = fileURLToPath(
   new URL("../../src/attack-runner/cli.mjs", import.meta.url),
@@ -91,4 +92,49 @@ test("CLI exits 3 and identifies a missing output directory", () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("output writer removes a file after a write failure", async () => {
+  const removed = [];
+  const handle = {
+    writeFile: async () => {
+      throw Object.assign(new Error("disk full"), { code: "ENOSPC" });
+    },
+    sync: async () => {},
+    close: async () => {},
+  };
+  const fs = {
+    open: async () => handle,
+    unlink: async (path) => removed.push(path),
+  };
+
+  await assert.rejects(writeOutput("plan.json", "{}", fs), (error) => {
+    assert.equal(error.exitCode, 3);
+    assert.match(error.message, /ENOSPC/);
+    return true;
+  });
+  assert.deepEqual(removed, ["plan.json"]);
+});
+
+test("output writer reports when it cannot remove an incomplete file", async () => {
+  const handle = {
+    writeFile: async () => {
+      throw Object.assign(new Error("disk full"), { code: "ENOSPC" });
+    },
+    sync: async () => {},
+    close: async () => {},
+  };
+  const fs = {
+    open: async () => handle,
+    unlink: async () => {
+      throw Object.assign(new Error("permission denied"), { code: "EACCES" });
+    },
+  };
+
+  await assert.rejects(writeOutput("plan.json", "{}", fs), (error) => {
+    assert.equal(error.exitCode, 3);
+    assert.match(error.message, /ENOSPC/);
+    assert.match(error.message, /Incomplete output may remain \(EACCES\)/);
+    return true;
+  });
 });

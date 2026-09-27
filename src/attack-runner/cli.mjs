@@ -6,6 +6,34 @@ function usage() {
   return "Usage: yarn attack-runner plan --input <fixture.json> [--output <plan.json>]";
 }
 
+export async function writeOutput(path, json, fs = { open, unlink }) {
+  let file;
+  try {
+    file = await fs.open(path, "wx");
+    await file.writeFile(json);
+    await file.sync();
+    await file.close();
+  } catch (error) {
+    let cleanupError;
+    if (file) {
+      await file.close().catch(() => {});
+      await fs.unlink(path).catch((caught) => {
+        if (caught.code !== "ENOENT") cleanupError = caught;
+      });
+    }
+    let message =
+      error.code === "EEXIST"
+        ? "Output file already exists. Choose a new path or remove the existing file."
+        : `Cannot write output file (${error.code ?? "unknown error"}).`;
+    if (cleanupError) {
+      message += ` Incomplete output may remain (${cleanupError.code ?? "unknown cleanup error"}).`;
+    }
+    const outputError = new Error(message);
+    outputError.exitCode = 3;
+    throw outputError;
+  }
+}
+
 export async function main(args) {
   if (args[0] !== "plan") throw new Error(usage());
   let input, output;
@@ -28,34 +56,8 @@ export async function main(args) {
   }
   const result = plan(raw);
   const json = `${JSON.stringify(result, null, 2)}\n`;
-  if (output) {
-    let file;
-    try {
-      file = await open(output, "wx");
-      await file.writeFile(json);
-      await file.sync();
-      await file.close();
-      file = undefined;
-    } catch (error) {
-      let cleanupError;
-      if (file) {
-        await file.close().catch(() => {});
-        await unlink(output).catch((caught) => {
-          if (caught.code !== "ENOENT") cleanupError = caught;
-        });
-      }
-      let message =
-        error.code === "EEXIST"
-          ? "Output file already exists. Choose a new path or remove the existing file."
-          : `Cannot write output file (${error.code ?? "unknown error"}).`;
-      if (cleanupError) {
-        message += ` Incomplete output may remain (${cleanupError.code ?? "unknown cleanup error"}).`;
-      }
-      const outputError = new Error(message);
-      outputError.exitCode = 3;
-      throw outputError;
-    }
-  } else process.stdout.write(json);
+  if (output) await writeOutput(output, json);
+  else process.stdout.write(json);
   return result.status === "planned" ? 0 : 2;
 }
 
