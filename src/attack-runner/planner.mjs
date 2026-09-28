@@ -266,7 +266,7 @@ function ticketDraft(o, runId, evidenceRefs) {
   };
 }
 // Combines corroborating observations into one proposed ticket without losing evidence.
-function mergeDraft(draft, o) {
+function mergeDraft(draft, o, primaryTransitions) {
   // Produces stable set unions for ticket list fields.
   const union = (a, b) => sorted([...a, ...b]);
   draft.preconditions = union(draft.preconditions, o.preconditions);
@@ -300,13 +300,13 @@ function mergeDraft(draft, o) {
   ).join("\n");
   // Keep the first (stable ID ordered) complete chain. Attach corroborating
   // evidence to matching steps, and retain every reference at ticket level.
-  for (const step of draft.activityChain) {
-    const other = o.transitions
-      .map(displayTransition)
-      .find(
+  for (let i = 0; i < draft.activityChain.length; i++) {
+    const step = draft.activityChain[i],
+      primary = primaryTransitions[i],
+      other = o.transitions.find(
         (t) =>
-          canonical(t.operation) === canonical(step.operation) &&
-          canonical(t.expectedBoundary) === canonical(step.expectedBoundary),
+          canonical(t.operation) === canonical(primary.operation) &&
+          canonical(t.expectedBoundary) === canonical(primary.expectedBoundary),
       );
     if (other) step.evidenceRefs = union(step.evidenceRefs, other.evidenceRefs);
   }
@@ -495,7 +495,8 @@ export function plan(raw) {
         ...primary.evidenceRefs,
         ...evidenceOf(o),
       ]);
-      if (primary.ticketDraft) mergeDraft(primary.ticketDraft, o);
+      if (primary.ticketDraft)
+        mergeDraft(primary.ticketDraft, o, match.record.transitions);
       decisions.push({
         observationId: o.observationId,
         outcome: primary.outcome,

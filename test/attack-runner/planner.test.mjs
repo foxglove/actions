@@ -450,8 +450,12 @@ test("Fixed tenant placeholders express structured relations", () => {
   assert.match(shortRefs.chain.at(-1).resourceRelation, /other tenant/);
 });
 
-test("Unknown or malformed tenant placeholders are rejected", () => {
-  for (const placeholder of ["{ActorTenant}", "{actor-tenant}", "{"]) {
+test("Unknown tenant placeholder variants are rejected", () => {
+  for (const placeholder of [
+    "{ActorTenant}",
+    "{actor-tenant}",
+    "{resource tenant}",
+  ]) {
     const x = fresh();
     x.observations[0].transitions[0].actorCapability = `${placeholder} non-admin developer`;
     const p = plan(x);
@@ -461,6 +465,16 @@ test("Unknown or malformed tenant placeholders are rejected", () => {
       /actorCapability.*unknown placeholder/,
     );
   }
+});
+
+test("Route templates remain valid prose", () => {
+  const x = fresh();
+  x.observations[0].transitions[1].targetClass = "GET /api/exports/{exportId}";
+  assert.equal(first(x).outcome, "new");
+  assert.equal(
+    first(x).ticketDraft.activityChain[1].targetClass,
+    "GET /api/exports/{exportId}",
+  );
 });
 
 test("Ambiguous terminal controls are quarantined before identity", () => {
@@ -508,6 +522,25 @@ test("E1-10: equivalent cross-component evidence merges into one complete ticket
     d.proposedActions.includes("create"),
   ).ticketDraft;
   assert.deepEqual(other, draft);
+});
+
+test("Corroborating tenant refs merge evidence into the matching displayed step", () => {
+  const x = fresh(),
+    a = x.observations[0],
+    b = structuredClone(a);
+  a.observationId = "O-A";
+  b.observationId = "O-B";
+  b.transitions[0].actorTenantRef = "tenant-C";
+  b.transitions[0].resourceTenantRef = "tenant-C";
+  b.transitions[1].actorTenantRef = "tenant-C";
+  b.transitions[1].resourceTenantRef = "tenant-D";
+  b.transitions[1].evidenceRefs = ["E-F1-DOWNLOAD-2"];
+  x.observations = [a, b];
+  const p = plan(x),
+    draft = p.decisions.find((d) => d.ticketDraft).ticketDraft;
+  assert.equal(new Set(p.decisions.map((d) => d.exploitId)).size, 1);
+  assert.match(draft.activityChain[1].operation, /tenant-B/);
+  assert.ok(draft.activityChain[1].evidenceRefs.includes("E-F1-DOWNLOAD-2"));
 });
 
 test("E1-08: confirmed run without action marker pauses evidence replay", () => {

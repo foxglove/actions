@@ -74,9 +74,11 @@ function transition(value, path) {
         "expected a safe opaque tenant reference",
       );
   const allowedPlaceholders = new Set(["{actorTenant}", "{resourceTenant}"]);
+  const tenantPlaceholder = /\{\s*(actor|resource)[\s_-]*tenant\s*\}/gi;
   for (const k of proseFields) {
-    const tokens = t[k].match(/\{[^{}]*\}|[{}]/g) ?? [];
-    const unknown = tokens.find((token) => !allowedPlaceholders.has(token));
+    const unknown = [...t[k].matchAll(tenantPlaceholder)]
+      .map(([token]) => token)
+      .find((token) => !allowedPlaceholders.has(token));
     if (unknown)
       throw new InputError(`${path}.${k}`, `unknown placeholder ${unknown}`);
   }
