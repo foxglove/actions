@@ -8,12 +8,16 @@ import {
   canonical,
 } from "../../src/attack-runner/planner.mjs";
 
+// Acceptance IDs in test names refer to docs/aegis/review/acceptance.md
+// (Offline planner acceptance). Names state the behavior; IDs preserve traceability.
 const fixture = JSON.parse(
-  await readFile(new URL("./fixtures/F1-new.json", import.meta.url)),
+  await readFile(
+    new URL("./fixtures/new-cross-tenant-export.json", import.meta.url),
+  ),
 );
-// Returns a copy of the base fixture that one test can change safely.
+// Fixture helper: gives each case its own cross-tenant exploit record so changes cannot affect another test.
 const fresh = () => structuredClone(fixture);
-// Builds an existing-ticket snapshot from the fixture's demonstrated exploit.
+// Fixture helper: creates a ticket for the same causal chain so tests can vary open, fixed and uncertain states.
 function existing(x, state = "open", issueOpen = true) {
   const o = x.observations[0];
   return {
@@ -33,10 +37,10 @@ function existing(x, state = "open", issueOpen = true) {
     historicalCount: 7,
   };
 }
-// Returns the first decision from a planned fixture.
+// Assertion helper for single-finding cases: selects the ticket decision being tested.
 const first = (x) => plan(x).decisions[0];
 
-test("E1-01 E1-14: full proposal includes unknown ownership and qualified production impact", () => {
+test("New exploit gets a complete ticket with unknown ownership and stated production-impact limits [E1-01 E1-14]", () => {
   const x = fresh();
   delete x.observations[0].components;
   const d = first(x);
@@ -63,7 +67,7 @@ test("E1-01 E1-14: full proposal includes unknown ownership and qualified produc
   assert.equal(first(x).notificationEligible, true);
 });
 
-test("E1-02 E1-09: open issue gains one per-run evidence/count and no notification", () => {
+test("Open ticket receives evidence and one count per run without another notification [E1-02 E1-09]", () => {
   const x = fresh();
   x.existing = [existing(x)];
   const d = first(x);
@@ -81,7 +85,7 @@ test("E1-02 E1-09: open issue gains one per-run evidence/count and no notificati
   assert.notEqual(first(x).confirmationKey, d.confirmationKey);
 });
 
-test("E1-03 E1-19: explicit fix claim reopens only closed issue, eligibility once per claim", () => {
+test("Evidence against a fix reopens the same ticket only when it is closed [E1-03 E1-19]", () => {
   const x = fresh();
   x.existing = [existing(x, "claimed_fixed", false)];
   let d = first(x);
@@ -109,7 +113,7 @@ test("E1-03 E1-19: explicit fix claim reopens only closed issue, eligibility onc
   assert.equal(first(x).notificationEligible, true);
 });
 
-test("E1-04 E1-05 E1-06: scoped non-observation remains summary-only for all execution states", () => {
+test("No finding leaves the ticket unchanged whether the retest completed, stopped or never started [E1-04 E1-05 E1-06]", () => {
   for (const execution of ["completed", "interrupted", "not_attempted"]) {
     const x = fresh();
     x.observations = [];
@@ -140,7 +144,7 @@ test("E1-04 E1-05 E1-06: scoped non-observation remains summary-only for all exe
   assert.deepEqual(plan(x).decisions, []);
 });
 
-test("E1-07: pre-loss positive survives; post-loss and wrong start are unresolved", () => {
+test("Evidence before session loss remains valid; evidence after loss or a wrong start needs review [E1-07]", () => {
   const x = fresh();
   x.sessionEvents.push({ ref: "LOST", sequence: 3, state: "lost" });
   assert.equal(first(x).outcome, "new");
@@ -158,7 +162,7 @@ test("E1-07: pre-loss positive survives; post-loss and wrong start are unresolve
     ref: "ROTATED",
     sequence: 1.5,
     state: "rotated",
-    jarRef: "J-F1",
+    jarRef: "cookie-jar-tenant-a",
   });
   // Invalid shared session sequence must reject, rather than manufacture provenance.
   assert.throws(() => plan(x), /sequence/);
@@ -168,11 +172,11 @@ test("E1-07: pre-loss positive survives; post-loss and wrong start are unresolve
   assert.equal(first(x).outcome, "new");
 });
 
-test("E1-08: duplicate observations and applied event state avoid repeat mutations", () => {
+test("Duplicate observations and applied event state avoid repeat mutations [E1-08]", () => {
   const x = fresh();
   x.existing = [existing(x)];
   x.observations.push(structuredClone(x.observations[0]));
-  x.observations[1].observationId = "O-F1-COPY";
+  x.observations[1].observationId = "observation-cross-tenant-export-copy";
   let ds = plan(x).decisions;
   assert.equal(
     ds.filter((d) => d.proposedActions.includes("append_evidence")).length,
@@ -192,7 +196,7 @@ test("Duplicate observations keep the primary fix-contradiction outcome", () => 
   x.existing = [existing(x, "claimed_fixed", false)];
   x.observations.push({
     ...structuredClone(x.observations[0]),
-    observationId: "O-F1-COPY",
+    observationId: "observation-cross-tenant-export-copy",
   });
   assert.deepEqual(
     plan(x).decisions.map((d) => d.outcome),
@@ -200,7 +204,7 @@ test("Duplicate observations keep the primary fix-contradiction outcome", () => 
   );
 });
 
-test("E1-10 E1-17 E1-20: repository/path/model and fingerprint version do not change established identity", () => {
+test("Repository/path/model and fingerprint version do not change established identity [E1-10 E1-17 E1-20]", () => {
   const x = fresh();
   x.existing = [existing(x)];
   x.run.pathId = "other-path";
@@ -236,17 +240,24 @@ test("E1-10 E1-17 E1-20: repository/path/model and fingerprint version do not ch
   assert.equal(first(x).outcome, "rediscovered");
 });
 
-test("E1-11 E1-18: different control separates identity; plausible duplicate is unresolved", () => {
+test("Different control separates identity; plausible duplicate is unresolved [E1-11 E1-18]", () => {
   const x = fresh();
   x.existing = [existing(x)];
   const alternate = structuredClone(x.observations[0]);
-  alternate.observationId = "O-SHARE";
+  alternate.observationId = "observation-share-token-bypass";
   alternate.violatedBoundary = "share token validation";
   alternate.transitions.at(-1).expectedBoundary = "deny invalid share token";
   x.observations.push(alternate);
   let ds = plan(x).decisions;
-  assert.equal(ds[0].outcome, "rediscovered");
-  assert.equal(ds[1].outcome, "new");
+  assert.equal(
+    ds.find((d) => d.sourceObservationId === x.observations[0].observationId)
+      .outcome,
+    "rediscovered",
+  );
+  assert.equal(
+    ds.find((d) => d.sourceObservationId === alternate.observationId).outcome,
+    "new",
+  );
   x.observations = [structuredClone(fixture.observations[0])];
   x.existing.push({
     ...existing(x),
@@ -258,7 +269,7 @@ test("E1-11 E1-18: different control separates identity; plausible duplicate is 
   assert.equal(plan(x).status, "needs_review");
 });
 
-test("E1-18: one raw finding with two explicit causes splits and retains shared prerequisite", () => {
+test("One raw finding with two explicit causes splits and retains shared prerequisite [E1-18]", () => {
   const x = fresh(),
     o = x.observations[0];
   o.transitions.push({
@@ -301,7 +312,11 @@ test("E1-18: one raw finding with two explicit causes splits and retains shared 
   );
   assert.equal(p.decisions[0].ticketDraft.activityChain.length, 2);
   assert.equal(p.decisions[1].ticketDraft.activityChain.length, 2);
-  assert.ok(p.decisions.every((d) => d.evidenceRefs.includes("E-F1-LIST")));
+  assert.ok(
+    p.decisions.every((d) =>
+      d.evidenceRefs.includes("evidence-list-owned-exports"),
+    ),
+  );
   assert.deepEqual(
     p.decisions.map((d) => d.ticketDraft.remediation),
     [["fix ownership"], ["fix share token"]],
@@ -349,7 +364,7 @@ test("E1-18: one raw finding with two explicit causes splits and retains shared 
   assert.equal(first(x).outcome, "unresolved");
 });
 
-test("E1-20: reviewed structured alias preserves exploit ID across normalization version", () => {
+test("Reviewed structured alias preserves exploit ID across normalization version [E1-20]", () => {
   const x = fresh(),
     e = existing(x);
   e.identityVersion = 1;
@@ -369,7 +384,7 @@ test("E1-20: reviewed structured alias preserves exploit ID across normalization
   assert.match(d.normalizedMatchReason, /reviewed structured identity alias/);
 });
 
-test("E1-17: DAG prerequisite order does not change causal identity", () => {
+test("Reordering independent prerequisites does not change exploit identity [E1-17]", () => {
   const x = fresh(),
     o = x.observations[0];
   o.transitions[0].operation = "z list exports";
@@ -386,7 +401,7 @@ test("E1-17: DAG prerequisite order does not change causal identity", () => {
   assert.deepEqual(identityOf(o), a);
 });
 
-test("E1-18: actor and resource tenant equality remains part of identity", () => {
+test("Actor and resource tenant equality remains part of identity [E1-18]", () => {
   const x = fresh(),
     o = x.observations[0];
   o.violatedBoundary = "access check on export download";
@@ -514,7 +529,7 @@ test("Ambiguous terminal controls are quarantined before identity", () => {
   ]);
 });
 
-test("E1-10: equivalent cross-component evidence merges into one complete ticket regardless of order", () => {
+test("Equivalent cross-component evidence merges into one complete ticket regardless of order [E1-10]", () => {
   const x = fresh(),
     a = x.observations[0],
     b = structuredClone(a);
@@ -557,16 +572,22 @@ test("Corroborating tenant refs merge evidence into the matching displayed step"
   b.transitions[0].resourceTenantRef = "tenant-C";
   b.transitions[1].actorTenantRef = "tenant-C";
   b.transitions[1].resourceTenantRef = "tenant-D";
-  b.transitions[1].evidenceRefs = ["E-F1-DOWNLOAD-2"];
+  b.transitions[1].evidenceRefs = [
+    "evidence-download-other-tenant-export-repeat",
+  ];
   x.observations = [a, b];
   const p = plan(x),
     draft = p.decisions.find((d) => d.ticketDraft).ticketDraft;
   assert.equal(new Set(p.decisions.map((d) => d.exploitId)).size, 1);
   assert.match(draft.activityChain[1].operation, /tenant-B/);
-  assert.ok(draft.activityChain[1].evidenceRefs.includes("E-F1-DOWNLOAD-2"));
+  assert.ok(
+    draft.activityChain[1].evidenceRefs.includes(
+      "evidence-download-other-tenant-export-repeat",
+    ),
+  );
 });
 
-test("E1-08: confirmed run without action marker pauses evidence replay", () => {
+test("Confirmed run without action marker pauses evidence replay [E1-08]", () => {
   const x = fresh();
   x.existing = [existing(x)];
   x.existing[0].confirmedRunIds = [x.run.id];
@@ -636,7 +657,7 @@ test("Same-jar rotation with changed party is not valid provenance", () => {
     ref: "ROTATED",
     sequence: 2,
     state: "rotated",
-    jarRef: "J-F1",
+    jarRef: "cookie-jar-tenant-a",
     actorRole: "non-admin-developer",
     partyRef: "tenant-B",
   });
@@ -689,7 +710,7 @@ test("A retest linked to unresolved evidence stays unresolved", () => {
       exploitId: "EXP-1",
       targetSurface: "export-download",
       attemptedOperations: ["download-other-tenant-export"],
-      observedObservationIds: ["O-F1"],
+      observedObservationIds: ["observation-cross-tenant-export"],
       execution: "completed",
       conditions: [],
       evidenceRefs: ["E-RETEST"],
@@ -705,13 +726,16 @@ test("A retest linked to unresolved evidence stays unresolved", () => {
 
 test("A retest linked to an invalid observation stays unresolved", () => {
   const x = fresh();
-  x.observations[0] = { observationId: "O-F1", status: "confirmed" };
+  x.observations[0] = {
+    observationId: "observation-cross-tenant-export",
+    status: "confirmed",
+  };
   x.retests = [
     {
       exploitId: "EXP-1",
       targetSurface: "export-download",
       attemptedOperations: ["download-other-tenant-export"],
-      observedObservationIds: ["O-F1"],
+      observedObservationIds: ["observation-cross-tenant-export"],
       execution: "completed",
       conditions: [],
       evidenceRefs: ["E-RETEST"],
@@ -742,7 +766,7 @@ test("A retest linked to a missing observation stays unresolved", () => {
   assert.ok(!p.decisions.some((d) => d.outcome === "not_observed"));
 });
 
-test("E1-12 E1-13: independent invalid item is quarantined; shared snapshot fails closed", () => {
+test("One invalid finding leaves valid findings usable; invalid shared data stops planning [E1-12 E1-13]", () => {
   const x = fresh();
   x.observations.push({ observationId: "BROKEN", status: "confirmed" });
   let p = plan(x);
@@ -803,16 +827,16 @@ test("Shared run contract rejects malformed target, hash, and evidence destinati
   for (const suffix of [
     "?token=FAKE_SECRET/",
     "#FAKE_SECRET/",
-    "../R-F1-NEW/",
-    "%2e%2e/R-F1-NEW/",
-    "/R-F1-NEW/",
+    "../run-new-cross-tenant-export/",
+    "%2e%2e/run-new-cross-tenant-export/",
+    "/run-new-cross-tenant-export/",
   ]) {
-    badPrefix.run.evidencePrefix = `gs://synthetic-private-fixture/R-F1-NEW/${suffix}`;
+    badPrefix.run.evidencePrefix = `gs://synthetic-private-fixture/run-new-cross-tenant-export/${suffix}`;
     assert.throws(() => plan(badPrefix), /evidencePrefix/);
   }
 });
 
-test("E1-15 E1-19: planner is deterministic and proposes a summary without external calls", () => {
+test("Planner is deterministic and proposes a summary without external calls [E1-15 E1-19]", () => {
   const x = fresh();
   assert.deepEqual(plan(x), plan(structuredClone(x)));
   assert.equal(plan(x).summary.proposed, true);

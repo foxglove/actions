@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "run": {
-    "id": "R-F1-NEW",
+    "id": "run-new-cross-tenant-export",
     "environment": "party",
     "authorizedTargets": ["https://qa-fixture.foxglove.party"],
     "pathId": "authenticated-access-chains",
@@ -12,19 +12,19 @@
     "budgetUsd": 100,
     "deadline": "2030-01-07T18:00:00Z",
     "operatorId": "synthetic-operator",
-    "evidencePrefix": "gs://synthetic-private-fixture/R-F1-NEW/",
+    "evidencePrefix": "gs://synthetic-private-fixture/run-new-cross-tenant-export/",
     "evidenceRetentionPolicyRef": "synthetic-30-day-policy",
     "session": "validated",
     "assessment": "completed"
   },
   "sessionEvents": [
     {
-      "ref": "S-F1-VALIDATED",
+      "ref": "session-validated-tenant-a",
       "sequence": 1,
       "state": "validated",
       "actorRole": "non-admin-developer",
       "partyRef": "tenant-A",
-      "jarRef": "J-F1"
+      "jarRef": "cookie-jar-tenant-a"
     }
   ],
   "coverage": [
@@ -37,16 +37,19 @@
         "download-other-tenant-export"
       ],
       "conditions": ["synthetic non-admin tenant-A session"],
-      "evidenceRefs": ["E-F1-LIST", "E-F1-DOWNLOAD"]
+      "evidenceRefs": [
+        "evidence-list-owned-exports",
+        "evidence-download-other-tenant-export"
+      ]
     }
   ],
   "retests": [],
   "observations": [
     {
-      "observationId": "O-F1",
+      "observationId": "observation-cross-tenant-export",
       "status": "confirmed",
       "rawFindingRef": "synthetic-strix-vuln-1",
-      "sessionRef": "S-F1-VALIDATED",
+      "sessionRef": "session-validated-tenant-a",
       "observedSequence": 2,
       "environment": "party",
       "surface": "export-download",
@@ -63,7 +66,7 @@
           "expectedBoundary": "only authorized metadata visible",
           "observedEffect": "learned a synthetic {resourceTenant} export identifier through an authorized prerequisite",
           "prerequisiteStepIds": [],
-          "evidenceRefs": ["E-F1-LIST"]
+          "evidenceRefs": ["evidence-list-owned-exports"]
         },
         {
           "stepId": "download",
@@ -76,7 +79,7 @@
           "expectedBoundary": "deny cross-tenant read",
           "observedEffect": "synthetic {resourceTenant} export content returned",
           "prerequisiteStepIds": ["list"],
-          "evidenceRefs": ["E-F1-DOWNLOAD"]
+          "evidenceRefs": ["evidence-download-other-tenant-export"]
         }
       ],
       "preconditions": ["validated non-admin tenant-A session"],

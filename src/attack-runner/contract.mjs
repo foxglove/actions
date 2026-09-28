@@ -1,4 +1,4 @@
-// Identifies the exact input path that violates the shared planner contract.
+// Reports which input field needs correction so invalid evidence cannot silently produce a ticket proposal.
 export class InputError extends Error {
   // Callers must not put the rejected value in message because the planner copies this text into its output.
   constructor(path, message) {
@@ -8,13 +8,13 @@ export class InputError extends Error {
   }
 }
 
-// Requires a non-null object that is not an array.
+// Shape-checking helper: rejects a missing or non-record value before callers inspect its fields.
 export function object(value, path) {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new InputError(path, "expected object");
   return value;
 }
-// Requires well-formed Unicode with at least one non-whitespace character.
+// Text-checking helper: rejects empty text and malformed Unicode before identity encoding or report output.
 export function string(value, path) {
   if (typeof value !== "string" || !value.trim())
     throw new InputError(path, "expected nonempty string");
@@ -22,34 +22,35 @@ export function string(value, path) {
     throw new InputError(path, "expected well-formed Unicode");
   return value;
 }
-// Requires one value from a closed set.
+// State-checking helper: prevents an unknown status from being treated as a supported lifecycle decision.
 export function oneOf(value, choices, path) {
   if (!choices.includes(value))
     throw new InputError(path, `expected ${choices.join("|")}`);
   return value;
 }
-// Requires an array.
+// Collection helper: rejects the wrong container type before callers validate each independent item.
 export function list(value, path) {
   if (!Array.isArray(value)) throw new InputError(path, "expected array");
   return value;
 }
-// Requires an array of strings and can also require at least one item.
+// List helper for references and instructions; callers can require at least one entry where missing evidence blocks a proposal.
 export function strings(value, path, nonempty = false) {
   const a = list(value, path).map((v, i) => string(v, `${path}[${i}]`));
   if (nonempty && !a.length)
     throw new InputError(path, "expected at least one item");
   return a;
 }
-// Validates a string only when the field is present.
+// Optional-field helper: permits absent metadata without accepting malformed text when it is supplied.
 function optionalString(value, path) {
   if (value !== undefined) string(value, path);
 }
-// Rejects duplicate values where identity must be unique.
+// Identity helper: rejects repeated keys where they would make a referenced record or step ambiguous.
 function unique(values, path) {
   if (new Set(values).size !== values.length)
     throw new InputError(path, "duplicate identity");
 }
-// Validates one causal step and its evidence and prerequisite references.
+// Checks the structure of one attack step so matching can compare actors, resources and controls.
+// References identify supplied evidence; this check does not verify a live exploit.
 function transition(value, path) {
   const t = object(value, path);
   const proseFields = [
@@ -89,7 +90,8 @@ function transition(value, path) {
   }
   return t;
 }
-// Validates one non-empty, acyclic causal chain.
+// Checks that a chain has uniquely named steps and valid, cycle-free dependencies,
+// so a ticket can describe how the observed effect was reached.
 function chain(value, path) {
   const ts = list(value, path).map((v, i) => transition(v, `${path}[${i}]`));
   if (!ts.length)
@@ -110,7 +112,7 @@ function chain(value, path) {
   const byId = new Map(ts.map((t) => [t.stepId, t])),
     visited = new Set(),
     active = new Set();
-  // Walks prerequisites to reject cycles before planning.
+  // Traversal helper: rejects circular prerequisites because they cannot describe an executable attack path.
   function visit(id) {
     if (active.has(id)) throw new InputError(path, "causal prerequisite cycle");
     if (visited.has(id)) return;
@@ -122,7 +124,8 @@ function chain(value, path) {
   for (const id of ids) visit(id);
   return ts;
 }
-// Validates shared run data before any finding can produce a ticket proposal.
+// Rejects invalid shared run, session, stored-ticket or action state before any finding is processed.
+// One bad shared record can make all ticket decisions unsafe; per-finding validation is separate.
 export function validateEnvelope(input) {
   const x = object(input, "$");
   if (x.schemaVersion !== 1)
@@ -332,7 +335,8 @@ export function validateEnvelope(input) {
   return { ...x, sessionEvents: sessions, existing, processedActions: actions };
 }
 
-// Validates one finding and its complete causal evidence.
+// Checks one finding's required fields, chain and declared causes before matching it to tickets.
+// A failure isolates this finding; it does not discard independent valid findings or prove evidence authenticity.
 export function validateObservation(value, path) {
   const o = object(value, path);
   for (const k of [
@@ -456,7 +460,8 @@ export function validateObservation(value, path) {
     strings(o.dangerousNotExecuted, `${path}.dangerousNotExecuted`);
   return o;
 }
-// Validates one retest record: its execution state, observed observation IDs, and evidence references.
+// Keeps retest execution state separate from observation results. Checks the supplied links and attempts
+// so an interrupted or unattempted test cannot be presented as a completed retest.
 export function validateRetest(value, path) {
   const r = object(value, path);
   string(r.exploitId, `${path}.exploitId`);
@@ -473,7 +478,8 @@ export function validateRetest(value, path) {
   optionalString(r.stopReason, `${path}.stopReason`);
   return r;
 }
-// Validates one coverage record with the status tested, interrupted, or not_attempted.
+// Checks coverage fields for the run summary, including tested, interrupted and not_attempted states;
+// missing coverage must not become a claim that an exploit is absent.
 export function validateCoverage(value, path) {
   const c = object(value, path);
   string(c.surface, `${path}.surface`);

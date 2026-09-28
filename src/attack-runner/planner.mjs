@@ -7,11 +7,11 @@ import {
   validateCoverage,
 } from "./contract.mjs";
 
-// Produces a stable digest for an already normalized identity.
+// Digest helper: gives an already normalized exploit or prerequisite a repeatable key across runs.
 const hash = (value) => createHash("sha256").update(value).digest("hex");
-// Removes duplicate strings and returns them in stable order.
+// Set helper: keeps merged references unique and output stable when observations arrive in a different order.
 const sorted = (a) => [...new Set(a)].sort();
-// Compares strings by code unit so host locale cannot change planner output.
+// Ordering helper: prevents the host locale from changing which observation supplies the displayed ticket chain.
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 // These aliases remove wording variation only. An unrecognized causal change is
 // triaged rather than inferred equivalent from title or a similarity score.
@@ -22,7 +22,8 @@ const aliases = [
   [/\b(identifier|id|uuid)\b/g, "identifier"],
   [/\b(denied|reject|prevent)\b/g, "deny"],
 ];
-// Removes harmless wording and generated-identifier differences before identity comparison.
+// Normalizes the supported wording aliases and generated identifiers so they do not alone create another ticket.
+// This is a limited matching rule, not proof that arbitrary paraphrases describe the same exploit.
 export function canonical(value) {
   let s = String(value).normalize("NFKC").toLowerCase();
   s = s.replace(/\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/gi, "<id>");
@@ -36,7 +37,8 @@ export function canonical(value) {
     .replace(/\s+/g, " ");
 }
 
-// Converts a validated prerequisite graph into an ordered semantic attack chain.
+// Builds the chain used for ticket matching, retaining each step's actor/resource relations and prerequisites.
+// Equal operation names must not hide different paths through security controls.
 function causalChain(transitions, withStepIds = false) {
   const byId = new Map(transitions.map((t) => [t.stepId, t]));
   const prerequisites = new Set(
@@ -49,7 +51,7 @@ function causalChain(transitions, withStepIds = false) {
     );
   const terminal = terminals[0];
   const actorTenantRef = terminal.actorTenantRef;
-  // Converts only fixed placeholders; opaque reference values never rewrite prose.
+  // Placeholder helper: compares tenant relationships across runs without replacing arbitrary words that resemble tenant IDs.
   const relative = (value, transition) =>
     canonical(
       value
@@ -67,7 +69,7 @@ function causalChain(transitions, withStepIds = false) {
         ),
     );
   const levels = new Map();
-  // Calculates each step's prerequisite depth for stable ordering.
+  // Ordering helper: places prerequisites before their dependents without relying on adapter-chosen step IDs.
   function level(id) {
     if (levels.has(id)) return levels.get(id);
     const t = byId.get(id);
@@ -79,7 +81,7 @@ function causalChain(transitions, withStepIds = false) {
   }
   level(terminal.stepId);
   const semantics = new Map();
-  // Includes the full prerequisite semantics so equal operation names cannot hide different controls.
+  // Identity helper: includes full prerequisite meaning so different control failures do not match on operation names alone.
   function semantic(id) {
     if (semantics.has(id)) return semantics.get(id);
     const t = byId.get(id);
@@ -118,7 +120,8 @@ function causalChain(transitions, withStepIds = false) {
     )
     .map(({ stepId, value }) => (withStepIds ? { stepId, value } : value));
 }
-// Splits explicitly independent terminal controls into separate findings.
+// Keeps explicitly independent causes eligible for separate tickets while preserving their shared prerequisites.
+// Encoded output IDs remain distinct; retests link through the original source observation ID.
 function splitCauses(o) {
   if (!o.causes)
     return [
@@ -161,7 +164,8 @@ function splitCauses(o) {
     };
   });
 }
-// Builds the structured fields that define one exploit across runs and wording changes.
+// Defines the matching contract for one exploit across runs. Repository, model and run metadata
+// do not create a new identity; changes in the causal chain can require separate review.
 export function identityOf(record) {
   const chain = causalChain(
     (record.transitions ?? record.normalizedChain).filter(
@@ -179,16 +183,16 @@ export function identityOf(record) {
     chain,
   };
 }
-// Serializes a normalized exploit identity for stable hashing.
+// Serialization helper: feeds the same structured identity to fingerprint and proposed-ticket key generation.
 const identityString = (record) => JSON.stringify(identityOf(record));
-// Creates the versioned exploit fingerprint used by this planner.
+// Fingerprint helper: labels the normalization version; matching stored chains still preserves established exploit IDs.
 const fingerprint = (record) => `v3:${hash(identityString(record))}`;
-// Collects each unique evidence reference from a finding's causal steps.
+// Evidence helper: retains all unique chain references for the proposed ticket and run decision.
 const evidenceOf = (o) => sorted(o.transitions.flatMap((t) => t.evidenceRefs));
-// Encodes stable action-key segments without allowing path separators to alter identity.
+// Replay-key helper: keeps supplied IDs within their own segments so different actions do not share a key accidentally.
 const key = (...parts) => parts.map(encodeURIComponent).join("/");
 
-// Explains whether two normalized identities match or need human review.
+// Explains a ticket match or ambiguity in the plan so a reviewer can assess why evidence is being grouped.
 function candidateReason(a, b) {
   if (a.environment !== b.environment || a.surface !== b.surface)
     return "different surface or environment";
@@ -198,7 +202,7 @@ function candidateReason(a, b) {
     return "same environment, surface, violated control, actor/resource relation, effect, and causal prerequisites";
   return "same surface and violated control, but causal relation, effect, or prerequisites differ; human identity review needed";
 }
-// Creates a no-write decision when evidence is incomplete or ambiguous.
+// Stops speculative ticket creation or updates when evidence is incomplete or ambiguous, and states what review needs.
 function evidenceDecision(o, reason, neededEvidence = []) {
   return {
     observationId: o?.observationId,
@@ -210,7 +214,8 @@ function evidenceDecision(o, reason, neededEvidence = []) {
     neededEvidence,
   };
 }
-// Returns why an observation does not follow its validated starting session, or null.
+// Checks supplied session history before accepting a finding. Rejects wrong starts and post-loss evidence,
+// while retaining completed positives; returns a reason or null, not proof of live authentication.
 function sessionIssue(o, events) {
   const start = events.find((s) => s.ref === o.sessionRef);
   if (!start || start.state !== "validated")
@@ -236,7 +241,7 @@ function sessionIssue(o, events) {
     return "cookie rotation changed the authorized jar, actor, or party";
   return null;
 }
-// Expands fixed tenant placeholders for the human-facing ticket activity chain.
+// Display helper: shows concrete tenant references in the ticket after identity uses their relative relationships.
 function displayTransition(transition) {
   const displayed = structuredClone(transition);
   for (const field of [
@@ -252,7 +257,8 @@ function displayTransition(transition) {
       .replaceAll("{resourceTenant}", displayed.resourceTenantRef);
   return displayed;
 }
-// Builds the complete proposed ticket content for a new exploit.
+// Prepares one actionable ticket: full activity chain, demonstrated impact, remediation and retest steps.
+// Unknown ownership and unproven production impact remain explicit instead of blocking a valid proposal.
 function ticketDraft(o, runId, evidenceRefs) {
   return {
     labels: ["Bug", "pentesting", "harness"],
@@ -273,9 +279,10 @@ function ticketDraft(o, runId, evidenceRefs) {
     components: o.components?.length ? [...o.components] : ["unknown"],
   };
 }
-// Combines corroborating observations into one proposed ticket without losing evidence.
+// Combines corroborating findings into one ticket proposal, preserving all evidence at ticket level.
+// Evidence attaches to a displayed step only when both chains have one unambiguous matching step.
 function mergeDraft(draft, o, primaryTransitions) {
-  // Produces stable set unions for ticket list fields.
+  // Merge helper: retains each distinct precondition, remediation step and reference in a repeatable order.
   const union = (a, b) => sorted([...a, ...b]);
   draft.preconditions = union(draft.preconditions, o.preconditions);
   draft.remediation = union(draft.remediation, o.remediation);
@@ -294,7 +301,7 @@ function mergeDraft(draft, o, primaryTransitions) {
     o.impact,
   ]).join("\n");
   const severityOrder = ["critical", "high", "medium", "low", "info"];
-  // Maps a severity to its ordering rank.
+  // Severity helper: retains the higher supplied severity when corroborating observations disagree.
   const rank = (s) => {
     const i = severityOrder.indexOf(s.toLowerCase());
     return i < 0 ? Infinity : i;
@@ -331,13 +338,13 @@ function mergeDraft(draft, o, primaryTransitions) {
     step.evidenceRefs = union(step.evidenceRefs, other.evidenceRefs);
   }
 }
-// Finds the recorded state of one external action attempt.
+// Journal lookup helper: finds whether a proposed write already happened or needs external readback.
 function actionState(input, action, actionKey) {
   return input.processedActions.find(
     (a) => a.action === action && a.key === actionKey,
   )?.state;
 }
-// Proposes an external action only when retry state makes it safe.
+// Suppresses applied writes and holds pending or uncertain writes for readback; eligible new or failed actions remain proposals.
 function addAction(input, decision, action, actionKey) {
   const state = actionState(input, action, actionKey);
   decision.actionKeys[action] = actionKey;
@@ -351,7 +358,7 @@ function addAction(input, decision, action, actionKey) {
   }
 }
 
-// Sets notification eligibility and requests readback when delivery is unresolved.
+// Applies replay/readback rules to notification eligibility too. It records eligibility only and sends no message.
 function setNotificationEligibility(input, decision, actionKey) {
   const state = actionState(input, "notify", actionKey);
   decision.notificationEligible = !state || state === "failed";
@@ -362,14 +369,15 @@ function setNotificationEligibility(input, decision, actionKey) {
     ]);
 }
 
-// Produces deterministic ticket and summary proposals without making external calls.
+// Reconciles one run against existing tickets and prior actions. Produces create/update/reopen proposals,
+// summary-only non-observations, or review requests; it never performs external writes.
 export function plan(raw) {
   const input = validateEnvelope(raw);
   const quarantined = [],
     coverage = [],
     retests = [],
     observations = [];
-  // Validates independent items while quarantining only the invalid item.
+  // Isolation helper: records invalid items for review while keeping independent valid findings available to the planner.
   function independent(collection, validate, dest) {
     input[collection].forEach((item, index) => {
       try {

@@ -17,9 +17,12 @@ const cli = fileURLToPath(
   new URL("../../src/attack-runner/cli.mjs", import.meta.url),
 );
 const fixture = JSON.parse(
-  readFileSync(new URL("./fixtures/F1-new.json", import.meta.url), "utf8"),
+  readFileSync(
+    new URL("./fixtures/new-cross-tenant-export.json", import.meta.url),
+    "utf8",
+  ),
 );
-// Runs the CLI against one temporary input and returns its process result.
+// CLI test helper: runs the real command with an isolated input file so tests can check exit status, output and error privacy.
 function run(input) {
   const dir = mkdtempSync(join(tmpdir(), "attack-runner-cli-"));
   try {
