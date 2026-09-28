@@ -373,7 +373,7 @@ test("Identity keeps security numbers and recognizes organization relations", ()
   );
   const x = fresh(),
     o = x.observations[0];
-  o.transitions.at(-1).actorCapability = "org-12 non-admin developer";
+  o.transitions.at(-1).actorCapability = "tenant-12 non-admin developer";
   o.transitions.at(-1).resourceRelation = "org-12 export";
   const own = identityOf(o);
   o.transitions.at(-1).resourceRelation = "org-34 export";
@@ -403,12 +403,27 @@ test("Tenant identity does not treat ordinary role words as identifiers", () => 
   assert.match(other.targetResourceRelation, /other tenant/);
 });
 
-test("Ambiguous actor tenant tokens require review", () => {
+test("Role tokens do not hide an explicit actor tenant", () => {
   const x = fresh(),
     o = x.observations[0];
   o.transitions.at(-1).actorCapability = "workspace-member in tenant-a";
-  assert.throws(() => identityOf(o), /ambiguous actor tenant tokens/);
-  assert.equal(first(x).outcome, "unresolved");
+  o.transitions.at(-1).resourceRelation = "tenant-a export";
+  const own = identityOf(o);
+  o.transitions.at(-1).resourceRelation = "tenant-b export";
+  const other = identityOf(o);
+  assert.notDeepEqual(own, other);
+});
+
+test("A tenant-scoped resource without one actor tenant requires review", () => {
+  const x = fresh(),
+    o = x.observations[0];
+  o.transitions.at(-1).actorCapability = "workspace-member";
+  assert.throws(() => identityOf(o), /supply one tenant-<id> token/);
+  const d = first(x);
+  assert.equal(d.outcome, "unresolved");
+  assert.deepEqual(d.neededEvidence, [
+    "one terminal control and one unambiguous actor tenant",
+  ]);
 });
 
 test("E1-10: equivalent cross-component evidence merges into one complete ticket regardless of order", () => {
@@ -522,7 +537,7 @@ test("Same-jar rotation with changed party is not valid provenance", () => {
   assert.equal(first(x).outcome, "unresolved");
 });
 
-test("Unrelated positive does not suppress a tracked exploit retest non-observation", () => {
+test("A retest observation linked to another exploit is unresolved", () => {
   const x = fresh(),
     d = first(x);
   x.retests = [
@@ -537,7 +552,7 @@ test("Unrelated positive does not suppress a tracked exploit retest non-observat
     },
   ];
   assert.equal(plan(x).decisions[0].exploitId, d.exploitId);
-  assert.equal(plan(x).decisions[1].outcome, "not_observed");
+  assert.equal(plan(x).decisions[1].outcome, "unresolved");
 });
 
 test("A positive exploit suppresses a contradictory non-observation", () => {
@@ -631,6 +646,30 @@ test("E1-12 E1-13: independent invalid item is quarantined; shared snapshot fail
   x.existing[0].state = "Done";
   assert.throws(() => plan(x), /existing\[0\]\.state/);
   assert.throws(() => plan({}), /schemaVersion/);
+});
+
+test("Malformed existing identities report their exact input path", () => {
+  const x = fresh();
+  x.existing = [existing(x)];
+  x.existing[0].normalizedChain.at(-1).actorCapability = "workspace-member";
+  assert.throws(() => plan(x), /existing\[0\]\.normalizedChain/);
+
+  const y = fresh();
+  y.existing = [existing(y)];
+  y.existing[0].identityAliases = [
+    {
+      environment: "party",
+      surface: y.existing[0].surface,
+      violatedBoundary: y.existing[0].violatedBoundary,
+      normalizedChain: structuredClone(y.existing[0].normalizedChain),
+    },
+  ];
+  y.existing[0].identityAliases[0].normalizedChain.at(-1).actorCapability =
+    "workspace-member";
+  assert.throws(
+    () => plan(y),
+    /existing\[0\]\.identityAliases\[0\]\.normalizedChain/,
+  );
 });
 
 test("Shared run contract rejects malformed target, hash, and evidence destination", () => {

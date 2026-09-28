@@ -50,12 +50,19 @@ function causalChain(transitions) {
     );
   const terminal = terminals[0];
   const actorTenants = [
-    ...terminal.actorCapability.matchAll(
-      /\b(?:tenant|organization|org|workspace)[-_]([a-z0-9]+)\b/gi,
-    ),
+    ...terminal.actorCapability.matchAll(/\btenant[-_]([a-z0-9]+)\b/gi),
   ].map((match) => match[1].toLowerCase());
-  if (actorTenants.length > 1)
-    throw new Error("ambiguous actor tenant tokens; supply one actor tenant");
+  const resourceHasTenant =
+    /\b(?:tenant|organization|org|workspace)[-_][a-z0-9]+\b/i.test(
+      terminal.resourceRelation,
+    );
+  if (
+    actorTenants.length > 1 ||
+    (resourceHasTenant && actorTenants.length !== 1)
+  )
+    throw new Error(
+      "ambiguous actor tenant; supply one tenant-<id> token when the resource is tenant-scoped",
+    );
   const actorTenant = actorTenants[0];
   // Expresses tenant references relative to the starting actor.
   const relative = (value) =>
@@ -200,16 +207,8 @@ function evidenceDecision(o, reason, neededEvidence = []) {
 // Returns why an observation does not follow its validated starting session, or null.
 function sessionIssue(o, events) {
   const start = events.find((s) => s.ref === o.sessionRef);
-  if (
-    !start ||
-    start.state !== "validated" ||
-    !start.actorRole ||
-    !start.partyRef ||
-    !start.jarRef
-  )
+  if (!start || start.state !== "validated")
     return "missing validated starting session";
-  if (start.actorRole !== "non-admin-developer")
-    return "starting actor is not a validated non-admin developer";
   if (start.sequence >= o.observedSequence)
     return "observation does not follow session validation";
   const subsequent = events.filter(
@@ -350,13 +349,35 @@ export function plan(raw) {
   independent("retests", validateRetest, retests);
   independent("observations", validateObservation, observations);
   const decisions = [],
-    known = input.existing.map((e) => ({
-      record: e,
-      identity: identityOf(e),
-      identityAliases: e.identityAliases?.map(identityOf) ?? [],
-      fingerprint: fingerprint(e),
-      existing: true,
-    }));
+    known = input.existing.map((e, index) => {
+      let identity;
+      try {
+        identity = identityOf(e);
+      } catch (error) {
+        throw new InputError(
+          `$.existing[${index}].normalizedChain`,
+          error.message,
+        );
+      }
+      const identityAliases =
+        e.identityAliases?.map((alias, aliasIndex) => {
+          try {
+            return identityOf(alias);
+          } catch (error) {
+            throw new InputError(
+              `$.existing[${index}].identityAliases[${aliasIndex}].normalizedChain`,
+              error.message,
+            );
+          }
+        }) ?? [];
+      return {
+        record: e,
+        identity,
+        identityAliases,
+        fingerprint: fingerprint(e),
+        existing: true,
+      };
+    });
   const seenIds = new Set(),
     positiveExploits = new Set(),
     allCandidates = [...known];
@@ -394,7 +415,9 @@ export function plan(raw) {
       identity = identityOf(o);
     } catch (e) {
       decisions.push(
-        evidenceDecision(o, e.message, ["acyclic causal prerequisites"]),
+        evidenceDecision(o, e.message, [
+          "one terminal control and one unambiguous actor tenant",
+        ]),
       );
       continue;
     }
@@ -586,11 +609,15 @@ export function plan(raw) {
           (q) => q.collection === "observations" && q.ref === id,
         ),
     );
-    if (unresolved || invalid || missing) {
+    const mismatched = linked.some(
+      (d) => d.exploitId && d.exploitId !== r.exploitId,
+    );
+    if (unresolved || invalid || missing || mismatched) {
       decisions.push({
         outcome: "unresolved",
         exploitId: r.exploitId,
-        reason: "retest cites an unresolved, invalid, or missing observation",
+        reason:
+          "retest cites an unresolved, invalid, missing, or mismatched observation",
         evidenceRefs: r.evidenceRefs,
         proposedActions: [],
         notificationEligible: false,

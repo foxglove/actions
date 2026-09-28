@@ -31,7 +31,7 @@ The input must contain these top-level fields:
 
 The input must not contain a password, session cookie, magic link, or other credential. See [`contract.mjs`](contract.mjs) for the complete input checks and [`F1-new.json`](../../test/attack-runner/fixtures/F1-new.json) for a runnable example.
 
-Use `tenant-<id>`, `organization-<id>`, `org-<id>`, or `workspace-<id>` in actor and resource relationship fields when tenant-relative identity matters. An underscore can replace the hyphen.
+When a terminal resource is tenant-scoped, its `actorCapability` must contain exactly one `tenant-<id>` token for the starting tenant. An underscore can replace the hyphen. Resource relationship fields can use `tenant-<id>`, `organization-<id>`, `org-<id>`, or `workspace-<id>`.
 
 A `validated` session event must set `actorRole` to `non-admin-developer`.
 
