@@ -188,7 +188,7 @@ function evidenceDecision(o, reason, neededEvidence = []) {
     neededEvidence,
   };
 }
-// Rejects observations that do not follow the approved session's causal timeline.
+// Returns why an observation does not follow its validated starting session, or null.
 function sessionIssue(o, events) {
   const start = events.find((s) => s.ref === o.sessionRef);
   if (

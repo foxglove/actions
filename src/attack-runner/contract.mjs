@@ -1,6 +1,6 @@
 // Identifies the exact input path that violates the shared planner contract.
 export class InputError extends Error {
-  // Builds a safe validation message without including the rejected value.
+  // Callers must not put the rejected value in message because the planner copies this text into its output.
   constructor(path, message) {
     super(`${path}: ${message}`);
     this.name = "InputError";
@@ -14,7 +14,7 @@ export function object(value, path) {
     throw new InputError(path, "expected object");
   return value;
 }
-// Requires a string that contains at least one non-space character.
+// Requires a string that contains at least one non-whitespace character.
 export function string(value, path) {
   if (typeof value !== "string" || !value.trim())
     throw new InputError(path, "expected nonempty string");
@@ -426,7 +426,7 @@ export function validateObservation(value, path) {
     strings(o.dangerousNotExecuted, `${path}.dangerousNotExecuted`);
   return o;
 }
-// Validates one scoped re-test and its observation result.
+// Validates one retest record: its execution state, observed observation IDs, and evidence references.
 export function validateRetest(value, path) {
   const r = object(value, path);
   string(r.exploitId, `${path}.exploitId`);
@@ -443,7 +443,7 @@ export function validateRetest(value, path) {
   optionalString(r.stopReason, `${path}.stopReason`);
   return r;
 }
-// Validates one coverage record for a tested, interrupted, or skipped surface.
+// Validates one coverage record with the status tested, interrupted, or not_attempted.
 export function validateCoverage(value, path) {
   const c = object(value, path);
   string(c.surface, `${path}.surface`);
