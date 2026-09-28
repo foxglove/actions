@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  writeFileSync,
+  rmSync,
+  readFileSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -57,6 +63,27 @@ test("CLI exits 1 for invalid arguments and prints usage", () => {
   assert.equal(result.status, 1);
   assert.equal(result.stdout, "");
   assert.match(result.stderr, /Usage: yarn attack-runner plan/);
+});
+
+test("CLI runs through a symbolic link in a path with URL characters", () => {
+  const dir = mkdtempSync(join(tmpdir(), "attack-runner-#-%-"));
+  try {
+    const input = join(dir, "input.json");
+    const link = join(dir, "planner-link.mjs");
+    writeFileSync(input, JSON.stringify(fixture));
+    symlinkSync(cli, link);
+    const result = spawnSync(
+      process.execPath,
+      [link, "plan", "--input", input],
+      {
+        encoding: "utf8",
+      },
+    );
+    assert.equal(result.status, 0);
+    assert.equal(JSON.parse(result.stdout).status, "planned");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("CLI exits 3 and keeps an existing output file unchanged", () => {

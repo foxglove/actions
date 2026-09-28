@@ -1,5 +1,7 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import { open, readFile, unlink } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 import { plan } from "./planner.mjs";
 
 // Returns the only supported command form for argument errors.
@@ -66,7 +68,7 @@ export async function main(args) {
 
 if (
   process.argv[1] &&
-  import.meta.url === new URL(`file://${process.argv[1]}`).href
+  import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
 ) {
   try {
     process.exitCode = await main(process.argv.slice(2));

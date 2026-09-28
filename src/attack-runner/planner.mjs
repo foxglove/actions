@@ -11,6 +11,8 @@ import {
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 // Removes duplicate strings and returns them in stable order.
 const sorted = (a) => [...new Set(a)].sort();
+// Compares strings by code unit so host locale cannot change planner output.
+const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 // These aliases remove wording variation only. An unrecognized causal change is
 // triaged rather than inferred equivalent from title or a similarity score.
@@ -25,8 +27,7 @@ const aliases = [
 export function canonical(value) {
   let s = String(value).normalize("NFKC").toLowerCase();
   s = s.replace(/\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/gi, "<id>");
-  s = s.replace(/\b(export|resource)[-_ ]?[0-9a-f]{6,}\b/g, "$1 <id>");
-  s = s.replace(/\b(?:[a-z]+[-_])?\d{2,}\b/g, "<id>");
+  s = s.replace(/\b(export|resource)[-_](?:[0-9a-f]{6,}|\d{2,})\b/g, "$1 <id>");
   for (const [pattern, replacement] of aliases)
     s = s.replace(pattern, replacement);
   return s
@@ -47,17 +48,20 @@ function causalChain(transitions) {
       "ambiguous terminal control; split independent causes or mark incidental steps explicitly",
     );
   const terminal = terminals[0];
-  const actorTenant = /\btenant[-_]([a-z0-9]+)\b/i
-    .exec(terminal.actorCapability)?.[1]
-    ?.toLowerCase();
+  const actorTenant =
+    /\b(?:tenant|organization|org|workspace)[-_ ]([a-z0-9]+)\b/i
+      .exec(terminal.actorCapability)?.[1]
+      ?.toLowerCase();
   // Expresses tenant references relative to the starting actor.
   const relative = (value) =>
     canonical(
       actorTenant
-        ? value.replace(/\btenant[-_]([a-z0-9]+)\b/gi, (_, tenant) =>
-            tenant.toLowerCase() === actorTenant
-              ? "actor-tenant"
-              : "other-tenant",
+        ? value.replace(
+            /\b(?:tenant|organization|org|workspace)[-_ ]([a-z0-9]+)\b/gi,
+            (_, tenant) =>
+              tenant.toLowerCase() === actorTenant
+                ? "actor-tenant"
+                : "other-tenant",
           )
         : value,
     );
@@ -93,7 +97,7 @@ function causalChain(transitions) {
   return result
     .sort(
       (a, b) =>
-        a.depth - b.depth || JSON.stringify(a).localeCompare(JSON.stringify(b)),
+        a.depth - b.depth || compare(JSON.stringify(a), JSON.stringify(b)),
     )
     .map(({ depth, ...transition }) => transition);
 }
@@ -199,11 +203,7 @@ function sessionIssue(o, events) {
     !start.jarRef
   )
     return "missing validated starting session";
-  if (
-    !/non.?admin|developer/.test(canonical(start.actorRole)) ||
-    (/\badmin\b/.test(canonical(start.actorRole)) &&
-      !/non.?admin/.test(canonical(start.actorRole)))
-  )
+  if (start.actorRole !== "non-admin-developer")
     return "starting actor is not a validated non-admin developer";
   if (start.sequence >= o.observedSequence)
     return "observation does not follow session validation";
@@ -357,7 +357,7 @@ export function plan(raw) {
     allCandidates = [...known];
   for (const o of observations
     .flatMap(({ value }) => splitCauses(value))
-    .sort((a, b) => a.observationId.localeCompare(b.observationId))) {
+    .sort((a, b) => compare(a.observationId, b.observationId))) {
     if (seenIds.has(o.observationId)) {
       decisions.push(
         evidenceDecision(o, "duplicate observationId in run", [
@@ -443,7 +443,7 @@ export function plan(raw) {
       if (primary.ticketDraft) mergeDraft(primary.ticketDraft, o);
       decisions.push({
         observationId: o.observationId,
-        outcome: match?.existing ? "rediscovered" : "new",
+        outcome: primary.outcome,
         reason:
           "same exploit already confirmed in this run; evidence and count are proposed once",
         normalizedMatchReason: candidateReason(
@@ -529,7 +529,7 @@ export function plan(raw) {
       if (d.outcome === "contradicts_fix") {
         if (!e.issueOpen) addAction(input, d, "reopen", d.episodeKey);
         const notifyState = actionState(input, "notify", d.episodeKey);
-        d.notificationEligible = !notifyState;
+        d.notificationEligible = !notifyState || notifyState === "failed";
       }
       d.countChange = {
         runId: input.run.id,
@@ -550,11 +550,8 @@ export function plan(raw) {
       }
       d.ticketDraft = ticketDraft(o, input.run.id, evidenceRefs);
       addAction(input, d, "create", createKey);
-      d.notificationEligible = !actionState(
-        input,
-        "notify",
-        key("new", exploitId),
-      );
+      const notifyState = actionState(input, "notify", key("new", exploitId));
+      d.notificationEligible = !notifyState || notifyState === "failed";
       d.episodeKey = key("new", exploitId);
       d.countChange = { runId: input.run.id, historicalCount: null };
     }
@@ -563,17 +560,30 @@ export function plan(raw) {
     decisions.push(d);
   }
   for (const { value: r } of retests) {
-    if (
-      r.observedObservationIds.some((id) =>
-        decisions.some(
-          (d) =>
-            (d.observationId === id || d.observationId?.startsWith(`${id}#`)) &&
-            d.exploitId === r.exploitId &&
-            !["unresolved", "not_observed"].includes(d.outcome),
-        ),
-      )
-    )
+    const linked = decisions.filter((d) =>
+      r.observedObservationIds.some(
+        (id) => d.observationId === id || d.observationId?.startsWith(`${id}#`),
+      ),
+    );
+    const unresolved = linked.find((d) => d.outcome === "unresolved");
+    const invalid = quarantined.find(
+      (q) =>
+        q.collection === "observations" &&
+        r.observedObservationIds.includes(q.ref),
+    );
+    if (unresolved || invalid) {
+      decisions.push({
+        outcome: "unresolved",
+        exploitId: r.exploitId,
+        reason: "retest cites an unresolved or invalid observation",
+        evidenceRefs: r.evidenceRefs,
+        proposedActions: [],
+        notificationEligible: false,
+        neededEvidence: ["resolved observation linked to the retested exploit"],
+      });
       continue;
+    }
+    if (positiveExploits.has(r.exploitId)) continue;
     decisions.push({
       outcome: "not_observed",
       exploitId: r.exploitId,

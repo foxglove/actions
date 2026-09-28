@@ -2,7 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { plan, identityOf } from "../../src/attack-runner/planner.mjs";
+import {
+  plan,
+  identityOf,
+  canonical,
+} from "../../src/attack-runner/planner.mjs";
 
 const fixture = JSON.parse(
   await readFile(new URL("./fixtures/F1-new.json", import.meta.url)),
@@ -43,6 +47,10 @@ test("E1-01 E1-14: full proposal includes unknown ownership and qualified produc
   assert.equal(d.ticketDraft.activityChain.length, 2);
   assert.equal(d.ticketDraft.productionImpact.value, "unknown");
   assert.ok(d.ticketDraft.remediation.length && d.ticketDraft.retest.length);
+  x.processedActions = [
+    { key: d.episodeKey, action: "notify", state: "failed" },
+  ];
+  assert.equal(first(x).notificationEligible, true);
 });
 
 test("E1-02 E1-09: open issue gains one per-run evidence/count and no notification", () => {
@@ -84,6 +92,10 @@ test("E1-03 E1-19: explicit fix claim reopens only closed issue, eligibility onc
   assert.equal(d.notificationEligible, false);
   assert.ok(d.proposedActions.includes("append_evidence"));
   x.existing[0].fixClaimId = "CLAIM-2";
+  assert.equal(first(x).notificationEligible, true);
+  x.processedActions = [
+    { key: first(x).episodeKey, action: "notify", state: "failed" },
+  ];
   assert.equal(first(x).notificationEligible, true);
 });
 
@@ -127,6 +139,10 @@ test("E1-07: pre-loss positive survives; post-loss and wrong start are unresolve
   x.observations[0].observedSequence = 2;
   x.sessionEvents[0].actorRole = "admin";
   assert.equal(first(x).outcome, "unresolved");
+  x.sessionEvents[0].actorRole = "developer administrator";
+  assert.equal(first(x).outcome, "unresolved");
+  x.sessionEvents[0].actorRole = "developer owner";
+  assert.equal(first(x).outcome, "unresolved");
   x.sessionEvents[0].actorRole = "non-admin-developer";
   x.sessionEvents.splice(1, 0, {
     ref: "ROTATED",
@@ -159,6 +175,19 @@ test("E1-08: duplicate observations and applied event state avoid repeat mutatio
   ];
   ds = plan(x).decisions;
   assert.ok(ds.every((d) => d.proposedActions.length === 0));
+});
+
+test("Duplicate observations keep the primary fix-contradiction outcome", () => {
+  const x = fresh();
+  x.existing = [existing(x, "claimed_fixed", false)];
+  x.observations.push({
+    ...structuredClone(x.observations[0]),
+    observationId: "O-F1-COPY",
+  });
+  assert.deepEqual(
+    plan(x).decisions.map((d) => d.outcome),
+    ["contradicts_fix", "contradicts_fix"],
+  );
 });
 
 test("E1-10 E1-17 E1-20: repository/path/model and fingerprint version do not change established identity", () => {
@@ -337,6 +366,23 @@ test("E1-18: actor and resource tenant equality remains part of identity", () =>
   assert.match(other.targetResourceRelation, /other tenant/);
 });
 
+test("Identity keeps security numbers and recognizes organization relations", () => {
+  assert.notEqual(
+    canonical("HTTP 200 returned export"),
+    canonical("HTTP 403 returned export"),
+  );
+  const x = fresh(),
+    o = x.observations[0];
+  o.transitions.at(-1).actorCapability = "org-12 non-admin developer";
+  o.transitions.at(-1).resourceRelation = "org-12 export";
+  const own = identityOf(o);
+  o.transitions.at(-1).resourceRelation = "org-34 export";
+  const other = identityOf(o);
+  assert.notDeepEqual(own, other);
+  assert.match(own.targetResourceRelation, /actor tenant/);
+  assert.match(other.targetResourceRelation, /other tenant/);
+});
+
 test("E1-10: equivalent cross-component evidence merges into one complete ticket regardless of order", () => {
   const x = fresh(),
     a = x.observations[0],
@@ -464,6 +510,66 @@ test("Unrelated positive does not suppress a tracked exploit retest non-observat
   ];
   assert.equal(plan(x).decisions[0].exploitId, d.exploitId);
   assert.equal(plan(x).decisions[1].outcome, "not_observed");
+});
+
+test("A positive exploit suppresses a contradictory non-observation", () => {
+  const x = fresh();
+  x.existing = [existing(x)];
+  x.retests = [
+    {
+      exploitId: "EXP-1",
+      targetSurface: "export-download",
+      attemptedOperations: ["download-other-tenant-export"],
+      observedObservationIds: [],
+      execution: "completed",
+      conditions: [],
+      evidenceRefs: ["E-RETEST"],
+    },
+  ];
+  const p = plan(x);
+  assert.equal(p.decisions[0].outcome, "rediscovered");
+  assert.ok(!p.decisions.some((d) => d.outcome === "not_observed"));
+});
+
+test("A retest linked to unresolved evidence stays unresolved", () => {
+  const x = fresh();
+  x.sessionEvents[0].actorRole = "admin";
+  x.retests = [
+    {
+      exploitId: "EXP-1",
+      targetSurface: "export-download",
+      attemptedOperations: ["download-other-tenant-export"],
+      observedObservationIds: ["O-F1"],
+      execution: "completed",
+      conditions: [],
+      evidenceRefs: ["E-RETEST"],
+    },
+  ];
+  const p = plan(x);
+  assert.deepEqual(
+    p.decisions.map((d) => d.outcome),
+    ["unresolved", "unresolved"],
+  );
+  assert.ok(!p.decisions.some((d) => d.outcome === "not_observed"));
+});
+
+test("A retest linked to an invalid observation stays unresolved", () => {
+  const x = fresh();
+  x.observations[0] = { observationId: "O-F1", status: "confirmed" };
+  x.retests = [
+    {
+      exploitId: "EXP-1",
+      targetSurface: "export-download",
+      attemptedOperations: ["download-other-tenant-export"],
+      observedObservationIds: ["O-F1"],
+      execution: "completed",
+      conditions: [],
+      evidenceRefs: ["E-RETEST"],
+    },
+  ];
+  const p = plan(x);
+  assert.ok(p.decisions.every((d) => d.outcome === "unresolved"));
+  assert.ok(!p.decisions.some((d) => d.outcome === "not_observed"));
 });
 
 test("E1-12 E1-13: independent invalid item is quarantined; shared snapshot fails closed", () => {
