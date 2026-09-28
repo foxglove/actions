@@ -1141,7 +1141,11 @@ test("Retesting one cause ignores its siblings but still checks every cited sour
   unrelated.surface = "different-surface";
   unrelated.violatedBoundary = "different-control";
   x.observations.push(unrelated);
-  x.retests[0].observedObservationIds.push(unrelated.observationId);
+  x.retests[0].observedObservationIds.push(
+    unrelated.observationId,
+    unrelated.observationId,
+    o.observationId,
+  );
   p = plan(x);
   const blockedRetest = p.decisions.find(
     (d) => d.exploitId === "EXP-1" && d.outcome === "unresolved",

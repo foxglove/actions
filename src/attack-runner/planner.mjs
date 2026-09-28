@@ -673,18 +673,20 @@ export function plan(raw) {
   for (const { value: r } of retests) {
     // Each source can contain several independent causes. It supports this retest
     // when one resolved cause matches; sibling causes keep their own decisions.
-    const unsupportedObservationIds = r.observedObservationIds.filter((id) => {
-      const invalid = quarantined.some(
-        (q) => q.collection === "observations" && q.ref === id,
-      );
-      const supportsExploit = decisions.some(
-        (d) =>
-          decisionSources.get(d.observationId)?.has(id) &&
-          d.exploitId === r.exploitId &&
-          d.outcome !== "unresolved",
-      );
-      return invalid || !supportsExploit;
-    });
+    const unsupportedObservationIds = sorted(r.observedObservationIds).filter(
+      (id) => {
+        const invalid = quarantined.some(
+          (q) => q.collection === "observations" && q.ref === id,
+        );
+        const supportsExploit = decisions.some(
+          (d) =>
+            decisionSources.get(d.observationId)?.has(id) &&
+            d.exploitId === r.exploitId &&
+            d.outcome !== "unresolved",
+        );
+        return invalid || !supportsExploit;
+      },
+    );
     if (unsupportedObservationIds.length) {
       decisions.push({
         outcome: "unresolved",
