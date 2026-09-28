@@ -13,6 +13,7 @@ const cli = fileURLToPath(
 const fixture = JSON.parse(
   readFileSync(new URL("./fixtures/F1-new.json", import.meta.url), "utf8"),
 );
+// Runs the CLI against one temporary input and returns its process result.
 function run(input) {
   const dir = mkdtempSync(join(tmpdir(), "attack-runner-cli-"));
   try {

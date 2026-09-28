@@ -7,7 +7,9 @@ import {
   validateCoverage,
 } from "./contract.mjs";
 
+// Produces a stable digest for an already normalized identity.
 const hash = (value) => createHash("sha256").update(value).digest("hex");
+// Removes duplicate strings and returns them in stable order.
 const sorted = (a) => [...new Set(a)].sort();
 
 // These aliases remove wording variation only. An unrecognized causal change is
@@ -19,6 +21,7 @@ const aliases = [
   [/\b(identifier|id|uuid)\b/g, "identifier"],
   [/\b(denied|reject|prevent)\b/g, "deny"],
 ];
+// Removes harmless wording and generated-identifier differences before identity comparison.
 export function canonical(value) {
   let s = String(value).normalize("NFKC").toLowerCase();
   s = s.replace(/\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/gi, "<id>");
@@ -32,6 +35,7 @@ export function canonical(value) {
     .replace(/\s+/g, " ");
 }
 
+// Converts a validated prerequisite graph into an ordered semantic attack chain.
 function causalChain(transitions) {
   const byId = new Map(transitions.map((t) => [t.stepId, t]));
   const prerequisites = new Set(
@@ -46,6 +50,7 @@ function causalChain(transitions) {
   const actorTenant = /\btenant[-_]([a-z0-9]+)\b/i
     .exec(terminal.actorCapability)?.[1]
     ?.toLowerCase();
+  // Expresses tenant references relative to the starting actor.
   const relative = (value) =>
     canonical(
       actorTenant
@@ -57,6 +62,7 @@ function causalChain(transitions) {
         : value,
     );
   const levels = new Map();
+  // Calculates each step's prerequisite depth for stable ordering.
   function level(id) {
     if (levels.has(id)) return levels.get(id);
     const t = byId.get(id);
@@ -91,6 +97,7 @@ function causalChain(transitions) {
     )
     .map(({ depth, ...transition }) => transition);
 }
+// Splits explicitly independent terminal controls into separate findings.
 function splitCauses(o) {
   if (!o.causes)
     return [
@@ -104,6 +111,7 @@ function splitCauses(o) {
   const byId = new Map(o.transitions.map((t) => [t.stepId, t]));
   return o.causes.map((c) => {
     const included = new Set();
+    // Includes the selected terminal step and every prerequisite needed to reach it.
     function include(id) {
       if (included.has(id)) return;
       included.add(id);
@@ -131,6 +139,7 @@ function splitCauses(o) {
     };
   });
 }
+// Builds the structured fields that define one exploit across runs and wording changes.
 export function identityOf(record) {
   const chain = causalChain(
     (record.transitions ?? record.normalizedChain).filter(
@@ -148,11 +157,16 @@ export function identityOf(record) {
     chain,
   };
 }
+// Serializes a normalized exploit identity for stable hashing.
 const identityString = (record) => JSON.stringify(identityOf(record));
+// Creates the versioned exploit fingerprint used by this planner.
 const fingerprint = (record) => `v2:${hash(identityString(record))}`;
+// Collects each unique evidence reference from a finding's causal steps.
 const evidenceOf = (o) => sorted(o.transitions.flatMap((t) => t.evidenceRefs));
+// Encodes stable action-key segments without allowing path separators to alter identity.
 const key = (...parts) => parts.map(encodeURIComponent).join("/");
 
+// Explains whether two normalized identities match or need human review.
 function candidateReason(a, b) {
   if (a.environment !== b.environment || a.surface !== b.surface)
     return "different surface or environment";
@@ -162,6 +176,7 @@ function candidateReason(a, b) {
     return "same environment, surface, violated control, actor/resource relation, effect, and causal prerequisites";
   return "same surface and violated control, but causal relation, effect, or prerequisites differ; human identity review needed";
 }
+// Creates a no-write decision when evidence is incomplete or ambiguous.
 function evidenceDecision(o, reason, neededEvidence = []) {
   return {
     observationId: o?.observationId,
@@ -173,6 +188,7 @@ function evidenceDecision(o, reason, neededEvidence = []) {
     neededEvidence,
   };
 }
+// Rejects observations that do not follow the approved session's causal timeline.
 function sessionIssue(o, events) {
   const start = events.find((s) => s.ref === o.sessionRef);
   if (
@@ -210,6 +226,7 @@ function sessionIssue(o, events) {
     return "cookie rotation changed the authorized jar, actor, or party";
   return null;
 }
+// Builds the complete proposed ticket content for a new exploit.
 function ticketDraft(o, runId, evidenceRefs) {
   return {
     labels: ["Bug", "pentesting", "harness"],
@@ -230,7 +247,9 @@ function ticketDraft(o, runId, evidenceRefs) {
     components: o.components?.length ? [...o.components] : ["unknown"],
   };
 }
+// Combines corroborating observations into one proposed ticket without losing evidence.
 function mergeDraft(draft, o) {
+  // Produces stable set unions for ticket list fields.
   const union = (a, b) => sorted([...a, ...b]);
   draft.preconditions = union(draft.preconditions, o.preconditions);
   draft.remediation = union(draft.remediation, o.remediation);
@@ -249,6 +268,7 @@ function mergeDraft(draft, o) {
     o.impact,
   ]).join("\n");
   const severityOrder = ["critical", "high", "medium", "low", "info"];
+  // Maps a severity to its ordering rank.
   const rank = (s) => {
     const i = severityOrder.indexOf(s.toLowerCase());
     return i < 0 ? Infinity : i;
@@ -271,11 +291,13 @@ function mergeDraft(draft, o) {
     if (other) step.evidenceRefs = union(step.evidenceRefs, other.evidenceRefs);
   }
 }
+// Finds the recorded state of one external action attempt.
 function actionState(input, action, actionKey) {
   return input.processedActions.find(
     (a) => a.action === action && a.key === actionKey,
   )?.state;
 }
+// Proposes an external action only when retry state makes it safe.
 function addAction(input, decision, action, actionKey) {
   const state = actionState(input, action, actionKey);
   decision.actionKeys[action] = actionKey;
@@ -289,12 +311,14 @@ function addAction(input, decision, action, actionKey) {
   }
 }
 
+// Produces deterministic ticket and summary proposals without making external calls.
 export function plan(raw) {
   const input = validateEnvelope(raw);
   const quarantined = [],
     coverage = [],
     retests = [],
     observations = [];
+  // Validates independent items while quarantining only the invalid item.
   function independent(collection, validate, dest) {
     input[collection].forEach((item, index) => {
       try {

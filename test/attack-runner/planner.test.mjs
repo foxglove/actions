@@ -7,7 +7,9 @@ import { plan, identityOf } from "../../src/attack-runner/planner.mjs";
 const fixture = JSON.parse(
   await readFile(new URL("./fixtures/F1-new.json", import.meta.url)),
 );
+// Returns a copy of the base fixture that one test can change safely.
 const fresh = () => structuredClone(fixture);
+// Builds an existing-ticket snapshot from the fixture's demonstrated exploit.
 function existing(x, state = "open", issueOpen = true) {
   const o = x.observations[0];
   return {
@@ -27,6 +29,7 @@ function existing(x, state = "open", issueOpen = true) {
     historicalCount: 7,
   };
 }
+// Returns the first decision from a planned fixture.
 const first = (x) => plan(x).decisions[0];
 
 test("E1-01 E1-14: full proposal includes unknown ownership and qualified production impact", () => {

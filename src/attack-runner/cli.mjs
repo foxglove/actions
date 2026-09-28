@@ -2,10 +2,12 @@
 import { open, readFile, unlink } from "node:fs/promises";
 import { plan } from "./planner.mjs";
 
+// Returns the only supported command form for argument errors.
 function usage() {
   return "Usage: yarn attack-runner plan --input <fixture.json> [--output <plan.json>]";
 }
 
+// Writes one complete plan without replacing an existing file or leaving a known partial file.
 export async function writeOutput(path, json, fs = { open, unlink }) {
   let file;
   try {
@@ -34,6 +36,7 @@ export async function writeOutput(path, json, fs = { open, unlink }) {
   }
 }
 
+// Parses the command arguments, validates the input, and returns the documented process result.
 export async function main(args) {
   if (args[0] !== "plan") throw new Error(usage());
   let input, output;

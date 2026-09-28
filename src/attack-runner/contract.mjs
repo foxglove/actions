@@ -1,4 +1,6 @@
+// Identifies the exact input path that violates the shared planner contract.
 export class InputError extends Error {
+  // Builds a safe validation message without including the rejected value.
   constructor(path, message) {
     super(`${path}: ${message}`);
     this.name = "InputError";
@@ -6,38 +8,46 @@ export class InputError extends Error {
   }
 }
 
+// Requires a non-null object that is not an array.
 export function object(value, path) {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new InputError(path, "expected object");
   return value;
 }
+// Requires a string that contains at least one non-space character.
 export function string(value, path) {
   if (typeof value !== "string" || !value.trim())
     throw new InputError(path, "expected nonempty string");
   return value;
 }
+// Requires one value from a closed set.
 export function oneOf(value, choices, path) {
   if (!choices.includes(value))
     throw new InputError(path, `expected ${choices.join("|")}`);
   return value;
 }
+// Requires an array.
 export function list(value, path) {
   if (!Array.isArray(value)) throw new InputError(path, "expected array");
   return value;
 }
+// Requires an array of strings and can also require at least one item.
 export function strings(value, path, nonempty = false) {
   const a = list(value, path).map((v, i) => string(v, `${path}[${i}]`));
   if (nonempty && !a.length)
     throw new InputError(path, "expected at least one item");
   return a;
 }
+// Validates a string only when the field is present.
 function optionalString(value, path) {
   if (value !== undefined) string(value, path);
 }
+// Rejects duplicate values where identity must be unique.
 function unique(values, path) {
   if (new Set(values).size !== values.length)
     throw new InputError(path, "duplicate identity");
 }
+// Validates one causal step and its evidence and prerequisite references.
 function transition(value, path) {
   const t = object(value, path);
   for (const k of [
@@ -54,6 +64,7 @@ function transition(value, path) {
   strings(t.evidenceRefs, `${path}.evidenceRefs`, true);
   return t;
 }
+// Validates one non-empty, acyclic causal chain.
 function chain(value, path) {
   const ts = list(value, path).map((v, i) => transition(v, `${path}[${i}]`));
   if (!ts.length)
@@ -74,6 +85,7 @@ function chain(value, path) {
   const byId = new Map(ts.map((t) => [t.stepId, t])),
     visited = new Set(),
     active = new Set();
+  // Walks prerequisites to reject cycles before planning.
   function visit(id) {
     if (active.has(id)) throw new InputError(path, "causal prerequisite cycle");
     if (visited.has(id)) return;
@@ -85,6 +97,7 @@ function chain(value, path) {
   for (const id of ids) visit(id);
   return ts;
 }
+// Validates shared run data before any finding can produce a ticket proposal.
 export function validateEnvelope(input) {
   const x = object(input, "$");
   if (x.schemaVersion !== 1)
@@ -289,6 +302,7 @@ export function validateEnvelope(input) {
   return { ...x, sessionEvents: sessions, existing, processedActions: actions };
 }
 
+// Validates one finding and its complete causal evidence.
 export function validateObservation(value, path) {
   const o = object(value, path);
   for (const k of [
@@ -412,6 +426,7 @@ export function validateObservation(value, path) {
     strings(o.dangerousNotExecuted, `${path}.dangerousNotExecuted`);
   return o;
 }
+// Validates one scoped re-test and its observation result.
 export function validateRetest(value, path) {
   const r = object(value, path);
   string(r.exploitId, `${path}.exploitId`);
@@ -428,6 +443,7 @@ export function validateRetest(value, path) {
   optionalString(r.stopReason, `${path}.stopReason`);
   return r;
 }
+// Validates one coverage record for a tested, interrupted, or skipped surface.
 export function validateCoverage(value, path) {
   const c = object(value, path);
   string(c.surface, `${path}.surface`);
