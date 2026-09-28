@@ -27,7 +27,8 @@ const aliases = [
 export function canonical(value) {
   let s = String(value).normalize("NFKC").toLowerCase();
   s = s.replace(/\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/gi, "<id>");
-  s = s.replace(/\b(export|resource)[-_](?:[0-9a-f]{6,}|\d{2,})\b/g, "$1 <id>");
+  s = s.replace(/\b(export|resource)[-_ ]?[0-9a-f]{6,}\b/g, "$1 <id>");
+  s = s.replace(/\b(export|resource)[-_]\d{2,}\b/g, "$1 <id>");
   for (const [pattern, replacement] of aliases)
     s = s.replace(pattern, replacement);
   return s
@@ -49,7 +50,7 @@ function causalChain(transitions) {
     );
   const terminal = terminals[0];
   const actorTenant =
-    /\b(?:tenant|organization|org|workspace)[-_ ]([a-z0-9]+)\b/i
+    /\b(?:tenant|organization|org|workspace)[-_]([a-z0-9]+)\b/i
       .exec(terminal.actorCapability)?.[1]
       ?.toLowerCase();
   // Expresses tenant references relative to the starting actor.
@@ -57,7 +58,7 @@ function causalChain(transitions) {
     canonical(
       actorTenant
         ? value.replace(
-            /\b(?:tenant|organization|org|workspace)[-_ ]([a-z0-9]+)\b/gi,
+            /\b(?:tenant|organization|org|workspace)[-_]([a-z0-9]+)\b/gi,
             (_, tenant) =>
               tenant.toLowerCase() === actorTenant
                 ? "actor-tenant"

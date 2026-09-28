@@ -383,6 +383,26 @@ test("Identity keeps security numbers and recognizes organization relations", ()
   assert.match(other.targetResourceRelation, /other tenant/);
 });
 
+test("Identity ignores generated hex resource IDs after a space", () => {
+  assert.equal(
+    canonical("download export 7c1f9a2b"),
+    canonical("download export 9d8e7f6a"),
+  );
+});
+
+test("Tenant identity does not treat ordinary role words as identifiers", () => {
+  const x = fresh(),
+    o = x.observations[0];
+  o.transitions.at(-1).actorCapability = "org member in tenant-a";
+  o.transitions.at(-1).resourceRelation = "tenant-a export";
+  const own = identityOf(o);
+  o.transitions.at(-1).resourceRelation = "tenant-b export";
+  const other = identityOf(o);
+  assert.notDeepEqual(own, other);
+  assert.match(own.targetResourceRelation, /actor tenant/);
+  assert.match(other.targetResourceRelation, /other tenant/);
+});
+
 test("E1-10: equivalent cross-component evidence merges into one complete ticket regardless of order", () => {
   const x = fresh(),
     a = x.observations[0],
