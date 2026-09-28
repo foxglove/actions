@@ -8,7 +8,7 @@
   "scripts": {
     "attack-runner": "node src/attack-runner/cli.mjs",
     "test:attack-runner": "node --test test/attack-runner/*.test.mjs",
-    "format:check": "prettier --check .github/workflows/attack-runner.yml docs/aegis/review/offline-planner.md package.json src/attack-runner test/attack-runner"
+    "format:check": "prettier --check .github/workflows/attack-runner.yml package.json src/attack-runner test/attack-runner"
   },
   "devDependencies": {
     "prettier": "3.8.1"
