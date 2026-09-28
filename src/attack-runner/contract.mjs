@@ -65,10 +65,10 @@ function transition(value, path) {
   strings(t.prerequisiteStepIds, `${path}.prerequisiteStepIds`);
   strings(t.evidenceRefs, `${path}.evidenceRefs`, true);
   for (const k of ["actorTenantRef", "resourceTenantRef"])
-    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{2,}$/.test(t[k]))
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(t[k]))
       throw new InputError(
         `${path}.${k}`,
-        "expected an opaque tenant reference of at least three safe characters",
+        "expected a safe opaque tenant reference",
       );
   return t;
 }

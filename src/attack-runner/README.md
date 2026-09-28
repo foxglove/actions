@@ -31,7 +31,7 @@ The input must contain these top-level fields:
 
 The input must not contain a password, session cookie, magic link, or other credential. See [`contract.mjs`](contract.mjs) for the complete input checks and [`F1-new.json`](../../test/attack-runner/fixtures/F1-new.json) for a runnable example.
 
-Each causal step must include `actorTenantRef` and `resourceTenantRef`. These structured fields define the tenant relationship used for exploit identity. Each value must be an opaque identifier with at least three safe characters. The planner does not infer tenant identity from the English text in `actorCapability` or `resourceRelation`.
+Each causal step must include `actorTenantRef` and `resourceTenantRef`. These structured fields define the tenant relationship used for exploit identity. Each value is an opaque identifier. The planner compares the values only for exact equality and never searches for them in prose. When a prose field must describe a tenant relation, use the fixed `{actorTenant}` or `{resourceTenant}` placeholder. The planner replaces the placeholder with its relation to the terminal actor.
 
 A `validated` session event must set `actorRole` to `non-admin-developer`.
 

@@ -409,17 +409,35 @@ test("Tenant identity uses structured references instead of role prose", () => {
   assert.match(other.targetResourceRelation, /other tenant/);
 });
 
-test("Tenant references replace only complete tokens", () => {
+test("Opaque tenant references never rewrite prose", () => {
   const x = fresh(),
     o = x.observations[0],
     terminal = o.transitions.at(-1);
-  terminal.actorTenantRef = "abc";
-  terminal.resourceTenantRef = "xyz";
-  terminal.actorCapability = "xabcx member in abc";
-  terminal.resourceRelation = "resource for xyz";
-  const last = identityOf(o).chain.at(-1);
-  assert.match(last.actorCapability, /xabcx member in actor tenant/);
-  assert.match(last.resourceRelation, /resource for other tenant/);
+  terminal.actorTenantRef = "admin";
+  terminal.resourceTenantRef = "export";
+  terminal.actorCapability = "non-admin developer";
+  terminal.resourceRelation = "export is available to an admin";
+  const commonWords = identityOf(o);
+  terminal.actorTenantRef = "acme";
+  terminal.resourceTenantRef = "globex";
+  assert.deepEqual(identityOf(o), commonWords);
+});
+
+test("Fixed tenant placeholders express structured relations", () => {
+  const x = fresh(),
+    o = x.observations[0],
+    terminal = o.transitions.at(-1);
+  terminal.actorTenantRef = "a";
+  terminal.resourceTenantRef = "b";
+  terminal.actorCapability = "{actorTenant} non-admin developer";
+  terminal.resourceRelation =
+    "{resourceTenant} export is not owned by {actorTenant}";
+  const shortRefs = identityOf(o);
+  terminal.actorTenantRef = "admin";
+  terminal.resourceTenantRef = "export";
+  assert.deepEqual(identityOf(o), shortRefs);
+  assert.match(shortRefs.chain.at(-1).actorCapability, /actor tenant/);
+  assert.match(shortRefs.chain.at(-1).resourceRelation, /other tenant/);
 });
 
 test("Ambiguous terminal controls are quarantined before identity", () => {
@@ -694,13 +712,10 @@ test("Shared run contract rejects malformed target, hash, and evidence destinati
   const badHash = fresh();
   badHash.run.instructionsSha256 = "x";
   assert.throws(() => plan(badHash), /instructionsSha256/);
-  const shortTenantRef = fresh();
-  shortTenantRef.observations[0].transitions[0].actorTenantRef = "a";
-  assert.equal(first(shortTenantRef).outcome, "unresolved");
-  assert.match(
-    first(shortTenantRef).reason,
-    /actorTenantRef.*at least three safe characters/,
-  );
+  const unsafeTenantRef = fresh();
+  unsafeTenantRef.observations[0].transitions[0].actorTenantRef = "tenant ref";
+  assert.equal(first(unsafeTenantRef).outcome, "unresolved");
+  assert.match(first(unsafeTenantRef).reason, /actorTenantRef.*safe opaque/);
   const badPrefix = fresh();
   badPrefix.run.evidencePrefix = "public";
   assert.throws(() => plan(badPrefix), /evidencePrefix/);

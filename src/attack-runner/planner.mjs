@@ -13,9 +13,6 @@ const hash = (value) => createHash("sha256").update(value).digest("hex");
 const sorted = (a) => [...new Set(a)].sort();
 // Compares strings by code unit so host locale cannot change planner output.
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
-// Escapes an opaque tenant reference before exact replacement in relationship text.
-const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 // These aliases remove wording variation only. An unrecognized causal change is
 // triaged rather than inferred equivalent from title or a similarity score.
 const aliases = [
@@ -52,21 +49,22 @@ function causalChain(transitions) {
     );
   const terminal = terminals[0];
   const actorTenantRef = terminal.actorTenantRef;
-  const tenantRefs = sorted(
-    transitions.flatMap((t) => [t.actorTenantRef, t.resourceTenantRef]),
-  ).sort((a, b) => b.length - a.length || compare(a, b));
-  const tenantPattern = new RegExp(
-    `(?<![a-z0-9])(?:${tenantRefs.map(escapeRegex).join("|")})(?![a-z0-9])`,
-    "gi",
-  );
-  // Replaces concrete tenant references with their relationship to the terminal actor.
-  const relative = (value) =>
+  // Converts only fixed placeholders; opaque reference values never rewrite prose.
+  const relative = (value, transition) =>
     canonical(
-      value.replace(tenantPattern, (ref) =>
-        ref.toLowerCase() === actorTenantRef.toLowerCase()
-          ? "actor-tenant"
-          : "other-tenant",
-      ),
+      value
+        .replaceAll(
+          "{actorTenant}",
+          transition.actorTenantRef === actorTenantRef
+            ? "actor-tenant"
+            : "other-tenant",
+        )
+        .replaceAll(
+          "{resourceTenant}",
+          transition.resourceTenantRef === actorTenantRef
+            ? "actor-tenant"
+            : "other-tenant",
+        ),
     );
   const levels = new Map();
   // Calculates each step's prerequisite depth for stable ordering.
@@ -84,22 +82,23 @@ function causalChain(transitions) {
     const t = byId.get(id);
     return {
       depth: levels.get(id),
-      actorCapability: relative(t.actorCapability),
+      actorCapability: relative(t.actorCapability, t),
       actorTenantRelation:
-        t.actorTenantRef.toLowerCase() === actorTenantRef.toLowerCase()
-          ? "actor tenant"
-          : "other tenant",
-      resourceRelation: relative(t.resourceRelation),
+        t.actorTenantRef === actorTenantRef ? "actor tenant" : "other tenant",
+      resourceRelation: relative(t.resourceRelation, t),
       resourceTenantRelation:
-        t.resourceTenantRef.toLowerCase() === actorTenantRef.toLowerCase()
+        t.resourceTenantRef === actorTenantRef
           ? "actor tenant"
           : "other tenant",
-      targetClass: relative(t.targetClass),
-      operation: relative(t.operation),
-      expectedBoundary: relative(t.expectedBoundary),
-      observedEffect: relative(t.observedEffect),
+      targetClass: relative(t.targetClass, t),
+      operation: relative(t.operation, t),
+      expectedBoundary: relative(t.expectedBoundary, t),
+      observedEffect: relative(t.observedEffect, t),
       prerequisites: sorted(
-        t.prerequisiteStepIds.map((p) => byId.get(p).operation).map(relative),
+        t.prerequisiteStepIds.map((p) => {
+          const prerequisite = byId.get(p);
+          return relative(prerequisite.operation, prerequisite);
+        }),
       ),
     };
   });

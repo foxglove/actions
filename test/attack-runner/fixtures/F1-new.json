@@ -54,27 +54,27 @@
       "transitions": [
         {
           "stepId": "list",
-          "actorCapability": "tenant-A non-admin developer",
+          "actorCapability": "{actorTenant} non-admin developer",
           "actorTenantRef": "tenant-A",
-          "resourceRelation": "owns tenant-A exports only",
+          "resourceRelation": "owns {resourceTenant} exports only",
           "resourceTenantRef": "tenant-A",
           "targetClass": "export metadata",
           "operation": "list exports",
           "expectedBoundary": "only authorized metadata visible",
-          "observedEffect": "learned a synthetic tenant-B export identifier through an authorized prerequisite",
+          "observedEffect": "learned a synthetic {resourceTenant} export identifier through an authorized prerequisite",
           "prerequisiteStepIds": [],
           "evidenceRefs": ["E-F1-LIST"]
         },
         {
           "stepId": "download",
-          "actorCapability": "tenant-A non-admin developer",
+          "actorCapability": "{actorTenant} non-admin developer",
           "actorTenantRef": "tenant-A",
-          "resourceRelation": "tenant-B export is not owned by tenant-A",
+          "resourceRelation": "{resourceTenant} export is not owned by {actorTenant}",
           "resourceTenantRef": "tenant-B",
           "targetClass": "export download API",
-          "operation": "download tenant-B export",
+          "operation": "download {resourceTenant} export",
           "expectedBoundary": "deny cross-tenant read",
-          "observedEffect": "synthetic tenant-B export content returned",
+          "observedEffect": "synthetic {resourceTenant} export content returned",
           "prerequisiteStepIds": ["list"],
           "evidenceRefs": ["E-F1-DOWNLOAD"]
         }
