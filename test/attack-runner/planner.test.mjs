@@ -409,6 +409,19 @@ test("Tenant identity uses structured references instead of role prose", () => {
   assert.match(other.targetResourceRelation, /other tenant/);
 });
 
+test("Tenant references replace only complete tokens", () => {
+  const x = fresh(),
+    o = x.observations[0],
+    terminal = o.transitions.at(-1);
+  terminal.actorTenantRef = "abc";
+  terminal.resourceTenantRef = "xyz";
+  terminal.actorCapability = "xabcx member in abc";
+  terminal.resourceRelation = "resource for xyz";
+  const last = identityOf(o).chain.at(-1);
+  assert.match(last.actorCapability, /xabcx member in actor tenant/);
+  assert.match(last.resourceRelation, /resource for other tenant/);
+});
+
 test("Ambiguous terminal controls are quarantined before identity", () => {
   const x = fresh(),
     o = x.observations[0];
@@ -681,6 +694,13 @@ test("Shared run contract rejects malformed target, hash, and evidence destinati
   const badHash = fresh();
   badHash.run.instructionsSha256 = "x";
   assert.throws(() => plan(badHash), /instructionsSha256/);
+  const shortTenantRef = fresh();
+  shortTenantRef.observations[0].transitions[0].actorTenantRef = "a";
+  assert.equal(first(shortTenantRef).outcome, "unresolved");
+  assert.match(
+    first(shortTenantRef).reason,
+    /actorTenantRef.*at least three safe characters/,
+  );
   const badPrefix = fresh();
   badPrefix.run.evidencePrefix = "public";
   assert.throws(() => plan(badPrefix), /evidencePrefix/);

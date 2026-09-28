@@ -55,18 +55,19 @@ function causalChain(transitions) {
   const tenantRefs = sorted(
     transitions.flatMap((t) => [t.actorTenantRef, t.resourceTenantRef]),
   ).sort((a, b) => b.length - a.length || compare(a, b));
+  const tenantPattern = new RegExp(
+    `(?<![a-z0-9])(?:${tenantRefs.map(escapeRegex).join("|")})(?![a-z0-9])`,
+    "gi",
+  );
   // Replaces concrete tenant references with their relationship to the terminal actor.
-  const relative = (value) => {
-    let result = value;
-    for (const ref of tenantRefs)
-      result = result.replace(
-        new RegExp(escapeRegex(ref), "gi"),
+  const relative = (value) =>
+    canonical(
+      value.replace(tenantPattern, (ref) =>
         ref.toLowerCase() === actorTenantRef.toLowerCase()
           ? "actor-tenant"
           : "other-tenant",
-      );
-    return canonical(result);
-  };
+      ),
+    );
   const levels = new Map();
   // Calculates each step's prerequisite depth for stable ordering.
   function level(id) {
