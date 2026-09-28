@@ -925,3 +925,52 @@ test("An invalid duplicate ID also blocks its valid copy", () => {
   assert.equal(p.status, "partial_failure");
   assert.ok(p.decisions.every((d) => d.proposedActions.length === 0));
 });
+
+test("Split and unsplit IDs cannot collide or share retest provenance", () => {
+  const x = fresh(),
+    o = x.observations[0];
+  o.observationId = "O";
+  o.causes = [
+    {
+      causeId: "C1",
+      terminalStepId: "download",
+      surface: o.surface,
+      violatedBoundary: o.violatedBoundary,
+      impact: o.impact,
+      severity: o.severity,
+      productionImpact: o.productionImpact,
+      remediation: o.remediation,
+      retest: o.retest,
+    },
+  ];
+  const other = structuredClone(o);
+  delete other.causes;
+  other.observationId = "O#C1";
+  other.surface = "another surface";
+  other.violatedBoundary = "another independent control";
+  x.observations.push(other);
+  const initial = plan(x);
+  assert.deepEqual(
+    new Set(initial.decisions.map((d) => d.observationId)),
+    new Set(["O#C1", "O%23C1"]),
+  );
+  assert.ok(initial.decisions.every((d) => d.outcome === "new"));
+  for (const [sourceId, outputId] of [
+    ["O", "O#C1"],
+    ["O#C1", "O%23C1"],
+  ]) {
+    x.retests = [
+      {
+        exploitId: initial.decisions.find((d) => d.observationId === outputId)
+          .exploitId,
+        targetSurface: "export-download",
+        attemptedOperations: ["download"],
+        observedObservationIds: [sourceId],
+        execution: "completed",
+        conditions: [],
+        evidenceRefs: [],
+      },
+    ];
+    assert.ok(plan(x).decisions.every((d) => d.outcome !== "unresolved"));
+  }
+});

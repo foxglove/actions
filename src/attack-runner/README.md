@@ -35,7 +35,7 @@ Each causal step must include `actorTenantRef` and `resourceTenantRef`. These st
 
 Each step identity includes the complete meaning of its prerequisites. Fingerprints use version `v3`. Existing tickets retain their exploit ID when their stored chain matches; an older fingerprint alone is not enough to establish a match. Step evidence merges only when there is one matching step in each chain. Otherwise, the evidence remains at ticket level.
 
-Each source observation must have a unique `observationId` within the run. All copies of a duplicate ID stop for review, including a valid copy whose duplicate is invalid. Retest citations use the exact source observation ID. For findings split into independent causes, output IDs use `encodeURIComponent(observationId)#encodeURIComponent(causeId)`; retests still cite the source ID.
+Each source observation must have a unique `observationId` within the run. All copies of a duplicate ID stop for review, including a valid copy whose duplicate is invalid. Retest citations use the exact source observation ID. Unsplit output IDs use `encodeURIComponent(observationId)`. For findings split into independent causes, output IDs use `encodeURIComponent(observationId)#encodeURIComponent(causeId)`; retests still cite the source ID.
 
 A `validated` session event must set `actorRole` to `non-admin-developer`.
 

@@ -124,6 +124,7 @@ function splitCauses(o) {
     return [
       {
         ...o,
+        observationId: encodeURIComponent(o.observationId),
         transitions: o.transitions.filter(
           (t) => !o.incidentalStepIds?.includes(t.stepId),
         ),
