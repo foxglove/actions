@@ -1143,9 +1143,10 @@ test("Retesting one cause ignores its siblings but still checks every cited sour
   x.observations.push(unrelated);
   x.retests[0].observedObservationIds.push(unrelated.observationId);
   p = plan(x);
-  assert.ok(
-    p.decisions.some(
-      (d) => d.exploitId === "EXP-1" && d.outcome === "unresolved",
-    ),
+  const blockedRetest = p.decisions.find(
+    (d) => d.exploitId === "EXP-1" && d.outcome === "unresolved",
   );
+  assert.deepEqual(blockedRetest.unsupportedObservationIds, [
+    "unrelated-source",
+  ]);
 });

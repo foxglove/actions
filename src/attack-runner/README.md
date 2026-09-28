@@ -39,6 +39,8 @@ Each step identity includes the complete meaning of its prerequisites. Fingerpri
 
 Each source observation must have a unique `observationId` within the run. All copies of a duplicate ID stop for review, including a valid copy whose duplicate is invalid. Retest citations use the exact source observation ID. Each observation decision includes the raw input ID as `sourceObservationId` when that ID is a string. Invalid observations also include their input array index as `inputIndex`. An invalid observation has no `observationId` when its raw ID is not a string or is not well-formed Unicode. Unsplit output IDs, including invalid observations, use `encodeURIComponent(observationId)`. For findings split into independent causes, output IDs use `encodeURIComponent(observationId)#encodeURIComponent(causeId)`; retests still cite the source ID.
 
+A blocked retest decision lists the exact raw source IDs in `unsupportedObservationIds`. These are the citations that have no resolved cause matching the retested exploit, or that refer to invalid observations. Other causes from a supporting source keep their own decisions.
+
 A `validated` session event must set `actorRole` to `non-admin-developer`.
 
 ## Exit codes

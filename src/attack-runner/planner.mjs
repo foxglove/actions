@@ -673,7 +673,7 @@ export function plan(raw) {
   for (const { value: r } of retests) {
     // Each source can contain several independent causes. It supports this retest
     // when one resolved cause matches; sibling causes keep their own decisions.
-    const unsupportedSource = r.observedObservationIds.some((id) => {
+    const unsupportedObservationIds = r.observedObservationIds.filter((id) => {
       const invalid = quarantined.some(
         (q) => q.collection === "observations" && q.ref === id,
       );
@@ -685,12 +685,13 @@ export function plan(raw) {
       );
       return invalid || !supportsExploit;
     });
-    if (unsupportedSource) {
+    if (unsupportedObservationIds.length) {
       decisions.push({
         outcome: "unresolved",
         exploitId: r.exploitId,
         reason:
           "retest cites an unresolved, invalid, missing, or mismatched observation",
+        unsupportedObservationIds,
         evidenceRefs: r.evidenceRefs,
         proposedActions: [],
         notificationEligible: false,
