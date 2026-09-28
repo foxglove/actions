@@ -22,9 +22,9 @@ Open the freshly issued magic link immediately in the prepared sandbox/headless 
 
 Retain the issued session cookie in this run's browser context/cookie jar. Use the application's real session-cookie mechanism, preserving HttpOnly/domain/path/security behavior; the magic-link JWT is not the session credential.
 
-Validate the expected authenticated non-admin developer identity using the configured party session endpoint (initially /v1/me). An application sign-in error, expired/invalid link, wrong identity/role, or failed validation is PREFLIGHT_FAILED. Classify an edge challenge/block separately as described below; an edge response alone does not prove invalid credentials. On failed validation or unresolved edge access, stop the assessment. Do not continue anonymously.
+Wait for the runner to report `PREFLIGHT_PASSED` before you start attack work. This signal confirms that the session started as the approved non-admin user. If login fails, the identity is wrong, or the runner does not send this signal, stop and report `PREFLIGHT_FAILED`. Report an edge block separately. Do not continue anonymously.
 
-Before supplying this link, the trusted runner adapter checks the handoff's declared authentication mode against the authorized profile. After login, the adapter must verify the actual session mode and starting identity from application evidence, record mode/coverage limitations in private run provenance, and explicitly signal that preflight passed. Wait for that signal before any attack activity; a missing or failed signal stops assessment. The worker does not receive the handoff envelope or own this mode comparison. A valid non-admin starting session that gains privileges through a demonstrated exploit remains exploit evidence, not an invalid starting identity.
+If the approved non-admin session gains more access through an exploit, record that exploit.
 
 Do not log the live magic link, cookie, or authentication headers. Evidence should report identity/role validation without credential values.
 
