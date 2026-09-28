@@ -138,11 +138,11 @@ test("E1-07: pre-loss positive survives; post-loss and wrong start are unresolve
   assert.equal(first(x).outcome, "unresolved");
   x.observations[0].observedSequence = 2;
   x.sessionEvents[0].actorRole = "admin";
-  assert.equal(first(x).outcome, "unresolved");
+  assert.throws(() => plan(x), /sessionEvents\[0\]\.actorRole/);
   x.sessionEvents[0].actorRole = "developer administrator";
-  assert.equal(first(x).outcome, "unresolved");
+  assert.throws(() => plan(x), /sessionEvents\[0\]\.actorRole/);
   x.sessionEvents[0].actorRole = "developer owner";
-  assert.equal(first(x).outcome, "unresolved");
+  assert.throws(() => plan(x), /sessionEvents\[0\]\.actorRole/);
   x.sessionEvents[0].actorRole = "non-admin-developer";
   x.sessionEvents.splice(1, 0, {
     ref: "ROTATED",
@@ -403,6 +403,14 @@ test("Tenant identity does not treat ordinary role words as identifiers", () => 
   assert.match(other.targetResourceRelation, /other tenant/);
 });
 
+test("Ambiguous actor tenant tokens require review", () => {
+  const x = fresh(),
+    o = x.observations[0];
+  o.transitions.at(-1).actorCapability = "workspace-member in tenant-a";
+  assert.throws(() => identityOf(o), /ambiguous actor tenant tokens/);
+  assert.equal(first(x).outcome, "unresolved");
+});
+
 test("E1-10: equivalent cross-component evidence merges into one complete ticket regardless of order", () => {
   const x = fresh(),
     a = x.observations[0],
@@ -553,7 +561,7 @@ test("A positive exploit suppresses a contradictory non-observation", () => {
 
 test("A retest linked to unresolved evidence stays unresolved", () => {
   const x = fresh();
-  x.sessionEvents[0].actorRole = "admin";
+  x.observations[0].status = "incomplete";
   x.retests = [
     {
       exploitId: "EXP-1",
@@ -589,6 +597,26 @@ test("A retest linked to an invalid observation stays unresolved", () => {
   ];
   const p = plan(x);
   assert.ok(p.decisions.every((d) => d.outcome === "unresolved"));
+  assert.ok(!p.decisions.some((d) => d.outcome === "not_observed"));
+});
+
+test("A retest linked to a missing observation stays unresolved", () => {
+  const x = fresh();
+  x.observations = [];
+  x.retests = [
+    {
+      exploitId: "EXP-9",
+      targetSurface: "export-download",
+      attemptedOperations: ["download-other-tenant-export"],
+      observedObservationIds: ["O-MISSING"],
+      execution: "completed",
+      conditions: [],
+      evidenceRefs: ["E-RETEST"],
+    },
+  ];
+  const p = plan(x);
+  assert.equal(p.status, "needs_review");
+  assert.equal(p.decisions[0].outcome, "unresolved");
   assert.ok(!p.decisions.some((d) => d.outcome === "not_observed"));
 });
 

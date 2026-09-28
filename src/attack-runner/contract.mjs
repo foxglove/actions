@@ -218,6 +218,11 @@ export function validateEnvelope(input) {
         `$.sessionEvents[${i}]`,
         "validated event needs actorRole, partyRef, jarRef",
       );
+    if (s.state === "validated" && s.actorRole !== "non-admin-developer")
+      throw new InputError(
+        `$.sessionEvents[${i}].actorRole`,
+        "expected non-admin-developer for a validated session",
+      );
     return s;
   });
   unique(

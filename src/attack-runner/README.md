@@ -33,6 +33,8 @@ The input must not contain a password, session cookie, magic link, or other cred
 
 Use `tenant-<id>`, `organization-<id>`, `org-<id>`, or `workspace-<id>` in actor and resource relationship fields when tenant-relative identity matters. An underscore can replace the hyphen.
 
+A `validated` session event must set `actorRole` to `non-admin-developer`.
+
 ## Exit codes
 
 | Code | Meaning                                                                                            |

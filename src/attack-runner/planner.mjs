@@ -49,10 +49,14 @@ function causalChain(transitions) {
       "ambiguous terminal control; split independent causes or mark incidental steps explicitly",
     );
   const terminal = terminals[0];
-  const actorTenant =
-    /\b(?:tenant|organization|org|workspace)[-_]([a-z0-9]+)\b/i
-      .exec(terminal.actorCapability)?.[1]
-      ?.toLowerCase();
+  const actorTenants = [
+    ...terminal.actorCapability.matchAll(
+      /\b(?:tenant|organization|org|workspace)[-_]([a-z0-9]+)\b/gi,
+    ),
+  ].map((match) => match[1].toLowerCase());
+  if (actorTenants.length > 1)
+    throw new Error("ambiguous actor tenant tokens; supply one actor tenant");
+  const actorTenant = actorTenants[0];
   // Expresses tenant references relative to the starting actor.
   const relative = (value) =>
     canonical(
@@ -572,11 +576,21 @@ export function plan(raw) {
         q.collection === "observations" &&
         r.observedObservationIds.includes(q.ref),
     );
-    if (unresolved || invalid) {
+    const missing = r.observedObservationIds.some(
+      (id) =>
+        !linked.some(
+          (d) =>
+            d.observationId === id || d.observationId?.startsWith(`${id}#`),
+        ) &&
+        !quarantined.some(
+          (q) => q.collection === "observations" && q.ref === id,
+        ),
+    );
+    if (unresolved || invalid || missing) {
       decisions.push({
         outcome: "unresolved",
         exploitId: r.exploitId,
-        reason: "retest cites an unresolved or invalid observation",
+        reason: "retest cites an unresolved, invalid, or missing observation",
         evidenceRefs: r.evidenceRefs,
         proposedActions: [],
         notificationEligible: false,
