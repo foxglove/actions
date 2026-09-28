@@ -513,8 +513,11 @@ export function plan(raw) {
         (i) => JSON.stringify(i) === JSON.stringify(identity),
       ),
     );
+    // Explicit independent causes from one source do not make each other ambiguous.
+    // Exact matches still deduplicate; unrelated sources and stored tickets still need review.
     const plausible = allCandidates.filter(
       (c) =>
+        c.sourceId !== sourceId &&
         c.identity.environment === identity.environment &&
         c.identity.surface === identity.surface &&
         (c.identity.violatedBoundary === identity.violatedBoundary ||
@@ -563,6 +566,7 @@ export function plan(raw) {
     if (!match)
       allCandidates.push({
         record: { exploitId, ...o, fingerprintAliases: [fp] },
+        sourceId,
         identity,
         fingerprint: fp,
         existing: false,

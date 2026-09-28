@@ -306,6 +306,29 @@ test("E1-18: one raw finding with two explicit causes splits and retains shared 
     p.decisions.map((d) => d.ticketDraft.remediation),
     [["fix ownership"], ["fix share token"]],
   );
+  // Independent causes can share a surface and a broad boundary description.
+  o.causes[1].surface = o.causes[0].surface;
+  o.causes[1].violatedBoundary = o.causes[0].violatedBoundary;
+  const shared = plan(x);
+  assert.deepEqual(
+    shared.decisions.map((d) => d.outcome),
+    ["new", "new"],
+  );
+  assert.equal(new Set(shared.decisions.map((d) => d.exploitId)).size, 2);
+  assert.ok(
+    shared.decisions.every((d) => d.proposedActions.includes("create")),
+  );
+  // A separate observation is still ambiguous against those two candidates.
+  const uncertain = structuredClone(o);
+  delete uncertain.causes;
+  uncertain.observationId = "Z-OTHER";
+  uncertain.transitions = uncertain.transitions.filter(
+    (t) => t.stepId !== "share",
+  );
+  uncertain.transitions[1].observedEffect = "different unexplained effect";
+  x.observations.push(uncertain);
+  assert.equal(plan(x).decisions.at(-1).outcome, "unresolved");
+  x.observations.pop();
   delete o.causes;
   assert.equal(plan(x).status, "partial_failure");
   assert.equal(first(x).outcome, "unresolved");
