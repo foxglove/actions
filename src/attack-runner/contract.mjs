@@ -50,16 +50,19 @@ function unique(values, path) {
 // Validates one causal step and its evidence and prerequisite references.
 function transition(value, path) {
   const t = object(value, path);
-  for (const k of [
-    "stepId",
+  const proseFields = [
     "actorCapability",
-    "actorTenantRef",
     "resourceRelation",
-    "resourceTenantRef",
     "targetClass",
     "operation",
     "expectedBoundary",
     "observedEffect",
+  ];
+  for (const k of [
+    "stepId",
+    "actorTenantRef",
+    "resourceTenantRef",
+    ...proseFields,
   ])
     string(t[k], `${path}.${k}`);
   strings(t.prerequisiteStepIds, `${path}.prerequisiteStepIds`);
@@ -70,6 +73,13 @@ function transition(value, path) {
         `${path}.${k}`,
         "expected a safe opaque tenant reference",
       );
+  const allowedPlaceholders = new Set(["{actorTenant}", "{resourceTenant}"]);
+  for (const k of proseFields) {
+    const tokens = t[k].match(/\{[^{}]*\}|[{}]/g) ?? [];
+    const unknown = tokens.find((token) => !allowedPlaceholders.has(token));
+    if (unknown)
+      throw new InputError(`${path}.${k}`, `unknown placeholder ${unknown}`);
+  }
   return t;
 }
 // Validates one non-empty, acyclic causal chain.

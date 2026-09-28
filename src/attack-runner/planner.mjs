@@ -228,6 +228,22 @@ function sessionIssue(o, events) {
     return "cookie rotation changed the authorized jar, actor, or party";
   return null;
 }
+// Expands fixed tenant placeholders for the human-facing ticket activity chain.
+function displayTransition(transition) {
+  const displayed = structuredClone(transition);
+  for (const field of [
+    "actorCapability",
+    "resourceRelation",
+    "targetClass",
+    "operation",
+    "expectedBoundary",
+    "observedEffect",
+  ])
+    displayed[field] = displayed[field]
+      .replaceAll("{actorTenant}", displayed.actorTenantRef)
+      .replaceAll("{resourceTenant}", displayed.resourceTenantRef);
+  return displayed;
+}
 // Builds the complete proposed ticket content for a new exploit.
 function ticketDraft(o, runId, evidenceRefs) {
   return {
@@ -239,7 +255,7 @@ function ticketDraft(o, runId, evidenceRefs) {
     demonstratedImpact: o.impact,
     severity: o.severity,
     productionImpact: { ...o.productionImpact },
-    activityChain: structuredClone(o.transitions),
+    activityChain: o.transitions.map(displayTransition),
     blockedSteps: [...(o.blockedSteps ?? [])],
     dangerousNotExecuted: [...(o.dangerousNotExecuted ?? [])],
     remediation: [...o.remediation],
@@ -285,11 +301,13 @@ function mergeDraft(draft, o) {
   // Keep the first (stable ID ordered) complete chain. Attach corroborating
   // evidence to matching steps, and retain every reference at ticket level.
   for (const step of draft.activityChain) {
-    const other = o.transitions.find(
-      (t) =>
-        canonical(t.operation) === canonical(step.operation) &&
-        canonical(t.expectedBoundary) === canonical(step.expectedBoundary),
-    );
+    const other = o.transitions
+      .map(displayTransition)
+      .find(
+        (t) =>
+          canonical(t.operation) === canonical(step.operation) &&
+          canonical(t.expectedBoundary) === canonical(step.expectedBoundary),
+      );
     if (other) step.evidenceRefs = union(step.evidenceRefs, other.evidenceRefs);
   }
 }

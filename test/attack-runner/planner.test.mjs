@@ -45,6 +45,16 @@ test("E1-01 E1-14: full proposal includes unknown ownership and qualified produc
   assert.deepEqual(d.ticketDraft.labels, ["Bug", "pentesting", "harness"]);
   assert.deepEqual(d.ticketDraft.components, ["unknown"]);
   assert.equal(d.ticketDraft.activityChain.length, 2);
+  assert.equal(
+    d.ticketDraft.activityChain[1].resourceRelation,
+    "tenant-B export is not owned by tenant-A",
+  );
+  assert.ok(
+    !JSON.stringify(d.ticketDraft.activityChain).includes("{actorTenant}"),
+  );
+  assert.ok(
+    !JSON.stringify(d.ticketDraft.activityChain).includes("{resourceTenant}"),
+  );
   assert.equal(d.ticketDraft.productionImpact.value, "unknown");
   assert.ok(d.ticketDraft.remediation.length && d.ticketDraft.retest.length);
   x.processedActions = [
@@ -438,6 +448,19 @@ test("Fixed tenant placeholders express structured relations", () => {
   assert.deepEqual(identityOf(o), shortRefs);
   assert.match(shortRefs.chain.at(-1).actorCapability, /actor tenant/);
   assert.match(shortRefs.chain.at(-1).resourceRelation, /other tenant/);
+});
+
+test("Unknown or malformed tenant placeholders are rejected", () => {
+  for (const placeholder of ["{ActorTenant}", "{actor-tenant}", "{"]) {
+    const x = fresh();
+    x.observations[0].transitions[0].actorCapability = `${placeholder} non-admin developer`;
+    const p = plan(x);
+    assert.equal(p.status, "partial_failure");
+    assert.match(
+      p.quarantined[0].reason,
+      /actorCapability.*unknown placeholder/,
+    );
+  }
 });
 
 test("Ambiguous terminal controls are quarantined before identity", () => {
