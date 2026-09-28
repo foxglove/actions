@@ -555,7 +555,7 @@ test("E1-08: confirmed run without action marker pauses evidence replay", () => 
 
 test("Fingerprint alias never overrides a different violated control", () => {
   const x = fresh(),
-    fp = `v2:${createHash("sha256")
+    fp = `v3:${createHash("sha256")
       .update(JSON.stringify(identityOf(x.observations[0])))
       .digest("hex")}`;
   x.existing = [existing(x)];
@@ -820,4 +820,108 @@ test("An uncertain notification requires external readback", () => {
   assert.equal(d.notificationEligible, false);
   assert.deepEqual(d.neededEvidence, ["notify external readback"]);
   assert.equal(plan(x).status, "needs_review");
+});
+
+test("Different prerequisite controls cannot share an exploit identity", () => {
+  const a = fresh().observations[0];
+  const root = a.transitions[0];
+  a.transitions = [
+    {
+      ...structuredClone(root),
+      stepId: "left",
+      operation: "prepare",
+      expectedBoundary: "left control",
+    },
+    {
+      ...structuredClone(root),
+      stepId: "right",
+      operation: "prepare",
+      expectedBoundary: "right control",
+    },
+    {
+      ...structuredClone(root),
+      stepId: "middle",
+      operation: "use capability",
+      prerequisiteStepIds: ["left"],
+    },
+    {
+      ...structuredClone(a.transitions[1]),
+      prerequisiteStepIds: ["left", "right", "middle"],
+    },
+  ];
+  const b = structuredClone(a);
+  b.transitions[2].prerequisiteStepIds = ["right"];
+  assert.notDeepEqual(identityOf(a), identityOf(b));
+});
+
+test("Conflicting duplicate observation IDs cannot authorize any action", () => {
+  const x = fresh();
+  const duplicate = structuredClone(x.observations[0]);
+  duplicate.violatedBoundary = "another independent control";
+  x.observations.push(duplicate);
+  for (const observations of [x.observations, [...x.observations].reverse()]) {
+    const p = plan({ ...x, observations });
+    assert.ok(p.decisions.every((d) => d.proposedActions.length === 0));
+    assert.ok(p.decisions.every((d) => d.outcome === "unresolved"));
+  }
+});
+
+test("An unrelated observation with a hash suffix cannot satisfy a retest citation", () => {
+  const x = fresh();
+  x.observations[0].observationId = "missing#unrelated";
+  const exploitId = first(x).exploitId;
+  x.retests = [
+    {
+      exploitId,
+      targetSurface: "export-download",
+      attemptedOperations: ["download"],
+      observedObservationIds: ["missing"],
+      execution: "completed",
+      conditions: [],
+      evidenceRefs: [],
+    },
+  ];
+  assert.ok(plan(x).decisions.some((d) => d.outcome === "unresolved"));
+});
+
+test("Step evidence follows full semantics when operation and boundary are shared", () => {
+  const x = fresh(),
+    a = x.observations[0];
+  a.observationId = "O-A";
+  const root = a.transitions[0];
+  const second = {
+    ...structuredClone(root),
+    stepId: "second",
+    targetClass: "another resource class",
+    evidenceRefs: ["E-SECOND"],
+  };
+  a.transitions[1].prerequisiteStepIds = [root.stepId, second.stepId];
+  a.transitions.splice(1, 0, second);
+  const b = structuredClone(a);
+  b.observationId = "O-B";
+  b.transitions[0].evidenceRefs = ["E-FIRST-B"];
+  b.transitions[1].evidenceRefs = ["E-SECOND-B"];
+  b.transitions.reverse();
+  // Renaming and reordering graph nodes must not change their meaning.
+  for (const t of b.transitions) {
+    t.stepId = `copy-${t.stepId}`;
+    t.prerequisiteStepIds = t.prerequisiteStepIds.map((id) => `copy-${id}`);
+  }
+  assert.deepEqual(identityOf(a), identityOf(b));
+  x.observations.push(b);
+  const draft = plan(x).decisions.find((d) => d.ticketDraft).ticketDraft;
+  const firstStep = draft.activityChain.find((t) => t.stepId === root.stepId);
+  const secondStep = draft.activityChain.find((t) => t.stepId === "second");
+  assert.ok(firstStep.evidenceRefs.includes("E-FIRST-B"));
+  assert.ok(!firstStep.evidenceRefs.includes("E-SECOND-B"));
+  assert.ok(secondStep.evidenceRefs.includes("E-SECOND-B"));
+  assert.ok(!secondStep.evidenceRefs.includes("E-FIRST-B"));
+});
+
+test("An invalid duplicate ID also blocks its valid copy", () => {
+  const x = fresh();
+  x.observations.push({ observationId: x.observations[0].observationId });
+  const p = plan(x);
+  assert.equal(p.status, "partial_failure");
+  assert.ok(p.decisions.every((d) => d.proposedActions.length === 0));
 });

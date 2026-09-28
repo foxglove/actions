@@ -37,7 +37,7 @@ export function canonical(value) {
 }
 
 // Converts a validated prerequisite graph into an ordered semantic attack chain.
-function causalChain(transitions) {
+function causalChain(transitions, withStepIds = false) {
   const byId = new Map(transitions.map((t) => [t.stepId, t]));
   const prerequisites = new Set(
     transitions.flatMap((t) => t.prerequisiteStepIds),
@@ -78,10 +78,12 @@ function causalChain(transitions) {
     return n;
   }
   level(terminal.stepId);
-  const result = [...levels.keys()].map((id) => {
+  const semantics = new Map();
+  // Includes the full prerequisite semantics so equal operation names cannot hide different controls.
+  function semantic(id) {
+    if (semantics.has(id)) return semantics.get(id);
     const t = byId.get(id);
-    return {
-      depth: levels.get(id),
+    const value = {
       actorCapability: relative(t.actorCapability, t),
       actorTenantRelation:
         t.actorTenantRef === actorTenantRef ? "actor tenant" : "other tenant",
@@ -95,21 +97,26 @@ function causalChain(transitions) {
       expectedBoundary: relative(t.expectedBoundary, t),
       observedEffect: relative(t.observedEffect, t),
       prerequisites: sorted(
-        t.prerequisiteStepIds.map((p) => {
-          const prerequisite = byId.get(p);
-          return relative(prerequisite.operation, prerequisite);
-        }),
+        t.prerequisiteStepIds.map((p) => hash(JSON.stringify(semantic(p)))),
       ),
     };
-  });
+    semantics.set(id, value);
+    return value;
+  }
+  const result = [...levels.keys()].map((id) => ({
+    stepId: id,
+    depth: levels.get(id),
+    value: semantic(id),
+  }));
   // A semantic sort preserves prerequisite depth without depending on step IDs
   // or the order in which an adapter supplied independent prerequisites.
   return result
     .sort(
       (a, b) =>
-        a.depth - b.depth || compare(JSON.stringify(a), JSON.stringify(b)),
+        a.depth - b.depth ||
+        compare(JSON.stringify(a.value), JSON.stringify(b.value)),
     )
-    .map(({ depth, ...transition }) => transition);
+    .map(({ stepId, value }) => (withStepIds ? { stepId, value } : value));
 }
 // Splits explicitly independent terminal controls into separate findings.
 function splitCauses(o) {
@@ -134,7 +141,7 @@ function splitCauses(o) {
     include(c.terminalStepId);
     return {
       ...o,
-      observationId: `${o.observationId}#${c.causeId}`,
+      observationId: `${encodeURIComponent(o.observationId)}#${encodeURIComponent(c.causeId)}`,
       surface: c.surface,
       violatedBoundary: c.violatedBoundary,
       impact: c.impact,
@@ -174,7 +181,7 @@ export function identityOf(record) {
 // Serializes a normalized exploit identity for stable hashing.
 const identityString = (record) => JSON.stringify(identityOf(record));
 // Creates the versioned exploit fingerprint used by this planner.
-const fingerprint = (record) => `v2:${hash(identityString(record))}`;
+const fingerprint = (record) => `v3:${hash(identityString(record))}`;
 // Collects each unique evidence reference from a finding's causal steps.
 const evidenceOf = (o) => sorted(o.transitions.flatMap((t) => t.evidenceRefs));
 // Encodes stable action-key segments without allowing path separators to alter identity.
@@ -300,15 +307,27 @@ function mergeDraft(draft, o, primaryTransitions) {
   ).join("\n");
   // Keep the first (stable ID ordered) complete chain. Attach corroborating
   // evidence to matching steps, and retain every reference at ticket level.
-  for (let i = 0; i < draft.activityChain.length; i++) {
-    const step = draft.activityChain[i],
-      primary = primaryTransitions[i],
-      other = o.transitions.find(
-        (t) =>
-          canonical(t.operation) === canonical(primary.operation) &&
-          canonical(t.expectedBoundary) === canonical(primary.expectedBoundary),
-      );
-    if (other) step.evidenceRefs = union(step.evidenceRefs, other.evidenceRefs);
+  const primarySteps = new Map(
+    causalChain(primaryTransitions, true).map(({ stepId, value }) => [
+      stepId,
+      JSON.stringify(value),
+    ]),
+  );
+  const otherSteps = causalChain(o.transitions, true);
+  for (const step of draft.activityChain) {
+    const matches = otherSteps.filter(
+      ({ value }) => JSON.stringify(value) === primarySteps.get(step.stepId),
+    );
+    // Ambiguous step correspondence keeps evidence at ticket level only.
+    if (
+      matches.length !== 1 ||
+      [...primarySteps.values()].filter(
+        (value) => value === primarySteps.get(step.stepId),
+      ).length !== 1
+    )
+      continue;
+    const other = o.transitions.find((t) => t.stepId === matches[0].stepId);
+    step.evidenceRefs = union(step.evidenceRefs, other.evidenceRefs);
   }
 }
 // Finds the recorded state of one external action attempt.
@@ -405,13 +424,39 @@ export function plan(raw) {
         existing: true,
       };
     });
-  const seenIds = new Set(),
-    positiveExploits = new Set(),
+  const rawIdCounts = new Map();
+  for (const item of input.observations) {
+    const id = item?.observationId;
+    if (typeof id === "string")
+      rawIdCounts.set(id, (rawIdCounts.get(id) ?? 0) + 1);
+  }
+  const expanded = observations.flatMap(({ value }) =>
+    splitCauses(value).map((observation) => ({
+      observation,
+      sourceId: value.observationId,
+    })),
+  );
+  const expandedIdCounts = new Map();
+  for (const { observation: o } of expanded)
+    expandedIdCounts.set(
+      o.observationId,
+      (expandedIdCounts.get(o.observationId) ?? 0) + 1,
+    );
+  const decisionSources = new Map();
+  for (const { observation: o, sourceId } of expanded) {
+    if (!decisionSources.has(o.observationId))
+      decisionSources.set(o.observationId, new Set());
+    decisionSources.get(o.observationId).add(sourceId);
+  }
+  const positiveExploits = new Set(),
     allCandidates = [...known];
-  for (const o of observations
-    .flatMap(({ value }) => splitCauses(value))
-    .sort((a, b) => compare(a.observationId, b.observationId))) {
-    if (seenIds.has(o.observationId)) {
+  for (const { observation: o, sourceId } of expanded.sort((a, b) =>
+    compare(a.observation.observationId, b.observation.observationId),
+  )) {
+    if (
+      rawIdCounts.get(sourceId) > 1 ||
+      expandedIdCounts.get(o.observationId) > 1
+    ) {
       decisions.push(
         evidenceDecision(o, "duplicate observationId in run", [
           "unique observation identity",
@@ -419,7 +464,6 @@ export function plan(raw) {
       );
       continue;
     }
-    seenIds.add(o.observationId);
     if (o.status !== "confirmed") {
       decisions.push(
         evidenceDecision(o, "observation is incomplete", [
@@ -615,8 +659,8 @@ export function plan(raw) {
   }
   for (const { value: r } of retests) {
     const linked = decisions.filter((d) =>
-      r.observedObservationIds.some(
-        (id) => d.observationId === id || d.observationId?.startsWith(`${id}#`),
+      r.observedObservationIds.some((id) =>
+        decisionSources.get(d.observationId)?.has(id),
       ),
     );
     const unresolved = linked.find((d) => d.outcome === "unresolved");
@@ -627,10 +671,7 @@ export function plan(raw) {
     );
     const missing = r.observedObservationIds.some(
       (id) =>
-        !linked.some(
-          (d) =>
-            d.observationId === id || d.observationId?.startsWith(`${id}#`),
-        ) &&
+        !linked.some((d) => decisionSources.get(d.observationId)?.has(id)) &&
         !quarantined.some(
           (q) => q.collection === "observations" && q.ref === id,
         ),

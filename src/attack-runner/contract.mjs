@@ -80,7 +80,10 @@ function transition(value, path) {
       .map(([token]) => token)
       .find((token) => !allowedPlaceholders.has(token));
     if (unknown)
-      throw new InputError(`${path}.${k}`, `unknown placeholder ${unknown}`);
+      throw new InputError(
+        `${path}.${k}`,
+        "unknown placeholder; use actorTenant or resourceTenant exactly",
+      );
   }
   return t;
 }

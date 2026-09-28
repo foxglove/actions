@@ -33,6 +33,10 @@ The input must not contain a password, session cookie, magic link, or other cred
 
 Each causal step must include `actorTenantRef` and `resourceTenantRef`. These structured fields define the tenant relationship used for exploit identity. Each value is an opaque identifier. The planner compares the values only for exact equality and never searches for them in prose. When a prose field must describe a tenant relation, use the exact `{actorTenant}` or `{resourceTenant}` placeholder. Tenant-like variants such as `{ActorTenant}` are invalid. Other brace text, such as the route template `{exportId}`, is ordinary prose. Identity uses the relative tenant relation. The proposed ticket expands the two tenant placeholders to concrete references for its human reader.
 
+Each step identity includes the complete meaning of its prerequisites. Fingerprints use version `v3`. Existing tickets retain their exploit ID when their stored chain matches; an older fingerprint alone is not enough to establish a match. Step evidence merges only when there is one matching step in each chain. Otherwise, the evidence remains at ticket level.
+
+Each source observation must have a unique `observationId` within the run. All copies of a duplicate ID stop for review, including a valid copy whose duplicate is invalid. Retest citations use the exact source observation ID. For findings split into independent causes, output IDs use `encodeURIComponent(observationId)#encodeURIComponent(causeId)`; retests still cite the source ID.
+
 A `validated` session event must set `actorRole` to `non-admin-developer`.
 
 ## Exit codes
