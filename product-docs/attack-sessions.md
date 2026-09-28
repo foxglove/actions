@@ -84,7 +84,7 @@ The scheduler may request issuance only after authenticated readiness. The runne
 
 ### Authentication adapter
 
-The runner's adapter provides unattended handoff retrieval, immediate redemption, session validation, and a verified maintenance operation. Issuance and storage cleanup belong to the separate issuer service. Authentication establishment produces either a validated run-local cookie session or `PREFLIGHT_FAILED`; the existing edge-failure classifications still apply. No assessment begins after preflight failure.
+The runner's adapter provides unattended handoff retrieval, immediate redemption, session validation, and a verified maintenance operation. Issuance and storage cleanup belong to the separate issuer service. The adapter emits exactly one terminal result by the configured preflight deadline: `PREFLIGHT_PASSED` after it verifies the approved mode and starting identity, or `PREFLIGHT_FAILED` after any failure or timeout. The existing edge-failure classifications still apply. Attack tools remain blocked unless the result is `PREFLIGHT_PASSED`.
 
 The implementation uses a supported issuance path. It does not assume the app's test-only retrieval shortcut is available on party or that signing a JWT registers a usable magic token.
 
