@@ -53,7 +53,9 @@ function transition(value, path) {
   for (const k of [
     "stepId",
     "actorCapability",
+    "actorTenantRef",
     "resourceRelation",
+    "resourceTenantRef",
     "targetClass",
     "operation",
     "expectedBoundary",

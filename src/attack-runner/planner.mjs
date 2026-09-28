@@ -13,6 +13,8 @@ const hash = (value) => createHash("sha256").update(value).digest("hex");
 const sorted = (a) => [...new Set(a)].sort();
 // Compares strings by code unit so host locale cannot change planner output.
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+// Escapes an opaque tenant reference before exact replacement in relationship text.
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // These aliases remove wording variation only. An unrecognized causal change is
 // triaged rather than inferred equivalent from title or a similarity score.
@@ -49,34 +51,22 @@ function causalChain(transitions) {
       "ambiguous terminal control; split independent causes or mark incidental steps explicitly",
     );
   const terminal = terminals[0];
-  const actorTenants = [
-    ...terminal.actorCapability.matchAll(/\btenant[-_]([a-z0-9]+)\b/gi),
-  ].map((match) => match[1].toLowerCase());
-  const resourceHasTenant =
-    /\b(?:tenant|organization|org|workspace)[-_][a-z0-9]+\b/i.test(
-      terminal.resourceRelation,
-    );
-  if (
-    actorTenants.length > 1 ||
-    (resourceHasTenant && actorTenants.length !== 1)
-  )
-    throw new Error(
-      "ambiguous actor tenant; supply one tenant-<id> token when the resource is tenant-scoped",
-    );
-  const actorTenant = actorTenants[0];
-  // Expresses tenant references relative to the starting actor.
-  const relative = (value) =>
-    canonical(
-      actorTenant
-        ? value.replace(
-            /\b(?:tenant|organization|org|workspace)[-_]([a-z0-9]+)\b/gi,
-            (_, tenant) =>
-              tenant.toLowerCase() === actorTenant
-                ? "actor-tenant"
-                : "other-tenant",
-          )
-        : value,
-    );
+  const actorTenantRef = terminal.actorTenantRef;
+  const tenantRefs = sorted(
+    transitions.flatMap((t) => [t.actorTenantRef, t.resourceTenantRef]),
+  ).sort((a, b) => b.length - a.length || compare(a, b));
+  // Replaces concrete tenant references with their relationship to the terminal actor.
+  const relative = (value) => {
+    let result = value;
+    for (const ref of tenantRefs)
+      result = result.replace(
+        new RegExp(escapeRegex(ref), "gi"),
+        ref.toLowerCase() === actorTenantRef.toLowerCase()
+          ? "actor-tenant"
+          : "other-tenant",
+      );
+    return canonical(result);
+  };
   const levels = new Map();
   // Calculates each step's prerequisite depth for stable ordering.
   function level(id) {
@@ -94,7 +84,15 @@ function causalChain(transitions) {
     return {
       depth: levels.get(id),
       actorCapability: relative(t.actorCapability),
+      actorTenantRelation:
+        t.actorTenantRef.toLowerCase() === actorTenantRef.toLowerCase()
+          ? "actor tenant"
+          : "other tenant",
       resourceRelation: relative(t.resourceRelation),
+      resourceTenantRelation:
+        t.resourceTenantRef.toLowerCase() === actorTenantRef.toLowerCase()
+          ? "actor tenant"
+          : "other tenant",
       targetClass: relative(t.targetClass),
       operation: relative(t.operation),
       expectedBoundary: relative(t.expectedBoundary),
@@ -167,8 +165,8 @@ export function identityOf(record) {
     environment: record.environment,
     surface: canonical(record.surface),
     violatedBoundary: canonical(record.violatedBoundary),
-    startingActorRelation: last.actorCapability,
-    targetResourceRelation: last.resourceRelation,
+    startingActorRelation: `${last.actorTenantRelation} ${last.actorCapability}`,
+    targetResourceRelation: `${last.resourceTenantRelation} ${last.resourceRelation}`,
     demonstratedEffect: last.observedEffect,
     chain,
   };
@@ -315,6 +313,17 @@ function addAction(input, decision, action, actionKey) {
   }
 }
 
+// Sets notification eligibility and requests readback when delivery is unresolved.
+function setNotificationEligibility(input, decision, actionKey) {
+  const state = actionState(input, "notify", actionKey);
+  decision.notificationEligible = !state || state === "failed";
+  if (state === "pending" || state === "uncertain")
+    decision.neededEvidence = sorted([
+      ...(decision.neededEvidence ?? []),
+      "notify external readback",
+    ]);
+}
+
 // Produces deterministic ticket and summary proposals without making external calls.
 export function plan(raw) {
   const input = validateEnvelope(raw);
@@ -416,7 +425,7 @@ export function plan(raw) {
     } catch (e) {
       decisions.push(
         evidenceDecision(o, e.message, [
-          "one terminal control and one unambiguous actor tenant",
+          "one terminal control and explicit actor/resource tenant references",
         ]),
       );
       continue;
@@ -556,8 +565,7 @@ export function plan(raw) {
       }
       if (d.outcome === "contradicts_fix") {
         if (!e.issueOpen) addAction(input, d, "reopen", d.episodeKey);
-        const notifyState = actionState(input, "notify", d.episodeKey);
-        d.notificationEligible = !notifyState || notifyState === "failed";
+        setNotificationEligibility(input, d, d.episodeKey);
       }
       d.countChange = {
         runId: input.run.id,
@@ -578,9 +586,8 @@ export function plan(raw) {
       }
       d.ticketDraft = ticketDraft(o, input.run.id, evidenceRefs);
       addAction(input, d, "create", createKey);
-      const notifyState = actionState(input, "notify", key("new", exploitId));
-      d.notificationEligible = !notifyState || notifyState === "failed";
       d.episodeKey = key("new", exploitId);
+      setNotificationEligibility(input, d, d.episodeKey);
       d.countChange = { runId: input.run.id, historicalCount: null };
     }
     if (d.neededEvidence?.length) d.notificationEligible = false;

@@ -55,7 +55,9 @@
         {
           "stepId": "list",
           "actorCapability": "tenant-A non-admin developer",
+          "actorTenantRef": "tenant-A",
           "resourceRelation": "owns tenant-A exports only",
+          "resourceTenantRef": "tenant-A",
           "targetClass": "export metadata",
           "operation": "list exports",
           "expectedBoundary": "only authorized metadata visible",
@@ -66,7 +68,9 @@
         {
           "stepId": "download",
           "actorCapability": "tenant-A non-admin developer",
+          "actorTenantRef": "tenant-A",
           "resourceRelation": "tenant-B export is not owned by tenant-A",
+          "resourceTenantRef": "tenant-B",
           "targetClass": "export download API",
           "operation": "download tenant-B export",
           "expectedBoundary": "deny cross-tenant read",

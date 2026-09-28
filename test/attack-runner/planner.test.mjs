@@ -358,8 +358,10 @@ test("E1-18: actor and resource tenant equality remains part of identity", () =>
     o = x.observations[0];
   o.violatedBoundary = "access check on export download";
   o.transitions[1].resourceRelation = "tenant-A export";
+  o.transitions[1].resourceTenantRef = "tenant-A";
   const own = identityOf(o);
   o.transitions[1].resourceRelation = "tenant-B export";
+  o.transitions[1].resourceTenantRef = "tenant-B";
   const other = identityOf(o);
   assert.notDeepEqual(own, other);
   assert.match(own.targetResourceRelation, /actor tenant/);
@@ -374,9 +376,12 @@ test("Identity keeps security numbers and recognizes organization relations", ()
   const x = fresh(),
     o = x.observations[0];
   o.transitions.at(-1).actorCapability = "tenant-12 non-admin developer";
+  o.transitions.at(-1).actorTenantRef = "12";
   o.transitions.at(-1).resourceRelation = "org-12 export";
+  o.transitions.at(-1).resourceTenantRef = "12";
   const own = identityOf(o);
   o.transitions.at(-1).resourceRelation = "org-34 export";
+  o.transitions.at(-1).resourceTenantRef = "34";
   const other = identityOf(o);
   assert.notDeepEqual(own, other);
   assert.match(own.targetResourceRelation, /actor tenant/);
@@ -390,39 +395,31 @@ test("Identity ignores generated hex resource IDs after a space", () => {
   );
 });
 
-test("Tenant identity does not treat ordinary role words as identifiers", () => {
+test("Tenant identity uses structured references instead of role prose", () => {
   const x = fresh(),
     o = x.observations[0];
-  o.transitions.at(-1).actorCapability = "org member in tenant-a";
-  o.transitions.at(-1).resourceRelation = "tenant-a export";
+  o.transitions.at(-1).actorCapability = "tenant-scoped workspace-member";
+  o.transitions.at(-1).resourceRelation = "scoped export";
+  o.transitions.at(-1).resourceTenantRef = "tenant-A";
   const own = identityOf(o);
-  o.transitions.at(-1).resourceRelation = "tenant-b export";
+  o.transitions.at(-1).resourceTenantRef = "tenant-B";
   const other = identityOf(o);
   assert.notDeepEqual(own, other);
   assert.match(own.targetResourceRelation, /actor tenant/);
   assert.match(other.targetResourceRelation, /other tenant/);
 });
 
-test("Role tokens do not hide an explicit actor tenant", () => {
+test("Ambiguous terminal controls are quarantined before identity", () => {
   const x = fresh(),
     o = x.observations[0];
-  o.transitions.at(-1).actorCapability = "workspace-member in tenant-a";
-  o.transitions.at(-1).resourceRelation = "tenant-a export";
-  const own = identityOf(o);
-  o.transitions.at(-1).resourceRelation = "tenant-b export";
-  const other = identityOf(o);
-  assert.notDeepEqual(own, other);
-});
-
-test("A tenant-scoped resource without one actor tenant requires review", () => {
-  const x = fresh(),
-    o = x.observations[0];
-  o.transitions.at(-1).actorCapability = "workspace-member";
-  assert.throws(() => identityOf(o), /supply one tenant-<id> token/);
+  o.transitions.push({
+    ...structuredClone(o.transitions.at(-1)),
+    stepId: "second-terminal",
+  });
   const d = first(x);
   assert.equal(d.outcome, "unresolved");
   assert.deepEqual(d.neededEvidence, [
-    "one terminal control and one unambiguous actor tenant",
+    "valid structured observation and evidence references",
   ]);
 });
 
@@ -651,7 +648,10 @@ test("E1-12 E1-13: independent invalid item is quarantined; shared snapshot fail
 test("Malformed existing identities report their exact input path", () => {
   const x = fresh();
   x.existing = [existing(x)];
-  x.existing[0].normalizedChain.at(-1).actorCapability = "workspace-member";
+  x.existing[0].normalizedChain.push({
+    ...structuredClone(x.existing[0].normalizedChain.at(-1)),
+    stepId: "second-terminal",
+  });
   assert.throws(() => plan(x), /existing\[0\]\.normalizedChain/);
 
   const y = fresh();
@@ -664,8 +664,10 @@ test("Malformed existing identities report their exact input path", () => {
       normalizedChain: structuredClone(y.existing[0].normalizedChain),
     },
   ];
-  y.existing[0].identityAliases[0].normalizedChain.at(-1).actorCapability =
-    "workspace-member";
+  y.existing[0].identityAliases[0].normalizedChain.push({
+    ...structuredClone(y.existing[0].identityAliases[0].normalizedChain.at(-1)),
+    stepId: "second-terminal",
+  });
   assert.throws(
     () => plan(y),
     /existing\[0\]\.identityAliases\[0\]\.normalizedChain/,
@@ -715,4 +717,16 @@ test("Pending and uncertain external actions are held for readback", () => {
   assert.ok(d.proposedActions.includes("increment_run_count"));
   assert.equal(d.notificationEligible, false);
   assert.ok(d.neededEvidence.some((e) => e.includes("readback")));
+});
+
+test("An uncertain notification requires external readback", () => {
+  const x = fresh(),
+    episodeKey = first(x).episodeKey;
+  x.processedActions = [
+    { key: episodeKey, action: "notify", state: "uncertain" },
+  ];
+  const d = first(x);
+  assert.equal(d.notificationEligible, false);
+  assert.deepEqual(d.neededEvidence, ["notify external readback"]);
+  assert.equal(plan(x).status, "needs_review");
 });

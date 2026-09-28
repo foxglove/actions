@@ -31,7 +31,7 @@ The input must contain these top-level fields:
 
 The input must not contain a password, session cookie, magic link, or other credential. See [`contract.mjs`](contract.mjs) for the complete input checks and [`F1-new.json`](../../test/attack-runner/fixtures/F1-new.json) for a runnable example.
 
-When a terminal resource is tenant-scoped, its `actorCapability` must contain exactly one `tenant-<id>` token for the starting tenant. An underscore can replace the hyphen. Resource relationship fields can use `tenant-<id>`, `organization-<id>`, `org-<id>`, or `workspace-<id>`.
+Each causal step must include `actorTenantRef` and `resourceTenantRef`. These structured fields define the tenant relationship used for exploit identity. The planner does not infer tenant identity from the English text in `actorCapability` or `resourceRelation`.
 
 A `validated` session event must set `actorRole` to `non-admin-developer`.
 
