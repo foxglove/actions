@@ -22,7 +22,7 @@ Open the freshly issued magic link immediately in the prepared sandbox/headless 
 
 Retain the issued session cookie in this run's browser context/cookie jar. Use the application's real session-cookie mechanism, preserving HttpOnly/domain/path/security behavior; the magic-link JWT is not the session credential.
 
-Wait for the runner to report `PREFLIGHT_PASSED` or `PREFLIGHT_FAILED`. Start attack work only after `PREFLIGHT_PASSED`. Stop after `PREFLIGHT_FAILED`. The runner reports failure when login or validation fails or reaches the configured preflight deadline. Report an edge block separately. Do not continue anonymously.
+Wait for the runner to report `PREFLIGHT_PASSED` or `PREFLIGHT_FAILED`. Start attack work only after `PREFLIGHT_PASSED`. Stop after `PREFLIGHT_FAILED` and preserve its failure classification. For example, keep `EDGE_CONTROL_BLOCKED` separate from an application login failure. The runner reports failure when login or validation fails or reaches the configured preflight deadline. Do not continue anonymously.
 
 If the approved non-admin session gains more access through an exploit, record that exploit.
 
