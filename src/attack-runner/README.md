@@ -18,15 +18,16 @@ The command does not replace an existing output file. If another write error cre
 
 ## Input
 
-The input must contain:
+The input must contain these top-level fields:
 
-- The run ID and approved environment.
-- The instruction-file hash.
-- The private evidence location.
-- The test coverage and stop reason.
-- The findings and their evidence references.
-- The relevant existing tickets.
-- External actions that were applied or have an unknown result.
+- `schemaVersion`: must be `1`.
+- `run`: run identity, authorization, tool, model, budget, deadline, session, and assessment data.
+- `sessionEvents`: ordered session evidence.
+- `coverage`, `observations`, and `retests`: assessment results and evidence references.
+- `existing`: relevant existing tickets.
+- `processedActions`: external actions that were applied or have an unknown result.
+
+`run` requires `id`, `pathId`, `instructionsRevision`, `instructionsSha256`, `operatorId`, `evidencePrefix`, `evidenceRetentionPolicyRef`, `environment`, `authorizedTargets`, `harness`, `model`, `budgetUsd`, `deadline`, `session`, and `assessment`. `run.stopReason` and `run.edgePolicyRef` are optional. `run.model.effort` is optional.
 
 The input must not contain a password, session cookie, magic link, or other credential. See [`contract.mjs`](contract.mjs) for the complete input checks and [`F1-new.json`](../../test/attack-runner/fixtures/F1-new.json) for a runnable example.
 
@@ -35,6 +36,6 @@ The input must not contain a password, session cookie, magic link, or other cred
 | Code | Meaning                                                                                            |
 | ---- | -------------------------------------------------------------------------------------------------- |
 | `0`  | The planner processed all items.                                                                   |
-| `1`  | The input file or shared run data is invalid. The planner does not produce a plan.                 |
+| `1`  | The arguments are invalid, the input file cannot be read or parsed, or shared run data is invalid. |
 | `2`  | The planner produced a plan, but one or more items need review.                                    |
-| `3`  | The planner could not write the requested output file. It prints the error code to standard error. |
+| `3`  | The planner could not write the requested output file. It prints the reason to standard error.     |

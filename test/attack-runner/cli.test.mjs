@@ -49,6 +49,15 @@ test("CLI rejects malformed shared input and never echoes malformed source bytes
   assert.match(shared.stderr, /schemaVersion/);
 });
 
+test("CLI exits 1 for invalid arguments and prints usage", () => {
+  const result = spawnSync(process.execPath, [cli, "unknown"], {
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  assert.match(result.stderr, /Usage: yarn attack-runner plan/);
+});
+
 test("CLI exits 3 and keeps an existing output file unchanged", () => {
   const dir = mkdtempSync(join(tmpdir(), "attack-runner-cli-output-"));
   try {
