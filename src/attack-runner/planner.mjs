@@ -707,9 +707,21 @@ export function plan(raw) {
       stopReason: r.stopReason,
     });
   }
+  // Preserve exact input provenance for every valid observation outcome.
+  for (const d of decisions) {
+    const sources = decisionSources.get(d.observationId);
+    if (sources?.size === 1) d.sourceObservationId = [...sources][0];
+  }
   for (const q of quarantined.filter((q) => q.collection === "observations")) {
+    const rawId = input.observations[q.index]?.observationId;
+    const sourceObservationId = typeof rawId === "string" ? rawId : undefined;
     decisions.push({
-      observationId: q.ref,
+      observationId:
+        sourceObservationId === undefined || !sourceObservationId.isWellFormed()
+          ? undefined
+          : encodeURIComponent(sourceObservationId),
+      sourceObservationId,
+      inputIndex: q.index,
       outcome: "unresolved",
       reason: `invalid observation at ${q.collection}[${q.index}]: ${q.reason}`,
       evidenceRefs: [],

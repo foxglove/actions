@@ -974,3 +974,35 @@ test("Split and unsplit IDs cannot collide or share retest provenance", () => {
     assert.ok(plan(x).decisions.every((d) => d.outcome !== "unresolved"));
   }
 });
+
+test("Invalid findings use the same output ID rules and preserve raw provenance", () => {
+  const x = fresh();
+  x.observations[0].observationId = "O#C1";
+  x.observations.push({ observationId: "O%23C1" }, {}, { observationId: 7 });
+  const p = plan(x);
+  const valid = p.decisions.find((d) => d.outcome === "new");
+  const invalid = p.decisions.find((d) => d.sourceObservationId === "O%23C1");
+  assert.equal(valid.observationId, "O%23C1");
+  assert.equal(valid.sourceObservationId, "O#C1");
+  assert.equal(invalid.observationId, "O%2523C1");
+  assert.equal(invalid.inputIndex, 1);
+  for (const inputIndex of [2, 3]) {
+    const d = p.decisions.find((d) => d.inputIndex === inputIndex);
+    assert.equal(d.observationId, undefined);
+    assert.equal(d.sourceObservationId, undefined);
+    assert.equal(d.outcome, "unresolved");
+  }
+});
+
+test("Malformed Unicode cannot crash ID encoding or discard valid findings", () => {
+  const x = fresh();
+  const invalid = structuredClone(x.observations[0]);
+  invalid.observationId = "\ud800";
+  x.observations.push(invalid);
+  const p = plan(x);
+  assert.equal(p.status, "partial_failure");
+  assert.equal(p.decisions[0].outcome, "new");
+  const rejected = p.decisions.find((d) => d.inputIndex === 1);
+  assert.equal(rejected.observationId, undefined);
+  assert.equal(rejected.sourceObservationId, "\ud800");
+});

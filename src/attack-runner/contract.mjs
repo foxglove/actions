@@ -14,10 +14,12 @@ export function object(value, path) {
     throw new InputError(path, "expected object");
   return value;
 }
-// Requires a string that contains at least one non-whitespace character.
+// Requires well-formed Unicode with at least one non-whitespace character.
 export function string(value, path) {
   if (typeof value !== "string" || !value.trim())
     throw new InputError(path, "expected nonempty string");
+  if (!value.isWellFormed())
+    throw new InputError(path, "expected well-formed Unicode");
   return value;
 }
 // Requires one value from a closed set.
