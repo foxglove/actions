@@ -671,28 +671,21 @@ export function plan(raw) {
     decisions.push(d);
   }
   for (const { value: r } of retests) {
-    const linked = decisions.filter((d) =>
-      r.observedObservationIds.some((id) =>
-        decisionSources.get(d.observationId)?.has(id),
-      ),
-    );
-    const unresolved = linked.find((d) => d.outcome === "unresolved");
-    const invalid = quarantined.find(
-      (q) =>
-        q.collection === "observations" &&
-        r.observedObservationIds.includes(q.ref),
-    );
-    const missing = r.observedObservationIds.some(
-      (id) =>
-        !linked.some((d) => decisionSources.get(d.observationId)?.has(id)) &&
-        !quarantined.some(
-          (q) => q.collection === "observations" && q.ref === id,
-        ),
-    );
-    const mismatched = linked.some(
-      (d) => d.exploitId && d.exploitId !== r.exploitId,
-    );
-    if (unresolved || invalid || missing || mismatched) {
+    // Each source can contain several independent causes. It supports this retest
+    // when one resolved cause matches; sibling causes keep their own decisions.
+    const unsupportedSource = r.observedObservationIds.some((id) => {
+      const invalid = quarantined.some(
+        (q) => q.collection === "observations" && q.ref === id,
+      );
+      const supportsExploit = decisions.some(
+        (d) =>
+          decisionSources.get(d.observationId)?.has(id) &&
+          d.exploitId === r.exploitId &&
+          d.outcome !== "unresolved",
+      );
+      return invalid || !supportsExploit;
+    });
+    if (unsupportedSource) {
       decisions.push({
         outcome: "unresolved",
         exploitId: r.exploitId,

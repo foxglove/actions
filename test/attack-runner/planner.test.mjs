@@ -1053,3 +1053,99 @@ test("Malformed Unicode cannot crash ID encoding or discard valid findings", () 
   assert.equal(rejected.observationId, undefined);
   assert.equal(rejected.sourceObservationId, "\ud800");
 });
+
+test("Retesting one cause ignores its siblings but still checks every cited source", () => {
+  const x = fresh(),
+    o = x.observations[0];
+  x.existing = [existing(x)];
+  const share = {
+    ...structuredClone(o.transitions[1]),
+    stepId: "share",
+    operation: "use share token",
+    expectedBoundary: "deny invalid share token",
+    observedEffect: "share token returned export content",
+  };
+  o.transitions.push(share);
+  o.causes = [
+    {
+      causeId: "ownership",
+      terminalStepId: "download",
+      surface: o.surface,
+      violatedBoundary: o.violatedBoundary,
+      impact: o.impact,
+      severity: o.severity,
+      productionImpact: o.productionImpact,
+      remediation: o.remediation,
+      retest: o.retest,
+    },
+    {
+      causeId: "share",
+      terminalStepId: "share",
+      surface: "export-share",
+      violatedBoundary: "share token control",
+      impact: "export read with invalid share token",
+      severity: "high",
+      productionImpact: o.productionImpact,
+      remediation: ["check share token"],
+      retest: ["deny invalid share token"],
+    },
+  ];
+  x.retests = [
+    {
+      exploitId: "EXP-1",
+      targetSurface: o.surface,
+      attemptedOperations: ["download"],
+      observedObservationIds: [o.observationId],
+      execution: "completed",
+      conditions: [],
+      evidenceRefs: ["evidence-retest-export"],
+    },
+  ];
+  let p = plan(x);
+  assert.equal(p.status, "planned");
+  assert.deepEqual(
+    p.decisions.filter((d) => d.exploitId === "EXP-1").map((d) => d.outcome),
+    ["rediscovered"],
+  );
+
+  // A separate ticket makes only the share cause ambiguous; ownership still matches.
+  const ambiguousShare = {
+    ...structuredClone(x.existing[0]),
+    exploitId: "EXP-SHARE",
+    linearIssueId: "LIN-SHARE",
+    surface: "export-share",
+    violatedBoundary: "share token control",
+    normalizedChain: [
+      structuredClone(o.transitions[0]),
+      structuredClone(share),
+    ],
+  };
+  ambiguousShare.normalizedChain[1].observedEffect =
+    "different effect requiring identity review";
+  x.existing.push(ambiguousShare);
+  p = plan(x);
+  assert.equal(p.status, "needs_review");
+  assert.ok(
+    p.decisions.some(
+      (d) => d.observationId?.endsWith("#share") && d.outcome === "unresolved",
+    ),
+  );
+  assert.deepEqual(
+    p.decisions.filter((d) => d.exploitId === "EXP-1").map((d) => d.outcome),
+    ["rediscovered"],
+  );
+
+  // Matching one cited source cannot excuse a second source about another exploit.
+  const unrelated = structuredClone(fixture.observations[0]);
+  unrelated.observationId = "unrelated-source";
+  unrelated.surface = "different-surface";
+  unrelated.violatedBoundary = "different-control";
+  x.observations.push(unrelated);
+  x.retests[0].observedObservationIds.push(unrelated.observationId);
+  p = plan(x);
+  assert.ok(
+    p.decisions.some(
+      (d) => d.exploitId === "EXP-1" && d.outcome === "unresolved",
+    ),
+  );
+});
