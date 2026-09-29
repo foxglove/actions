@@ -459,6 +459,8 @@ export function plan(raw) {
   }
   // Confirmed evidence survives a blocked ticket action; action eligibility is separate.
   const observedExploits = new Set();
+  // Candidate matches are uncertain evidence, not absence. Retain raw sources for review.
+  const ambiguousSources = new Map();
   const positiveExploits = new Set(),
     allCandidates = [...known];
   for (const { observation: o, sourceId } of expanded.sort((a, b) =>
@@ -534,13 +536,21 @@ export function plan(raw) {
           c.record.fingerprintAliases?.includes(fp)),
     );
     if (exact.length > 1 || (!exact.length && plausible.length)) {
-      decisions.push(
-        evidenceDecision(
+      const candidateExploitIds = sorted(
+        (exact.length ? exact : plausible).map((c) => c.record.exploitId),
+      );
+      for (const id of candidateExploitIds) {
+        if (!ambiguousSources.has(id)) ambiguousSources.set(id, new Set());
+        ambiguousSources.get(id).add(sourceId);
+      }
+      decisions.push({
+        ...evidenceDecision(
           o,
-          `ambiguous causal identity: ${sorted((exact.length ? exact : plausible).map((c) => c.record.exploitId)).join(", ")}`,
+          `ambiguous causal identity: ${candidateExploitIds.join(", ")}`,
           ["review candidate identity and causal evidence"],
         ),
-      );
+        candidateExploitIds,
+      });
       continue;
     }
     const match = exact[0];
@@ -752,6 +762,19 @@ export function plan(raw) {
       continue;
     }
     if (observedExploits.has(r.exploitId)) continue;
+    if (ambiguousSources.has(r.exploitId)) {
+      decisions.push({
+        outcome: "unresolved",
+        exploitId: r.exploitId,
+        reason: "confirmed evidence in this run possibly matches this exploit",
+        ambiguousObservationIds: sorted([...ambiguousSources.get(r.exploitId)]),
+        evidenceRefs: r.evidenceRefs,
+        proposedActions: [],
+        notificationEligible: false,
+        neededEvidence: ["identity review of the ambiguous observations"],
+      });
+      continue;
+    }
     decisions.push({
       outcome: "not_observed",
       exploitId: r.exploitId,

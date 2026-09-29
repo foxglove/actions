@@ -1308,3 +1308,75 @@ test("An unattempted retest cannot cite findings while independent findings rema
   assert.equal(result.quarantined[0].collection, "retests");
   assert.equal(result.decisions[0].outcome, "rediscovered");
 });
+
+// Candidate identity uncertainty must remain visible to retests, even without explicit citations.
+test("Uncertain exploit identity blocks absence only for its candidates [E1-04 E1-18]", () => {
+  for (const mode of ["plausible", "multiple exact"]) {
+    for (const execution of ["completed", "interrupted", "not_attempted"]) {
+      const x = fresh();
+      x.existing = [existing(x)];
+      if (mode === "plausible") {
+        x.observations[0].transitions.at(-1).observedEffect =
+          "different result needing identity review";
+      } else {
+        x.existing.push({
+          ...structuredClone(x.existing[0]),
+          exploitId: "EXP-2",
+          linearIssueId: "LIN-2",
+        });
+      }
+      const candidateIds = x.existing.map((e) => e.exploitId);
+      x.existing.push({
+        ...structuredClone(x.existing[0]),
+        exploitId: "unrelated",
+        linearIssueId: "LIN-other",
+        surface: "other-surface",
+      });
+      x.retests = [
+        ...candidateIds.map((id) => ({ ...emptyRetest(id), execution })),
+        {
+          ...emptyRetest("unrelated"),
+          targetSurface: "other-surface",
+          execution,
+        },
+      ];
+      const result = plan(x);
+      assert.equal(result.status, "needs_review");
+      assert.deepEqual(result.decisions[0].candidateExploitIds, candidateIds);
+      assert.deepEqual(
+        result.summary.nonObservations.map((d) => d.exploitId),
+        ["unrelated"],
+      );
+      for (const id of candidateIds) {
+        const d = result.decisions.find((d) => d.exploitId === id);
+        assert.equal(d.outcome, "unresolved");
+        assert.deepEqual(d.ambiguousObservationIds, [
+          x.observations[0].observationId,
+        ]);
+        assert.deepEqual(d.proposedActions, []);
+      }
+    }
+  }
+});
+
+test("Confirmed identity prevents absence despite another ambiguous finding, in either order [E1-04 E1-18]", () => {
+  for (const reverse of [false, true]) {
+    const x = fresh();
+    x.existing = [existing(x)];
+    const ambiguous = structuredClone(x.observations[0]);
+    ambiguous.observationId = reverse ? "aaa-ambiguous" : "zzz-ambiguous";
+    ambiguous.transitions.at(-1).observedEffect = "uncertain effect";
+    x.observations.push(ambiguous);
+    x.retests = [emptyRetest()];
+    const result = plan(x);
+    assert.equal(result.summary.nonObservations.length, 0);
+    assert.equal(
+      result.decisions.filter((d) => d.outcome === "rediscovered").length,
+      1,
+    );
+    assert.equal(
+      result.decisions.filter((d) => d.outcome === "unresolved").length,
+      1,
+    );
+  }
+});

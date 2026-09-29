@@ -49,6 +49,8 @@ A `validated` session event must set `actorRole` to `non-admin-developer`.
 
 ## Output
 
+Ambiguous findings list `candidateExploitIds`. A retest for one of these candidates requires identity review and lists the source IDs in `ambiguousObservationIds`; it cannot report `not_observed`. Confirmed matching evidence takes precedence over a possible match. Unrelated exploits keep their own retest results.
+
 `summary.proposedExploitIds` lists exploit IDs with a proposed create action. These are not assigned Linear issue IDs. A decision's `issueId`, when present, comes from the supplied existing-ticket record.
 
 ## Exit codes
