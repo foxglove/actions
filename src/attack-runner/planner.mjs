@@ -285,15 +285,17 @@ function ticketDraft(o, runId, evidenceRefs, startingRole) {
 function mergeDraft(draft, o, primaryTransitions, prose) {
   // Merge helper: retains each distinct precondition, remediation step and reference in a repeatable order.
   const union = (a, b) => sorted([...a, ...b]);
-  draft.preconditions = union(draft.preconditions, o.preconditions);
-  draft.remediation = union(draft.remediation, o.remediation);
-  draft.retest = union(draft.retest, o.retest);
+  // Instructions keep the stable first source's order; later sources append new items.
+  const appendNew = (a, b) => [...new Set([...a, ...b])];
+  draft.preconditions = appendNew(draft.preconditions, o.preconditions);
+  draft.remediation = appendNew(draft.remediation, o.remediation);
+  draft.retest = appendNew(draft.retest, o.retest);
   draft.components = union(
     draft.components,
     o.components?.length ? o.components : ["unknown"],
   );
-  draft.blockedSteps = union(draft.blockedSteps, o.blockedSteps ?? []);
-  draft.dangerousNotExecuted = union(
+  draft.blockedSteps = appendNew(draft.blockedSteps, o.blockedSteps ?? []);
+  draft.dangerousNotExecuted = appendNew(
     draft.dangerousNotExecuted,
     o.dangerousNotExecuted ?? [],
   );
@@ -390,11 +392,8 @@ export function plan(raw) {
         quarantined.push({
           collection,
           index,
-          ref:
-            item?.observationId ??
-            item?.exploitId ??
-            item?.surface ??
-            `${collection}[${index}]`,
+          // A rejected value may be an arbitrary object; use its location as the label.
+          ref: `${collection}[${index}]`,
           reason: e.message,
         });
       }

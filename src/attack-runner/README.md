@@ -57,6 +57,8 @@ Ticket `actorRole` is the validated starting-session role. `observedActorRoles` 
 
 A decision with `lifecycleBlocked: true` retains its confirmed `exploitId` and `issueId`. Correct source citations remain valid, but ticket actions wait for issue-state review.
 
+Merged preconditions, remediation, retest instructions and blocked/not-executed steps retain the first source's order and append new items from later sources. Sources are processed in stable observation-ID order. Quarantine `ref` labels identify the input location, such as `observations[0]`, rather than copying a rejected value.
+
 ## Exit codes
 
 | Code | Meaning                                                                                            |

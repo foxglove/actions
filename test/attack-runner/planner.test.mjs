@@ -1448,3 +1448,47 @@ test("Ticket separates validated starting role from reported escalation [E1-07]"
     ["developer", "org-admin"],
   );
 });
+
+test("Merged instructions retain source order and append only new items [E1-10]", () => {
+  const x = fresh();
+  const steps = ["Sign in.", "Request export.", "Confirm denial."];
+  for (const field of [
+    "preconditions",
+    "remediation",
+    "retest",
+    "blockedSteps",
+    "dangerousNotExecuted",
+  ])
+    x.observations[0][field] = [...steps];
+  const other = structuredClone(x.observations[0]);
+  other.observationId = "zzz-other";
+  for (const field of [
+    "preconditions",
+    "remediation",
+    "retest",
+    "blockedSteps",
+    "dangerousNotExecuted",
+  ])
+    other[field].push("Additional instruction.");
+  x.observations.push(other);
+  const draft = first(x).ticketDraft;
+  for (const field of [
+    "preconditions",
+    "remediation",
+    "retest",
+    "blockedSteps",
+    "dangerousNotExecuted",
+  ])
+    assert.deepEqual(draft[field], [...steps, "Additional instruction."]);
+});
+
+test("Quarantine labels use input locations and never copy rejected objects [E1-12]", () => {
+  const x = fresh();
+  x.observations[0].observationId = { cookie: "synthetic-secret" };
+  x.coverage = [{ surface: { token: "synthetic-secret" } }];
+  x.retests = [{ exploitId: { token: "synthetic-secret" } }];
+  const result = plan(x);
+  for (const q of result.quarantined)
+    assert.equal(q.ref, `${q.collection}[${q.index}]`);
+  assert.ok(!JSON.stringify(result).includes("synthetic-secret"));
+});
