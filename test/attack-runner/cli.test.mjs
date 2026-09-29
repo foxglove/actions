@@ -178,3 +178,42 @@ test("output writer reports when it cannot remove an incomplete file", async () 
     return true;
   });
 });
+
+test("CLI rejects repeated options and missing values before reading or writing", async () => {
+  const { main } = await import("../../src/attack-runner/cli.mjs");
+  for (const args of [
+    ["plan", "--input", "first.json", "--input", "second.json"],
+    [
+      "plan",
+      "--input",
+      "first.json",
+      "--output",
+      "one.json",
+      "--output",
+      "two.json",
+    ],
+    ["plan", "--input", "--output"],
+    ["plan", "--input", "first.json", "--output", "--input"],
+    ["plan", "--input"],
+    ["plan", "--input", "first.json", "--output"],
+  ])
+    await assert.rejects(main(args), /Usage: yarn attack-runner plan/);
+});
+
+test("CLI explains input read failure without printing the supplied path", () => {
+  const dir = mkdtempSync(join(tmpdir(), "attack-runner-missing-input-"));
+  try {
+    const missing = join(dir, "private-synthetic-filename.json");
+    const result = spawnSync(
+      process.execPath,
+      [cli, "plan", "--input", missing],
+      { encoding: "utf8" },
+    );
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Cannot read input file \(ENOENT\)/);
+    assert.ok(!result.stderr.includes(missing));
+    assert.equal(result.stdout, "");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

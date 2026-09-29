@@ -671,6 +671,38 @@ export function plan(raw) {
     decisions.push(d);
   }
   for (const { value: r } of retests) {
+    // A retest must name a known exploit and a reviewed surface before it can report coverage.
+    const candidate = allCandidates.find(
+      (c) =>
+        c.record.exploitId === r.exploitId &&
+        (c.existing || positiveExploits.has(r.exploitId)),
+    );
+    const expectedSurfaces = candidate
+      ? sorted([
+          candidate.identity.surface,
+          ...(candidate.identityAliases ?? []).map((a) => a.surface),
+        ])
+      : [];
+    if (!candidate || !expectedSurfaces.includes(canonical(r.targetSurface))) {
+      decisions.push({
+        outcome: "unresolved",
+        exploitId: r.exploitId,
+        targetSurface: r.targetSurface,
+        reason: candidate
+          ? "retest surface does not match the known exploit"
+          : "retest references an unknown exploit",
+        expectedSurfaces,
+        evidenceRefs: r.evidenceRefs,
+        proposedActions: [],
+        notificationEligible: false,
+        neededEvidence: [
+          candidate
+            ? "retest of a reviewed exploit surface"
+            : "known exploit record",
+        ],
+      });
+      continue;
+    }
     // Each source can contain several independent causes. It supports this retest
     // when one resolved cause matches; sibling causes keep their own decisions.
     const unsupportedObservationIds = sorted(r.observedObservationIds).filter(
@@ -754,7 +786,7 @@ export function plan(raw) {
       proposed: true,
       coverage: coverage.map((x) => x.value),
       stopReason: input.run.stopReason,
-      proposedIssueIds: sorted(
+      proposedExploitIds: sorted(
         decisions
           .filter((d) => d.proposedActions.includes("create"))
           .map((d) => d.exploitId),

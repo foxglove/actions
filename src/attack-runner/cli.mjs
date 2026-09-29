@@ -45,16 +45,20 @@ export async function main(args) {
   if (args[0] !== "plan") throw new Error(usage());
   let input, output;
   for (let i = 1; i < args.length; i += 2) {
-    if (args[i] === "--input" && args[i + 1]) input = args[i + 1];
-    else if (args[i] === "--output" && args[i + 1]) output = args[i + 1];
+    const value = args[i + 1];
+    if (!value || value.startsWith("--")) throw new Error(usage());
+    if (args[i] === "--input" && input === undefined) input = value;
+    else if (args[i] === "--output" && output === undefined) output = value;
     else throw new Error(usage());
   }
   if (!input) throw new Error(usage());
   let source, raw;
   try {
     source = await readFile(input, "utf8");
-  } catch {
-    throw new Error("Cannot read input file");
+  } catch (error) {
+    throw new Error(
+      `Cannot read input file (${error.code ?? "unknown error"}).`,
+    );
   }
   try {
     raw = JSON.parse(source);

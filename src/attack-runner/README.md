@@ -57,3 +57,12 @@ A `validated` session event must set `actorRole` to `non-admin-developer`.
 Test names describe the behavior first. The `E1-xx` suffixes map to the stable cases in [Offline planner acceptance](../../docs/aegis/review/acceptance.md#offline-planner-acceptance). For example, `E1-01` covers a new confirmed exploit and `E1-04` covers no ticket change when an exploit is not observed after an engineer resolves it. Related cases may share one test. These IDs are traceability labels, not fixture names or a claim that integration criteria pass.
 
 The `new-cross-tenant-export.json` fixture describes an unauthorized export read after an authorized metadata request. Its run, session, observation and evidence IDs are named for that scenario. All values are synthetic.
+
+Retests must name an existing exploit or an eligible new exploit proposal. Their
+target surface must match the exploit's normalized surface or a reviewed identity
+alias. Unknown exploits and surface mismatches require review and cannot produce
+a `not_observed` result.
+
+`summary.proposedExploitIds` lists exploit IDs with a proposed create action.
+These are not assigned Linear issue IDs. A decision's `issueId`, when present,
+comes from the supplied existing-ticket record.

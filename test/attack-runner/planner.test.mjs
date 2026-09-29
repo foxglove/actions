@@ -1010,7 +1010,8 @@ test("Split and unsplit IDs cannot collide or share retest provenance", () => {
       {
         exploitId: initial.decisions.find((d) => d.observationId === outputId)
           .exploitId,
-        targetSurface: "export-download",
+        targetSurface: x.observations.find((o) => o.observationId === sourceId)
+          .surface,
         attemptedOperations: ["download"],
         observedObservationIds: [sourceId],
         execution: "completed",
@@ -1153,4 +1154,79 @@ test("Retesting one cause ignores its siblings but still checks every cited sour
   assert.deepEqual(blockedRetest.unsupportedObservationIds, [
     "unrelated-source",
   ]);
+});
+
+test("Retests require a known exploit and one of its reviewed surfaces", () => {
+  const x = fresh();
+  x.existing = [existing(x, "claimed_fixed", false)];
+  x.observations = [];
+  const retest = {
+    exploitId: "EXP-1",
+    targetSurface: "export-download",
+    attemptedOperations: [],
+    observedObservationIds: [],
+    execution: "not_attempted",
+    conditions: [],
+    evidenceRefs: [],
+  };
+  x.retests = [{ ...retest, exploitId: "typo-exploit" }];
+  let p = plan(x);
+  assert.equal(p.status, "needs_review");
+  assert.equal(p.decisions[0].outcome, "unresolved");
+  assert.match(p.decisions[0].reason, /unknown exploit/);
+  assert.deepEqual(p.decisions[0].proposedActions, []);
+  assert.equal(p.summary.nonObservations.length, 0);
+  x.retests = [{ ...retest, targetSurface: "unrelated-surface" }];
+  p = plan(x);
+  assert.equal(p.decisions[0].outcome, "unresolved");
+  assert.match(p.decisions[0].reason, /surface/);
+  assert.deepEqual(p.decisions[0].expectedSurfaces, ["export download"]);
+  x.retests = [{ ...retest, targetSurface: "Export Download" }];
+  assert.equal(plan(x).decisions[0].outcome, "not_observed");
+  x.existing[0].identityAliases = [
+    {
+      environment: "party",
+      surface: "reviewed legacy surface",
+      violatedBoundary: x.existing[0].violatedBoundary,
+      normalizedChain: structuredClone(x.existing[0].normalizedChain),
+    },
+  ];
+  x.retests = [{ ...retest, targetSurface: "reviewed legacy surface" }];
+  assert.equal(plan(x).decisions[0].outcome, "not_observed");
+});
+
+test("Summary names proposed exploit IDs separately from assigned issue IDs", () => {
+  const x = fresh(),
+    p = plan(x);
+  assert.deepEqual(p.summary.proposedExploitIds, [p.decisions[0].exploitId]);
+  assert.equal(p.decisions[0].issueId, undefined);
+  assert.equal(Object.hasOwn(p.summary, "proposedIssueIds"), false);
+  x.existing = [existing(x)];
+  assert.deepEqual(plan(x).summary.proposedExploitIds, []);
+  assert.equal(plan(x).decisions[0].issueId, "LIN-1");
+});
+
+// A pending external create is not an established ticket or an approved new proposal.
+test("A retest cannot use a proposed ID whose create needs readback", () => {
+  const x = fresh();
+  const d = plan(x).decisions[0];
+  x.processedActions = [
+    { action: "create", key: d.actionKeys.create, state: "pending" },
+  ];
+  x.retests = [
+    {
+      exploitId: d.exploitId,
+      targetSurface: x.observations[0].surface,
+      attemptedOperations: [],
+      observedObservationIds: [],
+      execution: "not_attempted",
+      conditions: [],
+      evidenceRefs: [],
+    },
+  ];
+  const result = plan(x);
+  assert.equal(result.summary.nonObservations.length, 0);
+  assert.ok(
+    result.decisions.every((decision) => decision.outcome === "unresolved"),
+  );
 });
