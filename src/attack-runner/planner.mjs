@@ -273,17 +273,19 @@ function ticketDraft(o, runId, evidenceRefs, startingRole) {
     labels: ["Bug", "pentesting", "harness"],
     boundary: o.violatedBoundary,
     affectedSurface: o.surface,
-    preconditions: [...o.preconditions],
+    preconditions: [[...o.preconditions]],
     actorRole: startingRole,
     observedActorRoles: [o.actorRole],
     demonstratedImpact: o.impact,
     severity: o.severity,
     productionImpact: { ...o.productionImpact },
     activityChain: o.transitions.map(displayTransition),
-    blockedSteps: [...(o.blockedSteps ?? [])],
-    dangerousNotExecuted: [...(o.dangerousNotExecuted ?? [])],
-    remediation: [...o.remediation],
-    retest: [...o.retest],
+    blockedSteps: o.blockedSteps?.length ? [[...o.blockedSteps]] : [],
+    dangerousNotExecuted: o.dangerousNotExecuted?.length
+      ? [[...o.dangerousNotExecuted]]
+      : [],
+    remediation: [[...o.remediation]],
+    retest: [[...o.retest]],
     runId,
     evidenceRefs: [...evidenceRefs],
     components: o.components?.length ? [...o.components] : ["unknown"],
@@ -300,7 +302,7 @@ function mergeDraft(draft, o, primaryTransitions, mergeData) {
     const encoded = JSON.stringify(steps);
     if (!mergeData.instructions[field].has(encoded)) {
       mergeData.instructions[field].add(encoded);
-      draft[field].push(...steps);
+      if (steps.length) draft[field].push([...steps]);
     }
   }
   draft.components = union(
@@ -767,6 +769,10 @@ export function plan(raw) {
     }
     // Each source can contain several independent causes. It supports this retest
     // when one resolved cause matches; sibling causes keep their own decisions.
+    const ambiguous = ambiguousSources.get(r.exploitId) ?? new Set();
+    const citedAmbiguous = r.observedObservationIds.some((id) =>
+      ambiguous.has(id),
+    );
     const unsupportedObservationIds = sorted(r.observedObservationIds).filter(
       (id) => {
         const supportsExploit = decisions.some(
@@ -775,7 +781,7 @@ export function plan(raw) {
             d.exploitId === r.exploitId &&
             (d.outcome !== "unresolved" || d.lifecycleBlocked === true),
         );
-        return !supportsExploit;
+        return !ambiguous.has(id) && !supportsExploit;
       },
     );
     if (unsupportedObservationIds.length) {
@@ -785,14 +791,22 @@ export function plan(raw) {
         reason:
           "retest cites an unresolved, invalid, missing, or mismatched observation",
         unsupportedObservationIds,
+        ambiguousObservationIds: ambiguous.size
+          ? sorted([...ambiguous])
+          : undefined,
         evidenceRefs: r.evidenceRefs,
         proposedActions: [],
         notificationEligible: false,
-        neededEvidence: ["resolved observation linked to the retested exploit"],
+        neededEvidence: [
+          "resolved observation linked to the retested exploit",
+          ...(ambiguous.size
+            ? ["identity review of the ambiguous observations"]
+            : []),
+        ],
       });
       continue;
     }
-    if (observedExploits.has(r.exploitId)) continue;
+    if (observedExploits.has(r.exploitId) && !citedAmbiguous) continue;
     if (ambiguousSources.has(r.exploitId)) {
       decisions.push({
         outcome: "unresolved",

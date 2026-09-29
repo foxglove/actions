@@ -319,7 +319,7 @@ test("One raw finding with two explicit causes splits and retains shared prerequ
   );
   assert.deepEqual(
     p.decisions.map((d) => d.ticketDraft.remediation),
-    [["fix ownership"], ["fix share token"]],
+    [[["fix ownership"]], [["fix share token"]]],
   );
   // Independent causes can share a surface and a broad boundary description.
   o.causes[1].surface = o.causes[0].surface;
@@ -550,8 +550,8 @@ test("Equivalent cross-component evidence merges into one complete ticket regard
   ).ticketDraft;
   assert.deepEqual(draft.components, ["repo-A", "repo-B"]);
   assert.deepEqual(draft.remediation, [
-    "fix first component",
-    "fix second component",
+    ["fix first component"],
+    ["fix second component"],
   ]);
   assert.ok(draft.evidenceRefs.includes("E-B"));
   assert.ok(draft.activityChain[1].evidenceRefs.includes("E-B"));
@@ -1480,9 +1480,8 @@ test("Merged instructions retain complete distinct source sequences [E1-10]", ()
     "dangerousNotExecuted",
   ])
     assert.deepEqual(draft[field], [
-      ...steps,
-      ...steps,
-      "Additional instruction.",
+      [...steps],
+      [...steps, "Additional instruction."],
     ]);
 });
 
@@ -1536,7 +1535,36 @@ test("Repeated steps survive merging from primary and later sources [E1-10]", ()
         (d) => d.ticketDraft,
       ).ticketDraft;
       for (const field of fields)
-        assert.deepEqual(draft[field], [...a[field], ...b[field]]);
+        assert.deepEqual(draft[field], [a[field], b[field]]);
     }
+  }
+});
+
+// Identity uncertainty and missing sources require different corrective actions.
+test("Explicit ambiguous citations retain identity-review diagnostics [E1-18]", () => {
+  for (const includeMissing of [false, true]) {
+    const x = fresh();
+    x.existing = [existing(x)];
+    const sourceId = x.observations[0].observationId;
+    x.observations[0].transitions.at(-1).observedEffect = "uncertain result";
+    x.retests = [
+      {
+        ...emptyRetest(),
+        observedObservationIds: [
+          sourceId,
+          sourceId,
+          ...(includeMissing ? ["missing"] : []),
+        ],
+      },
+    ];
+    const d = plan(x).decisions.find((d) => d.exploitId === "EXP-1");
+    assert.equal(d.outcome, "unresolved");
+    assert.deepEqual(d.ambiguousObservationIds, [sourceId]);
+    assert.deepEqual(
+      d.unsupportedObservationIds ?? [],
+      includeMissing ? ["missing"] : [],
+    );
+    assert.ok(d.neededEvidence.some((s) => s.includes("identity review")));
+    assert.deepEqual(d.proposedActions, []);
   }
 });

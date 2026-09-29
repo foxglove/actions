@@ -49,7 +49,7 @@ A `validated` session event must set `actorRole` to `non-admin-developer`.
 
 ## Output
 
-Ambiguous findings list `candidateExploitIds`. A retest for one of these candidates requires identity review and lists the source IDs in `ambiguousObservationIds`; it cannot report `not_observed`. Confirmed matching evidence takes precedence over a possible match. Unrelated exploits keep their own retest results.
+Ambiguous findings list `candidateExploitIds`. A retest for one of these candidates requires identity review and lists the source IDs in `ambiguousObservationIds`, including when explicitly cited; it cannot report `not_observed`. Missing or mismatched citations are listed separately in `unsupportedObservationIds`; a retest with both problems reports both. Confirmed matching evidence takes precedence over a possible match. Unrelated exploits keep their own retest results.
 
 `summary.proposedExploitIds` lists exploit IDs with a proposed create action. These are not assigned Linear issue IDs. A decision's `issueId`, when present, comes from the supplied existing-ticket record.
 
@@ -57,7 +57,7 @@ Ticket `actorRole` is the validated starting-session role. `observedActorRoles` 
 
 A decision with `lifecycleBlocked: true` retains its confirmed `exploitId` and `issueId`. Correct source citations remain valid, but ticket actions wait for issue-state review.
 
-Merged preconditions, remediation, retest instructions and blocked/not-executed steps preserve complete source lists, including repeated steps. An identical complete list is included once; a distinct list is appended in full. Individual steps are never removed, even when a later list repeats steps from an earlier list. Sources are processed in stable observation-ID order. Quarantine `ref` labels identify the input location, such as `observations[0]`, rather than copying a rejected value.
+Merged preconditions, remediation, retest instructions and blocked/not-executed steps preserve complete source lists, including repeated steps. These output fields are arrays of arrays: each inner array is one source procedure. An identical complete list is included once; a distinct list is appended as a separate group. Empty optional lists produce no group. A ticket renderer must display each group separately and must not flatten the groups. Individual steps are never removed, even when a later list repeats steps from an earlier list. Sources are processed in stable observation-ID order. Quarantine `ref` labels identify the input location, such as `observations[0]`, rather than copying a rejected value.
 
 ## Exit codes
 
