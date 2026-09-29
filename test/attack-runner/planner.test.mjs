@@ -1380,3 +1380,71 @@ test("Confirmed identity prevents absence despite another ambiguous finding, in 
     );
   }
 });
+
+test("Valid citations retain confirmed identity when lifecycle blocks writes [E1-13]", () => {
+  for (const [state, open] of [
+    ["unknown", true],
+    ["open", false],
+    ["open", null],
+  ]) {
+    const x = fresh();
+    x.existing = [existing(x, state, open)];
+    x.retests = [
+      {
+        ...emptyRetest(),
+        observedObservationIds: [x.observations[0].observationId],
+      },
+    ];
+    const result = plan(x);
+    assert.equal(result.decisions.length, 1);
+    assert.equal(result.decisions[0].exploitId, "EXP-1");
+    assert.equal(result.decisions[0].issueId, "LIN-1");
+    assert.equal(result.decisions[0].lifecycleBlocked, true);
+    assert.equal(result.status, "needs_review");
+    assert.deepEqual(result.decisions[0].proposedActions, []);
+  }
+});
+
+test("Merged impacts preserve complete prose including blank lines and repeated values [E1-10]", () => {
+  const x = fresh();
+  const values = [
+    "Step 2: effect\nStep 1: context\n\nDetail",
+    "Other\n\nimpact",
+    "Other\n\nimpact",
+  ];
+  x.observations = values.map((value, i) => ({
+    ...structuredClone(x.observations[0]),
+    observationId: `source-${i}`,
+    impact: value,
+    productionImpact: { value: "unknown", rationale: value },
+  }));
+  for (const observations of [x.observations, [...x.observations].reverse()]) {
+    const draft = plan({ ...x, observations }).decisions.find(
+      (d) => d.ticketDraft,
+    ).ticketDraft;
+    assert.equal(draft.demonstratedImpact, values.slice(0, 2).join("\n\n"));
+    assert.equal(
+      draft.productionImpact.rationale,
+      values.slice(0, 2).join("\n\n"),
+    );
+  }
+});
+
+test("Ticket separates validated starting role from reported escalation [E1-07]", () => {
+  const x = fresh();
+  x.observations[0].actorRole = "org-admin";
+  const result = plan(x);
+  const draft = result.decisions[0].ticketDraft;
+  assert.equal(result.decisions[0].outcome, "new");
+  assert.equal(draft.actorRole, "non-admin-developer");
+  assert.deepEqual(draft.observedActorRoles, ["org-admin"]);
+  x.observations.push({
+    ...structuredClone(x.observations[0]),
+    observationId: "second-source",
+    actorRole: "developer",
+  });
+  assert.deepEqual(
+    plan(x).decisions.find((d) => d.ticketDraft).ticketDraft.observedActorRoles,
+    ["developer", "org-admin"],
+  );
+});

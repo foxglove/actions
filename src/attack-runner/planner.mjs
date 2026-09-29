@@ -259,13 +259,14 @@ function displayTransition(transition) {
 }
 // Prepares one actionable ticket: full activity chain, demonstrated impact, remediation and retest steps.
 // Unknown ownership and unproven production impact remain explicit instead of blocking a valid proposal.
-function ticketDraft(o, runId, evidenceRefs) {
+function ticketDraft(o, runId, evidenceRefs, startingRole) {
   return {
     labels: ["Bug", "pentesting", "harness"],
     boundary: o.violatedBoundary,
     affectedSurface: o.surface,
     preconditions: [...o.preconditions],
-    actorRole: o.actorRole,
+    actorRole: startingRole,
+    observedActorRoles: [o.actorRole],
     demonstratedImpact: o.impact,
     severity: o.severity,
     productionImpact: { ...o.productionImpact },
@@ -281,7 +282,7 @@ function ticketDraft(o, runId, evidenceRefs) {
 }
 // Combines corroborating findings into one ticket proposal, preserving all evidence at ticket level.
 // Evidence attaches to a displayed step only when both chains have one unambiguous matching step.
-function mergeDraft(draft, o, primaryTransitions) {
+function mergeDraft(draft, o, primaryTransitions, prose) {
   // Merge helper: retains each distinct precondition, remediation step and reference in a repeatable order.
   const union = (a, b) => sorted([...a, ...b]);
   draft.preconditions = union(draft.preconditions, o.preconditions);
@@ -297,9 +298,11 @@ function mergeDraft(draft, o, primaryTransitions) {
     o.dangerousNotExecuted ?? [],
   );
   draft.evidenceRefs = union(draft.evidenceRefs, evidenceOf(o));
-  draft.demonstratedImpact = union(draft.demonstratedImpact.split("\n"), [
-    o.impact,
-  ]).join("\n");
+  // Keep complete source paragraphs; delimiters inside prose are not record boundaries.
+  prose.impacts.add(o.impact);
+  prose.rationales.add(o.productionImpact.rationale);
+  draft.demonstratedImpact = [...prose.impacts].join("\n\n");
+  draft.observedActorRoles = union(draft.observedActorRoles, [o.actorRole]);
   const severityOrder = ["critical", "high", "medium", "low", "info"];
   // Severity helper: retains the higher supplied severity when corroborating observations disagree.
   const rank = (s) => {
@@ -309,10 +312,7 @@ function mergeDraft(draft, o, primaryTransitions) {
   if (rank(o.severity) < rank(draft.severity)) draft.severity = o.severity;
   if (draft.productionImpact.value !== o.productionImpact.value)
     draft.productionImpact.value = "unknown";
-  draft.productionImpact.rationale = union(
-    draft.productionImpact.rationale.split("\n"),
-    [o.productionImpact.rationale],
-  ).join("\n");
+  draft.productionImpact.rationale = [...prose.rationales].join("\n\n");
   // Keep the first (stable ID ordered) complete chain. Attach corroborating
   // evidence to matching steps, and retain every reference at ticket level.
   const primarySteps = new Map(
@@ -459,6 +459,7 @@ export function plan(raw) {
   }
   // Confirmed evidence survives a blocked ticket action; action eligibility is separate.
   const observedExploits = new Set();
+  const draftProse = new Map();
   // Candidate matches are uncertain evidence, not absence. Retain raw sources for review.
   const ambiguousSources = new Map();
   const positiveExploits = new Set(),
@@ -565,7 +566,12 @@ export function plan(raw) {
         ...evidenceOf(o),
       ]);
       if (primary.ticketDraft)
-        mergeDraft(primary.ticketDraft, o, match.record.transitions);
+        mergeDraft(
+          primary.ticketDraft,
+          o,
+          match.record.transitions,
+          draftProse.get(exploitId),
+        );
       decisions.push({
         observationId: o.observationId,
         outcome: primary.outcome,
@@ -617,13 +623,16 @@ export function plan(raw) {
         e.issueOpen === null ||
         (e.state === "open" && !e.issueOpen)
       ) {
-        decisions.push(
-          evidenceDecision(
+        decisions.push({
+          ...evidenceDecision(
             o,
             `matched issue ${e.linearIssueId} has unknown or inconsistent lifecycle state`,
             ["mapped issue state"],
           ),
-        );
+          exploitId,
+          issueId: e.linearIssueId,
+          lifecycleBlocked: true,
+        });
         continue;
       }
       if (e.state === "claimed_fixed") {
@@ -673,7 +682,16 @@ export function plan(raw) {
         );
         continue;
       }
-      d.ticketDraft = ticketDraft(o, input.run.id, evidenceRefs);
+      d.ticketDraft = ticketDraft(
+        o,
+        input.run.id,
+        evidenceRefs,
+        input.sessionEvents.find((s) => s.ref === o.sessionRef).actorRole,
+      );
+      draftProse.set(exploitId, {
+        impacts: new Set([o.impact]),
+        rationales: new Set([o.productionImpact.rationale]),
+      });
       addAction(input, d, "create", createKey);
       d.episodeKey = key("new", exploitId);
       setNotificationEligibility(input, d, d.episodeKey);
@@ -742,7 +760,7 @@ export function plan(raw) {
           (d) =>
             decisionSources.get(d.observationId)?.has(id) &&
             d.exploitId === r.exploitId &&
-            d.outcome !== "unresolved",
+            (d.outcome !== "unresolved" || d.lifecycleBlocked === true),
         );
         return !supportsExploit;
       },

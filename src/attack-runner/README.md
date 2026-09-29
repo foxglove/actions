@@ -53,6 +53,10 @@ Ambiguous findings list `candidateExploitIds`. A retest for one of these candida
 
 `summary.proposedExploitIds` lists exploit IDs with a proposed create action. These are not assigned Linear issue IDs. A decision's `issueId`, when present, comes from the supplied existing-ticket record.
 
+Ticket `actorRole` is the validated starting-session role. `observedActorRoles` preserves the roles reported by matching findings; a reported higher role does not invalidate an authorized start or prove escalation on its own. The activity chain and evidence describe any escalation. Merged impact and production-rationale prose preserves each complete supplied value and its line order.
+
+A decision with `lifecycleBlocked: true` retains its confirmed `exploitId` and `issueId`. Correct source citations remain valid, but ticket actions wait for issue-state review.
+
 ## Exit codes
 
 | Code | Meaning                                                                                            |
