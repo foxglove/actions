@@ -457,6 +457,8 @@ export function plan(raw) {
       decisionSources.set(o.observationId, new Set());
     decisionSources.get(o.observationId).add(sourceId);
   }
+  // Confirmed evidence survives a blocked ticket action; action eligibility is separate.
+  const observedExploits = new Set();
   const positiveExploits = new Set(),
     allCandidates = [...known];
   for (const { observation: o, sourceId } of expanded.sort((a, b) =>
@@ -545,6 +547,7 @@ export function plan(raw) {
     const exploitId =
       match?.record.exploitId ??
       `proposed-${hash(identityString(o)).slice(0, 20)}`;
+    observedExploits.add(exploitId);
     if (positiveExploits.has(exploitId)) {
       const primary = decisions.find((d) => d.exploitId === exploitId);
       primary.evidenceRefs = sorted([
@@ -670,7 +673,25 @@ export function plan(raw) {
     positiveExploits.add(exploitId);
     decisions.push(d);
   }
+  // Count raw records too: an invalid duplicate must not leave the other copy authoritative.
+  const retestCounts = new Map();
+  for (const r of input.retests) {
+    if (typeof r?.exploitId === "string")
+      retestCounts.set(r.exploitId, (retestCounts.get(r.exploitId) ?? 0) + 1);
+  }
   for (const { value: r } of retests) {
+    if (retestCounts.get(r.exploitId) > 1) {
+      decisions.push({
+        outcome: "unresolved",
+        exploitId: r.exploitId,
+        reason: "duplicate retest records name the same exploit",
+        evidenceRefs: r.evidenceRefs,
+        proposedActions: [],
+        notificationEligible: false,
+        neededEvidence: ["one combined retest record per exploit per run"],
+      });
+      continue;
+    }
     // A retest must name a known exploit and a reviewed surface before it can report coverage.
     const candidate = allCandidates.find(
       (c) =>
@@ -707,16 +728,13 @@ export function plan(raw) {
     // when one resolved cause matches; sibling causes keep their own decisions.
     const unsupportedObservationIds = sorted(r.observedObservationIds).filter(
       (id) => {
-        const invalid = quarantined.some(
-          (q) => q.collection === "observations" && q.ref === id,
-        );
         const supportsExploit = decisions.some(
           (d) =>
             decisionSources.get(d.observationId)?.has(id) &&
             d.exploitId === r.exploitId &&
             d.outcome !== "unresolved",
         );
-        return invalid || !supportsExploit;
+        return !supportsExploit;
       },
     );
     if (unsupportedObservationIds.length) {
@@ -733,7 +751,7 @@ export function plan(raw) {
       });
       continue;
     }
-    if (positiveExploits.has(r.exploitId)) continue;
+    if (observedExploits.has(r.exploitId)) continue;
     decisions.push({
       outcome: "not_observed",
       exploitId: r.exploitId,

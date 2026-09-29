@@ -473,6 +473,11 @@ export function validateRetest(value, path) {
     ["completed", "interrupted", "not_attempted"],
     `${path}.execution`,
   );
+  if (r.execution === "not_attempted" && r.observedObservationIds.length)
+    throw new InputError(
+      `${path}.observedObservationIds`,
+      "a not_attempted retest cannot cite observations",
+    );
   strings(r.conditions, `${path}.conditions`);
   strings(r.evidenceRefs, `${path}.evidenceRefs`);
   optionalString(r.stopReason, `${path}.stopReason`);

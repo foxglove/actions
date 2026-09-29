@@ -1230,3 +1230,81 @@ test("A retest cannot use a proposed ID whose create needs readback", () => {
     result.decisions.every((decision) => decision.outcome === "unresolved"),
   );
 });
+
+// Retest fixture helper: names a known exploit without asserting that execution found it.
+function emptyRetest(exploitId = "EXP-1") {
+  return {
+    exploitId,
+    targetSurface: "export-download",
+    attemptedOperations: [],
+    observedObservationIds: [],
+    execution: "completed",
+    conditions: [],
+    evidenceRefs: [],
+  };
+}
+
+test("A blocked ticket action does not erase confirmed exploit evidence [E1-04 E1-13]", () => {
+  for (const [state, issueOpen] of [
+    ["unknown", true],
+    ["open", false],
+    ["open", null],
+  ]) {
+    const x = fresh();
+    x.existing = [existing(x, state, issueOpen)];
+    x.retests = [emptyRetest()];
+    const result = plan(x);
+    assert.equal(result.status, "needs_review");
+    assert.equal(result.summary.nonObservations.length, 0);
+    assert.ok(result.decisions.every((d) => d.proposedActions.length === 0));
+  }
+});
+
+test("Duplicate retest records require review, including an invalid duplicate [E1-12]", () => {
+  for (const secondExecution of ["completed", "interrupted", "invalid"]) {
+    const x = fresh();
+    x.existing = [existing(x)];
+    x.observations = [];
+    x.retests = [
+      emptyRetest(),
+      { ...emptyRetest(), execution: secondExecution },
+    ];
+    const result = plan(x);
+    assert.notEqual(result.status, "planned");
+    assert.equal(result.summary.nonObservations.length, 0);
+    assert.ok(result.decisions.some((d) => /duplicate retest/.test(d.reason)));
+  }
+});
+
+test("Quarantine display labels cannot invalidate an unrelated source citation [E1-12]", () => {
+  const x = fresh();
+  x.existing = [existing(x)];
+  x.observations[0].observationId = "source-X";
+  x.observations.push({ surface: "source-X" }, { exploitId: "source-X" });
+  x.retests = [{ ...emptyRetest(), observedObservationIds: ["source-X"] }];
+  const result = plan(x);
+  assert.equal(
+    result.decisions.filter((d) => d.unsupportedObservationIds).length,
+    0,
+  );
+  assert.equal(
+    result.decisions.filter((d) => d.outcome === "rediscovered").length,
+    1,
+  );
+});
+
+test("An unattempted retest cannot cite findings while independent findings remain usable [E1-06 E1-12]", () => {
+  const x = fresh();
+  x.existing = [existing(x)];
+  x.retests = [
+    {
+      ...emptyRetest(),
+      execution: "not_attempted",
+      observedObservationIds: [x.observations[0].observationId],
+    },
+  ];
+  const result = plan(x);
+  assert.equal(result.status, "partial_failure");
+  assert.equal(result.quarantined[0].collection, "retests");
+  assert.equal(result.decisions[0].outcome, "rediscovered");
+});
