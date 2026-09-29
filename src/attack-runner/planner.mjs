@@ -257,6 +257,15 @@ function displayTransition(transition) {
       .replaceAll("{resourceTenant}", displayed.resourceTenantRef);
   return displayed;
 }
+// Ordered source lists can contain repeated steps; only complete equal lists are redundant.
+const instructionFields = [
+  "preconditions",
+  "remediation",
+  "retest",
+  "blockedSteps",
+  "dangerousNotExecuted",
+];
+
 // Prepares one actionable ticket: full activity chain, demonstrated impact, remediation and retest steps.
 // Unknown ownership and unproven production impact remain explicit instead of blocking a valid proposal.
 function ticketDraft(o, runId, evidenceRefs, startingRole) {
@@ -282,28 +291,27 @@ function ticketDraft(o, runId, evidenceRefs, startingRole) {
 }
 // Combines corroborating findings into one ticket proposal, preserving all evidence at ticket level.
 // Evidence attaches to a displayed step only when both chains have one unambiguous matching step.
-function mergeDraft(draft, o, primaryTransitions, prose) {
-  // Merge helper: retains each distinct precondition, remediation step and reference in a repeatable order.
+function mergeDraft(draft, o, primaryTransitions, mergeData) {
+  // Set helper: sorts distinct components, evidence references and observed roles.
   const union = (a, b) => sorted([...a, ...b]);
-  // Instructions keep the stable first source's order; later sources append new items.
-  const appendNew = (a, b) => [...new Set([...a, ...b])];
-  draft.preconditions = appendNew(draft.preconditions, o.preconditions);
-  draft.remediation = appendNew(draft.remediation, o.remediation);
-  draft.retest = appendNew(draft.retest, o.retest);
+  // Append a complete new sequence. Do not remove individual steps or parse display output.
+  for (const field of instructionFields) {
+    const steps = o[field] ?? [];
+    const encoded = JSON.stringify(steps);
+    if (!mergeData.instructions[field].has(encoded)) {
+      mergeData.instructions[field].add(encoded);
+      draft[field].push(...steps);
+    }
+  }
   draft.components = union(
     draft.components,
     o.components?.length ? o.components : ["unknown"],
   );
-  draft.blockedSteps = appendNew(draft.blockedSteps, o.blockedSteps ?? []);
-  draft.dangerousNotExecuted = appendNew(
-    draft.dangerousNotExecuted,
-    o.dangerousNotExecuted ?? [],
-  );
   draft.evidenceRefs = union(draft.evidenceRefs, evidenceOf(o));
   // Keep complete source paragraphs; delimiters inside prose are not record boundaries.
-  prose.impacts.add(o.impact);
-  prose.rationales.add(o.productionImpact.rationale);
-  draft.demonstratedImpact = [...prose.impacts].join("\n\n");
+  mergeData.impacts.add(o.impact);
+  mergeData.rationales.add(o.productionImpact.rationale);
+  draft.demonstratedImpact = [...mergeData.impacts].join("\n\n");
   draft.observedActorRoles = union(draft.observedActorRoles, [o.actorRole]);
   const severityOrder = ["critical", "high", "medium", "low", "info"];
   // Severity helper: retains the higher supplied severity when corroborating observations disagree.
@@ -314,7 +322,7 @@ function mergeDraft(draft, o, primaryTransitions, prose) {
   if (rank(o.severity) < rank(draft.severity)) draft.severity = o.severity;
   if (draft.productionImpact.value !== o.productionImpact.value)
     draft.productionImpact.value = "unknown";
-  draft.productionImpact.rationale = [...prose.rationales].join("\n\n");
+  draft.productionImpact.rationale = [...mergeData.rationales].join("\n\n");
   // Keep the first (stable ID ordered) complete chain. Attach corroborating
   // evidence to matching steps, and retain every reference at ticket level.
   const primarySteps = new Map(
@@ -458,7 +466,7 @@ export function plan(raw) {
   }
   // Confirmed evidence survives a blocked ticket action; action eligibility is separate.
   const observedExploits = new Set();
-  const draftProse = new Map();
+  const draftMergeData = new Map();
   // Candidate matches are uncertain evidence, not absence. Retain raw sources for review.
   const ambiguousSources = new Map();
   const positiveExploits = new Set(),
@@ -569,7 +577,7 @@ export function plan(raw) {
           primary.ticketDraft,
           o,
           match.record.transitions,
-          draftProse.get(exploitId),
+          draftMergeData.get(exploitId),
         );
       decisions.push({
         observationId: o.observationId,
@@ -687,9 +695,15 @@ export function plan(raw) {
         evidenceRefs,
         input.sessionEvents.find((s) => s.ref === o.sessionRef).actorRole,
       );
-      draftProse.set(exploitId, {
+      draftMergeData.set(exploitId, {
         impacts: new Set([o.impact]),
         rationales: new Set([o.productionImpact.rationale]),
+        instructions: Object.fromEntries(
+          instructionFields.map((field) => [
+            field,
+            new Set([JSON.stringify(o[field] ?? [])]),
+          ]),
+        ),
       });
       addAction(input, d, "create", createKey);
       d.episodeKey = key("new", exploitId);

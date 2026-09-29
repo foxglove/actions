@@ -1449,7 +1449,7 @@ test("Ticket separates validated starting role from reported escalation [E1-07]"
   );
 });
 
-test("Merged instructions retain source order and append only new items [E1-10]", () => {
+test("Merged instructions retain complete distinct source sequences [E1-10]", () => {
   const x = fresh();
   const steps = ["Sign in.", "Request export.", "Confirm denial."];
   for (const field of [
@@ -1479,7 +1479,11 @@ test("Merged instructions retain source order and append only new items [E1-10]"
     "blockedSteps",
     "dangerousNotExecuted",
   ])
-    assert.deepEqual(draft[field], [...steps, "Additional instruction."]);
+    assert.deepEqual(draft[field], [
+      ...steps,
+      ...steps,
+      "Additional instruction.",
+    ]);
 });
 
 test("Quarantine labels use input locations and never copy rejected objects [E1-12]", () => {
@@ -1491,4 +1495,48 @@ test("Quarantine labels use input locations and never copy rejected objects [E1-
   for (const q of result.quarantined)
     assert.equal(q.ref, `${q.collection}[${q.index}]`);
   assert.ok(!JSON.stringify(result).includes("synthetic-secret"));
+});
+
+// Repeated steps can act on different users; only an identical complete sequence is redundant.
+test("Repeated steps survive merging from primary and later sources [E1-10]", () => {
+  const fields = [
+    "preconditions",
+    "remediation",
+    "retest",
+    "blockedSteps",
+    "dangerousNotExecuted",
+  ];
+  for (const repeatedFirst of [true, false]) {
+    const x = fresh();
+    const repeat = [
+      "Sign in as A.",
+      "Request export.",
+      "Sign in as B.",
+      "Request export.",
+    ];
+    const single = ["Request export."];
+    const a = x.observations[0];
+    a.observationId = "a";
+    const b = { ...structuredClone(a), observationId: "b" };
+    for (const field of fields) {
+      a[field] = repeatedFirst ? repeat : single;
+      b[field] = repeatedFirst ? single : repeat;
+    }
+    x.observations = [
+      a,
+      b,
+      { ...structuredClone(a), observationId: "c" },
+      { ...structuredClone(b), observationId: "d" },
+    ];
+    for (const observations of [
+      x.observations,
+      [...x.observations].reverse(),
+    ]) {
+      const draft = plan({ ...x, observations }).decisions.find(
+        (d) => d.ticketDraft,
+      ).ticketDraft;
+      for (const field of fields)
+        assert.deepEqual(draft[field], [...a[field], ...b[field]]);
+    }
+  }
 });
