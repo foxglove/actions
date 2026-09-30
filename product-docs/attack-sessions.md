@@ -2,59 +2,68 @@
 
 ## Summary
 
-Authenticated assessments establish a session with a fresh magic link for each run. A separate company-owned issuer delivers the link through private temporary storage; Attack Runner has no superadmin access. The resulting session cookie authenticates subsequent work beyond the link's short lifetime.
+Authenticated assessments establish a session with a fresh ordinary magic link for each run. A company-owned issuer function triggers the application's supported ordinary-login email for the approved test identity and delivers it to a company-owned mailbox. Attack Runner reads the link from that mailbox and signs in; it has no superadmin access. The resulting session cookie authenticates subsequent work beyond the link's short lifetime.
 
 Scheduled authentication requires no employee login, personal mailbox, copied cookie, or weekly URL pasting. It must continue to work when the person who configured it leaves. The responsible operator still observes and can stop the assessment as specified in [Attack runner](attack-runner.md); operator coverage is distinct from authentication.
+
+This document resolves the authentication product decisions for the first path. It supersedes two mechanisms proposed earlier on [PR #51](https://github.com/foxglove/actions/pull/51): the private GCS login-handoff object and the issuer-owned handoff cleanup. See [Superseded mechanisms](#superseded-mechanisms). The invariant that Attack Runner holds no superadmin, signing, or issuer authority is retained unchanged.
+
+## Product decisions
+
+| Decision                  | Selected outcome                                                                                                                                                                                                                                                                                                                                                                             | Accountable owner                                                                            | Accepted coverage/risk                                                                                                                                                                 | Qualification evidence                                                                                                                             | Blocks engineering? |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| Authentication mode       | Ordinary non-admin developer magic-link login is required. A superadmin-issued impersonation session is not a permitted substitute.                                                                                                                                                                                                                                                          | Kumar Pasumarthy (release authority; moves to a team over time)                              | The assessment covers what an ordinary non-admin developer can reach. It does not cover superadmin-only behavior. Impersonation evidence cannot substitute for ordinary-mode coverage. | Post-redemption mode and identity verification from application-derived evidence; qualification of the mode oracle is executable engineering work. | No                  |
+| Ordinary-login delivery   | The issuer triggers the supported ordinary magic-link email and delivers it to a company-owned mailbox the runner reads. No scoped mint operation is required, and no new app endpoint is invented.                                                                                                                                                                                          | App/auth code owners: `@foxglove/data-curation-search` (with `@wimagguc`, `@dante-foxglove`) | Delivery depends on email arriving before the link lifetime is too short. A late email fails preflight rather than starting an unauthenticated assessment.                             | Unattended two-run and employee-removal qualification (I-01, I-18) with the real mailbox and workload identity.                                    | No                  |
+| Issuer ownership          | The app/auth code owners own the issuer function, the company test identity, its provisioning/rotation/revocation, identity-to-profile mapping, deployment approval, and mailbox access.                                                                                                                                                                                                     | `@foxglove/data-curation-search` (with `@wimagguc`, `@dante-foxglove`)                       | A single team owns both the auth surface and the issuer function. There is no separate on-call rotation yet.                                                                           | Named owner recorded here; there is no `@foxglove/foundations` team in the app `CODEOWNERS`.                                                       | No                  |
+| Cleanup and alerting      | Not applicable. There is no stored handoff object to delete, so there is no issuer-owned cleanup and no cleanup-failure alert.                                                                                                                                                                                                                                                               | App/auth code owners (mailbox hygiene only)                                                  | A redeemed link is inert; an unredeemed link expires in 15 minutes. Mailbox-message retention is ordinary mailbox hygiene, not a live-credential control.                              | Single-use and expiry are inspected app facts (see [Appendix](#appendix)); concurrent-redemption behavior is qualified before release.             | No                  |
+| Authentication thresholds | Preflight deadline 5 minutes; minimum remaining link lifetime at retrieval 10 minutes; required authenticated-session duration equals the configured run duration (default 60 minutes, configurable) plus a reporting reserve; maintenance every 300 seconds and before high-impact activity; one bounded in-job restart; at most 2 attempts per job without resetting time or spend limits. | Kumar Pasumarthy                                                                             | The run duration is a configurable setting so a longer assessment can be scheduled later. The other values are fixed defaults.                                                         | Each value requires runtime qualification against the real application and edge before live release.                                               | No                  |
+| Release authority         | Kumar Pasumarthy accepts auth coverage and limitations, the unattended issuer path, the actual-mode oracle, full-duration session continuity, issuer/runner/harness isolation, and edge-policy effects. Ownership moves to a team over time.                                                                                                                                                 | Kumar Pasumarthy                                                                             | A single accountable owner for the first release.                                                                                                                                      | Recorded here; re-recorded when ownership moves to a team.                                                                                         | No                  |
 
 ## Terms
 
 - **Session cookie jar**: the run-local browser context or equivalent cookie store that retains the application's actual session cookie and server-issued updates.
 - **Session maintenance**: the application's supported activity or refresh operation that preserves the established authenticated session for the run duration.
-- **Login issuer**: a separately deployed service that holds minting authority and resolves the permitted test identity from trusted configuration.
-- **Login handoff**: one private temporary object containing a fresh link and its run/attempt binding. It is separate from retained evidence.
+- **Login issuer**: a company-owned function, which may be a scheduled operation of an existing company service, that triggers the supported ordinary magic-link email for the approved test identity. It uses company-owned identities and is outside Attack Runner.
+- **Company mailbox**: the company-owned mailbox that receives the emailed ordinary magic link. Attack Runner has scoped read access to it; it has no mailbox administration authority.
 - **Authentication mode**: the established session's provenance, such as ordinary magic-link login or superadmin impersonation; matching the target member does not make these modes equivalent.
 
 ## Decisions
 
-### Minting authority stays outside Attack Runner
+### Issuance authority stays outside Attack Runner
 
 The issuer, scheduler and test account use company-owned identities with a team responsible for provisioning, recovery and revocation. Attack Runner, including its controller and auth adapter, receives no superadmin session, signing key, or permission to act as the issuer. It cannot change the issuer's deployment, identity mapping or access policy. The issuer is not a privileged step or helper on the Attack Runner worker.
 
-The scheduler authorizes the run, attempt and profile, then requests issuance after the browser is ready. The issuer maps that authorization to an explicitly allowed party test identity. A runner-supplied email, member, org, redirect or storage destination cannot select a different identity or expand scope. Knowing a run ID is not authorization. Duplicate readiness signals do not create extra links or parallel attempts.
+The scheduler authorizes the run, attempt and profile, then requests issuance shortly before the scheduled run so a configured minimum lifetime remains when the worker is ready. The issuer maps that authorization to an explicitly allowed party test identity and triggers the ordinary magic-link email for that identity. A runner-supplied email, member, org or redirect cannot select a different identity or expand scope. Knowing a run ID is not authorization. Duplicate readiness signals do not trigger extra emails or parallel attempts.
 
-The harness receives the test login material and session only. It receives neither the issuer's credentials nor the runner's storage credentials. This boundary applies to mounted files, environment variables, cloud metadata and service-account impersonation permissions, not just prompt instructions.
+The harness receives the test login material and session only. It receives neither the issuer's credentials nor mailbox-administration credentials. This boundary applies to mounted files, environment variables, cloud metadata and service-account impersonation permissions, not just prompt instructions.
 
-### A private handoff belongs to one run and attempt
+### The link is delivered to a company mailbox for one run and attempt
 
-Use a dedicated private temporary GCS bucket for login handoffs, separate from the evidence and durable reconciliation stores. Publish an immutable object per authorized run/attempt; do not use a shared latest-link object. Attack Runner can read only its assigned object for a bounded time, with no list, write, delete, bucket-administration or other-run access. A secret-looking object name alone is not access control.
+The issuer triggers the supported ordinary magic-link email for the approved test identity, addressed to the company-owned mailbox. Attack Runner has scoped read access to that mailbox. After the worker signals readiness, it reads the message that corresponds to its authorized run and attempt within a bounded window: the newest ordinary magic link for the approved test identity delivered after the issuance request. The runner does not read unrelated messages, and it cannot send mail, delete messages, or administer the mailbox.
 
-The runner may also read only the redacted cleanup-status record for its own authorized run/attempt. It cannot list other status records, read another attempt's status or handoff reference, or write/delete any status record. The issuer alone writes these records. This read-only status access grants no issuer-control or handoff-deletion authority; the harness receives neither status-store credentials nor access to other attempts.
-
-The handoff binds the link to its run, attempt, approved profile, expected member/org, declared authentication mode, and issuance/expiry times. Before redemption, the trusted runner adapter checks these against its independently authorized configuration. After redemption, it verifies the actual identity and session mode using application-derived evidence before releasing attack work. The issuer's mode label is not proof of the resulting session mode. An untrusted payload cannot redefine the expected identity, mode or target.
+The first release runs one weekly assessment with one active attempt at a time, so overlapping runs that could share the mailbox are out of scope; see [Attack runner](attack-runner.md#runs-are-weekly-and-manually-invocable). The scheduler authorizes one attempt; a bounded restart is a new attempt within the original job limits. The expected identity, profile and mode come from independently authorized configuration, not from the message contents. An untrusted message cannot redefine the expected identity, mode or target.
 
 ### The ready worker logs in immediately
 
-The runner prepares its worker before the separate issuer mints a fresh magic link. The worker retrieves and redeems the link immediately, once, before its 15-minute expiry. If delivery leaves insufficient time for bounded login and validation, fail preflight; do not begin attack work or ask a person to paste another link.
+The runner prepares its worker before the issuer triggers the ordinary magic-link email. The worker retrieves the link from the mailbox and redeems it immediately, once, before its 15-minute expiry. The adapter requires a configured minimum remaining lifetime, initially 10 minutes, sufficient for bounded login and identity validation. If the email is missing, too old, or leaves insufficient lifetime, fail preflight; do not begin attack work or ask a person to paste another link.
 
 We use a fresh link for each run rather than a long-lived cookie secret, so each assessment has a distinct authentication establishment event. The resulting session cookie is retained in that run's cookie jar with its application-defined HttpOnly, domain, path, and security behavior.
 
-Missing, stale, cancelled, wrongly bound or unexpected-mode handoffs stop preflight. A read retry may retrieve the same object before redemption, but an uncertain redemption is not retried blindly. End that attempt and require a separately identified, bounded restart with fresh authorization and preflight. A restart never resets the enclosing job's time or spend limit. There is no fallback to a personal credential or anonymous assessment.
+Missing, stale, cancelled, wrongly bound or unexpected-mode links stop preflight. A read retry may return the same message before redemption, but an uncertain redemption is not retried blindly. End that attempt and require a separately identified, bounded restart with fresh authorization and preflight. A restart never resets the enclosing job's time or spend limit. There is no fallback to a personal credential or anonymous assessment.
 
 ### Authentication mode must match the intended coverage
 
-The default contract remains an ordinary non-admin developer login. Superadmin can return a magic link directly, but the inspected implementation creates an impersonation session and takes a different sign-in branch. Private storage does not change those semantics.
-
-**Decision pending app/auth review:** whether a separately issued impersonation session is acceptable for Authenticated Access Chains, and which sign-in or authorization checks it cannot cover. Until explicitly selected in the product contract and qualified, it is not a permitted substitution for ordinary login. If ordinary login is retained, the issuer needs a supported scoped mint operation or unattended company-owned mailbox integration. Both retain the same private handoff boundary.
+The product contract is an ordinary non-admin developer login. Superadmin can return a magic link directly, but the inspected implementation creates an impersonation session and takes a different sign-in branch. Email delivery does not change those semantics. A superadmin-generated impersonation session is not a permitted substitution for ordinary login.
 
 Record the selected mode and coverage limitations in private run provenance. A valid non-admin starting session that subsequently demonstrates privilege escalation remains exploit evidence; the starting-identity check must not discard that causal transition.
 
-The adapter must distinguish an impersonation session even when its envelope is incorrectly labelled ordinary. The inspected sign-in implementation emits an impersonation marker in its server response, but `/v1/me` does not expose session source. Capturing that response from the approved application in a fresh browser is a candidate mode check, not a qualified integration. Absence of a marker alone is not sufficient proof of ordinary login. Engineering must qualify both branches and ambiguous/missing evidence; if they cannot be distinguished, a session-bound application signal is a release dependency. Unknown or mismatched mode fails preflight. Worker instructions cannot replace this adapter gate.
+The adapter must distinguish an impersonation session even when a message is incorrectly presented as ordinary. The inspected sign-in implementation emits an impersonation marker in its server response, but `/v1/me` does not expose session source. Capturing that response from the approved application in a fresh browser is a candidate mode check, not a qualified integration. Absence of a marker alone is not sufficient proof of ordinary login. Engineering must qualify both branches and ambiguous or missing evidence; if they cannot be distinguished, a session-bound application signal is a release dependency. Unknown or mismatched mode fails preflight. Worker instructions cannot replace this adapter gate.
 
 ### One logical session lasts for the assessment
 
 The first path uses an authorized non-admin developer identity. Preflight validates the expected identity, role, and party context. Invalid credentials or an unexpected identity stop the assessment before attack work.
 
-The default maintenance interval is 300 seconds, with validation before high-impact activity. Maintenance uses the same cookie jar and retains server-issued cookie updates. The selected operation must demonstrably maintain authentication beyond 15 minutes and through the configured run duration. A successful health check or a last-seen update alone does not prove that lifetime requirement.
+The default maintenance interval is 300 seconds, with validation before high-impact activity. Maintenance uses the same cookie jar and retains server-issued cookie updates. The selected operation must demonstrably maintain authentication beyond 15 minutes and through the configured run duration. The run duration is a configurable run setting, initially 60 minutes, so a longer assessment can be scheduled later; maintenance must hold for whatever duration is configured. A successful health check or a last-seen update alone does not prove that lifetime requirement.
 
 The worker does not reopen the magic link, clear cookies, sign out, switch to Google SSO, or remint credentials to imitate continuity. A new login is a separately identified restart with fresh preflight.
 
@@ -68,85 +77,93 @@ The adapter classifies edge challenges/blocks separately from application sign-i
 
 ### Credentials remain ephemeral
 
-Live links exist only in the isolated issuer, the temporary handoff and the private run context. Cookies and authentication headers stay in the contexts that need them. No credential values enter committed files, retained reports, tickets, Slack or logs. Evidence records the validation result without credential values.
+Live links exist only in the issuer, the company mailbox and the private run context. Cookies and authentication headers stay in the contexts that need them. No credential values enter committed files, retained reports, tickets, Slack or logs. Evidence records the validation result without credential values.
 
-An issuer-owned cleanup service deletes the exact handoff object after successful-login acknowledgment, cancellation or expiry; it also removes abandoned handoffs after crashes. Run-local link material is erased after use and other run-local credentials during cleanup. Temporary storage has no version history, soft-delete recovery or retention lock. Its settings do not change the separate evidence-retention policy.
+A magic link is single-use and expires 15 minutes after issuance; the application enforces both. A redeemed link is inert, and an unredeemed link expires without action. Run-local link material and other run-local credentials are erased when the run container is torn down. The delivered email remains in the company mailbox until ordinary mailbox retention removes it; because the link is single-use and short-lived, that message holds no reusable credential after redemption or expiry. Mailbox retention is owned by the app/auth code owners as ordinary mailbox hygiene; it is separate from the evidence-retention policy in [Attack runner](attack-runner.md#evidence-is-retained-in-private-storage).
 
-Storage reads are not single-use consumption; application redemption enforces link use. Deleting an object does not revoke an established session. Token expiry remains enforced by the application even if cleanup is delayed. Cleanup has bounded retries, a named owner and visible failure reporting; an expired link is not proof its stored bytes were deleted. A cleanup failure does not erase independently valid exploit evidence.
+There is no stored handoff object with an independent lifetime, so there is no issuer-owned deletion step and no cleanup-failure alert. Deleting a mailbox message does not revoke an established session, and application expiry does not depend on message deletion. A mailbox or cleanup problem does not erase independently valid exploit evidence.
 
-The issuer owns a durable private, credential-free cleanup record per run/attempt. Its stable reference is derived from the trusted configured issuer-status namespace and the scheduler's canonical run/attempt IDs, using the resource key `attempts/{runId}/{attemptId}/cleanup`. The IDs are encoded as individual path segments. Scheduler and issuer use this same rule; deriving a reference neither creates a record nor authorizes access. The issuer creates the record when it accepts issuance authorization, before minting. It records the handoff reference/generation when known, status (`pending`, `deleted`, `failed`, or `not_created`), update time and sanitized failure reason. `deleted` requires confirmed absence of the expected object generation under the qualified storage policy; `not_created` requires a confirmed failure before publication. Uncertain publication or deletion is never reported as either. The record remains `pending` during bounded retries and becomes `failed` when its configured retry/deadline policy is exhausted. A later confirmed recovery updates that record while preserving the failure history.
+### Superseded mechanisms
 
-When writing its summary, the runner records the observed cleanup status, observation time and stable issuer-record reference for each attempt. An unavailable record is `unknown`, not successful cleanup. The summary is a snapshot: cleanup may finish later, and the issuer record is authoritative for that later outcome. This does not promise a rewrite of the completed summary or add cleanup to the assessment's synchronous lifecycle. Before recurring launch, the issuer team must configure and test a private operational failure destination and transport; their selection is an explicit release dependency. Assessment-summary delivery to Slack remains deferred.
+Two mechanisms proposed on [PR #51](https://github.com/foxglove/actions/pull/51) are replaced by ordinary email delivery to a company mailbox:
 
-The scheduler may request issuance only after authenticated readiness. The runner may report “issuance was never requested” only when it can establish that it stopped before sending readiness. In that case no issuer record or handoff exists, and the summary intentionally records cleanup status `unknown` with the pre-readiness failure reason rather than fabricating an issuer `not_created` result. Once readiness has been sent, or its transmission is uncertain, the runner cannot infer whether the scheduler requested issuance from a missing object reference or status response. It records `unknown` when the issuer outcome is unavailable and must not use the pre-issuance reason; an available issuer record supplies the observed status instead.
+- The private GCS login-handoff object per run/attempt. The runner now reads the emailed link from the company mailbox. There is no handoff object to publish, assign, or read.
+- The issuer-owned handoff cleanup, its durable per-attempt cleanup record, the summary `handoffCleanup` snapshot, and the private cleanup-failure destination. Single-use and 15-minute expiry are the only credential-lifetime controls, so no deletion step or failure alert is required.
+
+The retained invariants are unchanged: Attack Runner holds no superadmin, signing, issuer, or mailbox-administration authority; the issuer resolves the identity from trusted configuration; the runner verifies actual identity and mode after redemption; and missing, ambiguous, mismatched, expired, or unqualified authentication fails closed.
 
 ## Contracts
 
 ### Authentication adapter
 
-The runner's adapter provides unattended handoff retrieval, immediate redemption, session validation, and a verified maintenance operation. Issuance and storage cleanup belong to the separate issuer service. The adapter emits exactly one terminal result by the configured preflight deadline: `PREFLIGHT_PASSED` after it verifies the approved mode and starting identity, or `PREFLIGHT_FAILED` after any failure or timeout. `PREFLIGHT_FAILED` includes the failure classification, such as `EDGE_CONTROL_BLOCKED`, `ACCESS_FAILURE_UNCLASSIFIED`, or an application login failure. Attack tools remain blocked unless the result is `PREFLIGHT_PASSED`.
+The runner's adapter provides unattended mailbox retrieval, immediate redemption, session validation, and a verified maintenance operation. Triggering the ordinary magic-link email belongs to the issuer function. The adapter emits exactly one terminal result by the configured preflight deadline: `PREFLIGHT_PASSED` after it verifies the approved mode and starting identity, or `PREFLIGHT_FAILED` after any failure or timeout. `PREFLIGHT_FAILED` includes the failure classification, such as `EDGE_CONTROL_BLOCKED`, `ACCESS_FAILURE_UNCLASSIFIED`, or an application login failure. Attack tools remain blocked unless the result is `PREFLIGHT_PASSED`.
 
-The implementation uses a supported issuance path. It does not assume the app's test-only retrieval shortcut is available on party or that signing a JWT registers a usable magic token.
+The implementation uses a supported ordinary-login path. It does not assume the app's test-only retrieval shortcut is available on party or that signing a JWT registers a usable magic token.
 
-### Issuance and handoff lifecycle
+### Issuance and login lifecycle
 
 ```mermaid
 sequenceDiagram
     participant S as Trusted scheduler
-    participant I as Separate login issuer
-    participant G as Private temporary storage
+    participant I as Company issuer function
+    participant M as Company mailbox
     participant R as Attack Runner
     participant B as Prepared test browser
-    S->>S: Derive cleanup reference from configured namespace and run/attempt IDs
-    S->>R: Start authorized run and attempt, with stable cleanup-record reference
+    S->>R: Start authorized run and attempt
     R->>B: Prepare browser
     R-->>S: Authenticated readiness
     S->>I: Authorize fixed profile and attempt
-    I->>I: Create pending cleanup record at derived reference
-    I->>I: Resolve allowed identity and mint fresh link
-    I->>G: Create immutable handoff
-    G-->>I: Confirm object reference and generation
-    I-->>S: Published object reference and generation
-    S-->>R: Assigned object and bounded read access
-    R->>G: Read exact assigned object
-    G-->>R: Link and run binding
-    alt Valid binding, declared mode and remaining lifetime
+    I->>I: Resolve allowed identity
+    I->>M: Trigger ordinary magic-link email for the test identity
+    R->>M: Read this attempt's newest matching message
+    M-->>R: Ordinary magic link
+    alt Link present with sufficient remaining lifetime
         R->>B: Redeem once in prepared browser
         B-->>R: Application sign-in and session evidence
         R->>R: Validate actual identity and mode
         alt Login, identity and mode validation succeed
-            R-->>I: Authenticated success acknowledgment
-            I->>G: Delete exact handoff
             R-->>B: Release attack work after adapter preflight passes
             B->>B: Assess using maintained session cookie
         else Login or validation failed, or redemption uncertain
             R-->>S: End attempt, no assessment
-            S->>I: Authenticated attempt termination
-            I->>G: Cleanup abandoned handoff
         end
-    else Missing, expired, cancelled or mismatched handoff
+    else Missing, expired, mismatched or insufficient-lifetime link
         R-->>S: Fail preflight, no assessment
-        S->>I: Authenticated attempt termination or cancellation
-        I->>G: Cleanup handoff if present
     end
-    Note over I,G: Expiry cleanup also covers crashes and missing acknowledgments
-    Note over I,R: Issuer owns cleanup record; summary records status as observed
-    Note over R,B: No issuer authority in runner; no cloud credentials in harness
+    Note over I,M: Single-use, 15-minute expiry; no stored handoff object to clean up
+    Note over R,B: No issuer or mailbox-admin authority in runner; no cloud credentials in harness
 ```
 
-Issuance/storage failure is reported by the issuer to the scheduler, which ends the attempt and tells the runner to fail preflight. External cancellation likewise travels from scheduler to both runner and issuer. Lost termination messages are covered by issuer-owned expiry cleanup. The scheduler supplies a stable per-attempt cleanup-record reference at initial bootstrap, even if issuance later fails, and passes the object reference/generation after publication. A missing issuer record remains unknown; it is not proof that no handoff exists. The issuer authenticates acknowledgments against the authorized run/attempt; an acknowledgment cannot change the deletion target. Cleanup records reflect the storage operation's confirmed outcome or explicit failure, not merely a sent delete request. Retry and cleanup failures follow the rules above, including visible failure without discarding completed evidence.
+Issuance failure is reported by the issuer to the scheduler, which ends the attempt and tells the runner to fail preflight. External cancellation likewise travels from scheduler to both runner and issuer. An unredeemed link expires on its own; there is no deletion step to reconcile. The issuer authorizes issuance against the authorized run/attempt; a runner-supplied value cannot change the target identity. A late or missing email fails preflight and starts no assessment; a bounded restart is a new attempt within the original job limits.
+
+## Qualification states
+
+These invariants are selected product behavior. Each still needs runtime qualification with observable evidence before live release. Source inspection is not live qualification.
+
+| Invariant                                                        | Owner                | Observable oracle                                                                                     | Required evidence                                                                                                                               | Failure behavior                                  | Downstream work gated |
+| ---------------------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | --------------------- |
+| Ordinary session established unattended from the company mailbox | App/auth code owners | Redeemed session's identity, role and mode from application-derived evidence                          | Two clean scheduled runs and an employee-removal fixture (I-01, I-18) with the real mailbox and workload identity                               | Preflight fails; no assessment                    | Live scheduled runs   |
+| Actual mode is ordinary, not impersonation                       | App/auth code owners | Session-bound application signal captured in a fresh browser; `/v1/me` does not expose session source | Ordinary and impersonation branches, a mislabelled message, and missing/ambiguous evidence distinguished (I-22)                                 | Preflight fails; attack tools stay gated          | Live scheduled runs   |
+| Session holds for the configured run duration                    | App/auth code owners | Authenticated request after the 15-minute link expiry and through the configured duration             | Maintenance verified beyond 15 minutes and for the configured duration, retaining server cookie updates (I-02)                                  | Session loss stops active work; evidence retained | Live scheduled runs   |
+| Runner cannot reach issuer or mailbox authority                  | App/auth code owners | Attempted issuer/mailbox-admin/cross-attempt access is denied, including inherited grants             | Denied superadmin, signing, mailbox administration, and other-attempt access; no issuer or mailbox credential in the harness environment (I-19) | Access denied                                     | Live scheduled runs   |
+| Link lifetime and single use are effective                       | App/auth code owners | Application redemption and expiry behavior                                                            | Single-use and concurrent-redemption behavior verified against the application (I-20, I-21)                                                     | Preflight fails on an unusable link               | Live scheduled runs   |
+| Edge reachability is established or the run fails visibly        | Environment owner    | Reachability from the real runner/harness network path                                                | Edge challenge/block classification and scoped-policy recording (I-16)                                                                          | Visible run failure; incomplete coverage          | Live scheduled runs   |
+
+## Verdict
+
+READY_FOR_ENGINEERING_QUALIFICATION. Every authentication product decision has one selected outcome, an accountable owner, and accepted coverage limitations, with no product intent left to implementation. The remaining work is executable qualification, listed in [Qualification states](#qualification-states). This verdict does not mean READY_FOR_IMPLEMENTATION.
 
 ## Product dimensions
 
-| Dimension            | Decision                                                                                         | Source        |
-| -------------------- | ------------------------------------------------------------------------------------------------ | ------------- |
-| Access               | Company-owned non-admin test identity; separate issuer; no superadmin access in Attack Runner.   | This document |
-| Seats and plans      | Not applicable; this contract does not grant a customer entitlement.                             | This document |
-| Billing and metering | Not applicable; authentication is not a separate customer meter.                                 | This document |
-| Limits               | Magic links expire after 15 minutes; default session maintenance runs every 300 seconds.         | This document |
-| Security and data    | Per-attempt private handoff and run-local cookie jar; no credentials in retained evidence.       | This document |
-| Deployment           | Separate issuer and runner identities; unattended bootstrap and maintenance on authorized party. | This document |
-| Interfaces           | Authorized readiness, private handoff, sign-in, identity validation, maintenance and cleanup.    | This document |
+| Dimension            | Decision                                                                                                                                                      | Source        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| Access               | Company-owned non-admin test identity; company issuer function; no superadmin access in Attack Runner.                                                        | This document |
+| Seats and plans      | Not applicable; this contract does not grant a customer entitlement.                                                                                          | This document |
+| Billing and metering | Not applicable; authentication is not a separate customer meter.                                                                                              | This document |
+| Limits               | Magic links expire after 15 minutes; minimum remaining lifetime at retrieval 10 minutes; preflight deadline 5 minutes; session maintenance every 300 seconds. | This document |
+| Security and data    | Ordinary link emailed to a company mailbox with scoped read access; run-local cookie jar; no credentials in retained evidence.                                | This document |
+| Deployment           | Company issuer and runner identities; unattended trigger, delivery and maintenance on authorized party.                                                       | This document |
+| Interfaces           | Authorized readiness, ordinary magic-link email, mailbox read, sign-in, identity validation and maintenance.                                                  | This document |
 
 ## Alternatives considered
 
@@ -154,29 +171,35 @@ Issuance/storage failure is reported by the issuer to the scheduler, which ends 
 
 A magic link establishes a session once; it is not a renewable session credential. A long-lived cookie secret bypasses fresh establishment and is not the primary authentication mechanism.
 
+### Superadmin-issued impersonation session
+
+Superadmin can return a magic link directly, but its inspected implementation creates an impersonation session on a different sign-in branch. Impersonation cannot exercise the ordinary sign-in and authorization path, and its cookie is window-scoped. It is easier to automate, but ease of automation is not a coverage reason. Ordinary login is required; impersonation is not a permitted substitute.
+
+### Private GCS login-handoff object with issuer-owned cleanup
+
+An earlier proposal on [PR #51](https://github.com/foxglove/actions/pull/51) copied the link into a private per-attempt GCS object and had the issuer delete it and record cleanup status. Email delivery to a company mailbox removes the stored object, so it removes the deletion step, the cleanup record, and the cleanup-failure alert. Single-use and 15-minute expiry are the credential-lifetime controls. See [Superseded mechanisms](#superseded-mechanisms).
+
 ### Giving the runner superadmin access
 
-Even if Strix cannot see a privileged credential, putting it in Attack Runner's controller grants the runner unnecessary authority. A separately deployed issuer limits the runner to the test login material supplied for its attempt.
+Even if Strix cannot see a privileged credential, putting it in Attack Runner's controller grants the runner unnecessary authority. A company issuer function limits the runner to the ordinary login material supplied for its attempt.
 
 ### Employee-assisted authentication
 
-Weekly manual minting, personal mailbox access or a saved employee SSO session ties the service to that person's availability and account lifecycle. One-time company-owned provisioning is required; recurring authentication is automated.
+Weekly manual minting, personal mailbox access or a saved employee SSO session ties the service to that person's availability and account lifecycle. One-time company-owned provisioning is required; recurring authentication is automated through the company issuer function and mailbox.
 
 ## Appendix
 
-The inspected app commit establishes three relevant facts: magic tokens are registered and single-use with a 15-minute lifetime; the normal mint route delivers email and returns success rather than the token; sign-in issues a separate HttpOnly cookie. Session activity updates last-seen state, which alone does not establish sliding expiry. These facts constrain adapter selection; they do not demonstrate unattended party authentication.
+The inspected app commit establishes these relevant facts: magic tokens are registered and single-use with a 15-minute lifetime; the normal ordinary-login route emails the link and returns success rather than the token, except that it returns the link only when `NODE_ENV` is `test`; a magic token creates an ordinary session unless it carries an impersonator claim; and the impersonation branch, taken only for a token with that claim, sets a distinct session marker. Session activity updates last-seen state, which alone does not establish sliding expiry. These facts constrain adapter selection; they do not demonstrate unattended party authentication.
 
-Current source inspection also supports investigating a company-owned Google service account signing into superadmin and requesting an impersonation link. The verifier checks a Google-signed token, configured audience, verified email and provisioned membership; the mint route additionally checks elevated permission. Google supports service-account ID tokens with the needed email claims and a supplied audience. This is a feasibility inference, not a live-tested integration or approval of impersonation semantics. Account provisioning, permissions, session behavior and handoff isolation remain release dependencies.
+Source inspection also shows a superadmin impersonation path that returns a link directly and creates an impersonation session. That path is not selected; ordinary login is required. It is recorded here only to explain why the adapter verifies actual mode after redemption. This is a feasibility inference, not a live-tested integration.
 
 ## Resources
 
-- [MagicTokenService](https://github.com/foxglove/app/blob/61452baeb3a610d0c12922600661bb5199f4e61a/packages/api/src/services/MagicTokenService.ts): token registration, lifetime, and redemption.
-- [Magic-link route](https://github.com/foxglove/app/blob/61452baeb3a610d0c12922600661bb5199f4e61a/packages/api/src/routes/internal/auth/magic-link/index.ts): normal email delivery and test-only retrieval behavior.
-- [Sign-in route](https://github.com/foxglove/app/blob/61452baeb3a610d0c12922600661bb5199f4e61a/packages/api/src/routes/v1/signin/index.ts): session-cookie creation.
+- [MagicTokenService](https://github.com/foxglove/app/blob/61452baeb3a610d0c12922600661bb5199f4e61a/packages/api/src/services/MagicTokenService.ts): token registration, lifetime, and single-use redemption.
+- [Magic-link route](https://github.com/foxglove/app/blob/61452baeb3a610d0c12922600661bb5199f4e61a/packages/api/src/routes/internal/auth/magic-link/index.ts): ordinary-login email delivery and test-only retrieval behavior.
+- [Sign-in route](https://github.com/foxglove/app/blob/61452baeb3a610d0c12922600661bb5199f4e61a/packages/api/src/routes/v1/signin/index.ts): ordinary versus impersonation session creation and the session-cookie behavior.
 - [SessionService](https://github.com/foxglove/app/blob/61452baeb3a610d0c12922600661bb5199f4e61a/packages/api/src/services/SessionService.ts): session activity handling.
-- [Superadmin sign-in](https://github.com/foxglove/app/blob/fde9444416d7b4479a15337946170fec3ff4d507/packages/api/src/routes/internal/superadmin/signin/index.ts), [token verification](https://github.com/foxglove/app/blob/fde9444416d7b4479a15337946170fec3ff4d507/packages/api/src/lib/acl.ts), [impersonation minting](https://github.com/foxglove/app/blob/fde9444416d7b4479a15337946170fec3ff4d507/packages/api/src/routes/internal/superadmin/impersonate.ts) and [app sign-in branches](https://github.com/foxglove/app/blob/fde9444416d7b4479a15337946170fec3ff4d507/packages/api/src/routes/v1/signin/index.ts): candidate issuer integration and the authentication-mode distinction.
-- [Google service-account ID tokens](https://docs.cloud.google.com/iam/docs/reference/credentials/rest/v1/projects.serviceAccounts/generateIdToken): non-interactive token issuance with audience and email claims.
-- [GCS credential access boundaries](https://docs.cloud.google.com/iam/docs/downscoping-short-lived-credentials), [soft delete](https://docs.cloud.google.com/storage/docs/soft-delete) and [lifecycle processing](https://docs.cloud.google.com/storage/docs/lifecycle): handoff isolation and effective deletion behavior.
+- [Superadmin impersonation minting](https://github.com/foxglove/app/blob/fde9444416d7b4479a15337946170fec3ff4d507/packages/api/src/routes/internal/superadmin/impersonate.ts): the impersonation path that is not selected and the authentication-mode distinction.
 
 ## References
 
