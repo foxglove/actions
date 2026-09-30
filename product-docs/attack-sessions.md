@@ -56,6 +56,25 @@ Claim the authorized attempt before minting. Duplicate or concurrent requests ca
 
 Keep the link out of persistent storage, request/response logs, traces, caches and retained reports. No temporary GCS login bucket is part of this contract. Secret-free attempt and cleanup records remain durable. The harness receives only the test link/session and its private local files, not issuer, status-service or evidence-storage credentials.
 
+### Dispatch and closure use durable evidence
+
+The issuer stores one durable guard for each authorized attempt. Its private fields are `closed`, `dispatchClaimed` and `writerClaimed`. All start as `false` and can change only to `true`. Guard updates are atomic, durable compare-and-set operations shared by all issuer instances. A missing record or an uncertain write is not proof of a `false` field. Never recreate or reset a missing guard to resume an attempt.
+
+Before the app call, persist the issuance write-ahead record, then atomically claim dispatch only if `closed=false` and `dispatchClaimed=false`. Only the worker that receives confirmed success may send the app call, once. A failed or uncertain claim must not send it. Recovery cannot reuse a recorded claim, even if the worker might have crashed before the call.
+
+Before starting the credential writer, persist the creation result and delivery preparation. Then atomically claim the writer only if `closed=false`, `dispatchClaimed=true` and `writerClaimed=false`. The same one-use and uncertain-result rules apply.
+
+Closure atomically sets `closed=true` while retaining both claim fields. It prevents new claims; it does not prove that previously claimed operations never ran. Such operations can still be in flight. Cleanup must close their handlers and writers, or use qualified termination evidence, before it reports completion. A timeout or restart cannot clear a claim.
+
+| Durable evidence after closure                 | Permitted conclusion                                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `dispatchClaimed=false`, `writerClaimed=false` | No app dispatch was permitted; cleanup may be `not_created`                          |
+| `dispatchClaimed=true`, `writerClaimed=false`  | The app call may have occurred; the credential writer never started                  |
+| `dispatchClaimed=true`, `writerClaimed=true`   | Both operations may have occurred; require their independent result/cleanup evidence |
+| Guard unavailable or closure unconfirmed       | No guard-based absence claim is permitted                                            |
+
+Only the first row is guard-confirmed no dispatch. A correlated app rejection can separately prove no token creation. A persisted claim without a completion record remains uncertain; absence of a completion record is not absence of dispatch. `writerClaimed=true` cannot coexist with `dispatchClaimed=false`.
+
 ### The ready worker logs in immediately
 
 The ready worker redeems the fresh link once and keeps the resulting cookie in this attempt's cookie jar. Preserve the application's HttpOnly, domain, path and security behavior. Erase the run-local link after use.
@@ -108,15 +127,15 @@ The same private attempt record has two separate observation fields. `issuance` 
 | `delivery` | `sent`                     | The response writer reports successful completion; this does not prove runner receipt                                                    |
 | `delivery` | `unknown`                  | The credential response may have started, but writer completion is not confirmed; includes partial writes and missing completion records |
 
-Create the record with `issuance=not_requested`, `delivery=not_sent` and cleanup `pending`. Persist `issuance=unknown` before the app call can start. The attempt guard then permits dispatch only while the attempt remains open. Update issuance only from a correlated app result.
+Create the record with `issuance=not_requested`, `delivery=not_sent` and cleanup `pending`. Persist `issuance=unknown` before the app call can start. The durable dispatch claim must then succeed before the app call. Update issuance only from a correlated app result.
 
-After the app confirms creation, persist `issuance=created`. Only after that write succeeds, persist `delivery=unknown`. Only after both writes succeed and the attempt guard permits writer start may the credential response begin. Set `delivery=sent` only after writer success. A failed or uncertain prerequisite write blocks the next external operation and ends the attempt. In particular, failure to persist `issuance=created` prevents both the delivery preparation and the credential response.
+After the app confirms creation, persist `issuance=created`. Only after that write succeeds, persist `delivery=unknown`. Only after both writes and the durable writer claim succeed may the credential response begin. Set `delivery=sent` only after writer success. A failed or uncertain prerequisite write blocks the next external operation and ends the attempt. In particular, failure to persist `issuance=created` prevents both the delivery preparation and the credential response.
 
 A failed write does not prove that the storage change was absent. Retain the last observed durable values; readback may show the attempted value. Do not report an unconfirmed write as successful. This order prevents a crash from leaving a false `not_requested` or `not_sent` observation. Missing completion evidence is not a reason to repeat minting or credential delivery.
 
 For confirmed pre-mint rejection, record `issuance=rejected_before_creation`, `delivery=not_sent` and cleanup `not_created`. For app timeout, keep `issuance=unknown` and `delivery=not_sent`; cleanup follows its own action evidence. After `issuance=created` is persisted, delivery or cleanup failure cannot change it. If that write fails, the durable observation can remain `unknown` despite the issuer having received a creation result. Neither case permits `not_created`: the app call occurred and the token was created. A sent response can be lost before runner receipt. A partial response can be closed and cleaned up while delivery remains `unknown`. Missing issuer records remain unavailable, not default-valued observations.
 
-If cancellation, termination or a required record-write failure ends the attempt before the app call starts, first close the attempt against further work. When the attempt guard confirms that no app dispatch occurred, record cleanup `not_created`. Retain the last observed issuance value: `not_requested` before the write-ahead record, or `unknown` after it. Do not wait for credential cleanup or report a credential-cleanup failure for this case. A live `not_requested` value is only a snapshot: closing the attempt must prevent concurrent dispatch and late callbacks before it supports `not_created`.
+If cancellation, termination or a required record-write failure ends the attempt before the app call starts, first close the attempt against further work. When the attempt guard confirms that no app dispatch occurred, record cleanup `not_created`. Retain the last observed issuance value: `not_requested` before the write-ahead record, or `unknown` after it. Do not wait for credential cleanup or report a credential-cleanup failure for this case. A live `not_requested` value is only a snapshot. Guard-based `not_created` requires confirmed durable closure with `dispatchClaimed=false`. A recorded claim remains uncertain after a crash, even if no app result exists.
 
 Before the credential response starts, a prerequisite record-write failure returns a redacted attempt failure when the response channel is available. The runner fails preflight and informs the scheduler; no response follows the same path by the deadline. If the cleanup-result write also fails, do not claim that `not_created` was stored. Retry that status write under the existing bounded operational policy, without starting mint or delivery. The runner uses the last observed cleanup state, or `unknown` if unavailable. Standard operations handle the record-write failure.
 
@@ -130,7 +149,7 @@ A failure to store `delivery=sent` after the credential response completes is an
 
 Before writing `cleared`, the issuer records these attempt-bound results:
 
-1. The app-response handler and credential response writer are closed against further work. Record whether each completed, was aborted/closed, or never started. A never-started result requires a closed attempt that prevents later start. Late callbacks cannot restart handling or retain a new link. A completed write does not prove that the runner received it.
+1. The app-response handler and credential response writer are closed against further work. Record whether each completed, was aborted/closed, or never started. Guard evidence for a never-started writer requires durable closure with `writerClaimed=false`. A claimed operation instead needs completion, abort/closure or qualified termination evidence; closure alone is insufficient. Late callbacks cannot restart handling or retain a new link. A completed write does not prove that the runner received it.
 2. The issuer released its owned references to the app response, link and response buffers. Its cleanup routine reports completion without recording their contents.
 3. The attempt used the qualified app/issuer/proxy policy revision, with body persistence, credential caching, body logging/tracing and credential-bearing crash dumps disabled. Missing or mismatched configuration prevents `cleared`.
 
@@ -163,15 +182,16 @@ sequenceDiagram
     S->>R: Bootstrap trusted identity and cleanup reference
     R->>B: Prepare browser
     R->>I: Authenticated readiness request for authorized attempt
-    I->>I: Claim once, record not_requested and not_sent, cleanup pending
+    I->>I: Initialize durable attempt guard; record not_requested and not_sent, cleanup pending
     I->>I: Attempt issuance unknown write before app dispatch
-    alt Required write fails or cancellation wins guard before dispatch
+    I->>I: Claim dispatch durably after issuance write succeeds
+    alt Prerequisite or claim is unconfirmed, or closure prevents claim
         I->>I: Close attempt against dispatch and late callbacks
-        I->>I: Record not_created from guard-confirmed no dispatch; retain observed issuance
+        I->>I: Record not_created only for closed guard with no dispatch claim; otherwise reconcile actions
         I-->>R: Redacted attempt failure when channel is available
         R-->>S: Fail preflight and end attempt, or fail by deadline if no response
         S->>I: Terminate authorization
-    else Required writes succeed and dispatch wins the open-attempt guard
+    else Required writes and one-use dispatch claim succeed
         I->>A: Request restricted ordinary test-user link
         alt App confirms rejection before token creation
             A-->>I: Confirmed pre-mint failure
@@ -187,12 +207,13 @@ sequenceDiagram
         else App confirms token creation
             A-->>I: Fresh registered ordinary link
             I->>I: Persist issuance created; only on success prepare delivery unknown
-            alt Either required write fails or cancellation wins before writer start
-                I->>I: Close attempt; handler closed and writer never started; run cleanup actions
+            I->>I: Claim writer durably only after both writes succeed
+            alt Prerequisite or writer claim is unconfirmed, or closure prevents claim
+                I->>I: Close attempt; prove handler and writer closure independently; run cleanup actions
                 I-->>R: Redacted attempt failure when channel is available
                 R-->>S: Fail preflight by deadline, no attacks
                 S->>I: Terminate attempt, no remint
-            else Both writes succeed and writer start wins the open-attempt guard
+            else Both writes and one-use writer claim succeed
                 I-->>R: Private response with link and attempt binding
                 I->>I: Record writer outcome; on write failure retain observed value, no second response
                 I->>I: Run cleanup actions; reconcile status under bounded policy
