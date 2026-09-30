@@ -63,7 +63,7 @@ The private summary records the failure phase, affected surface, classification/
 
 Each run records its unique ID, authorized environment/scope, pinned harness release or commit, provider/model and supported effort settings, attack-path ID, instructions Git revision and committed-content hash, money budget, time limit, responsible operator, edge-policy reference and access-failure observations, protected evidence destination/retention policy, coverage, stop reason, and evidence references. Secrets are excluded. The hash covers committed instructions, never a secret-bearing runtime copy.
 
-Authentication provenance records the adapter-verified session mode and its coverage limitations. The ordinary magic link is single-use and expires 15 minutes after issuance, so there is no stored login-handoff object and no per-attempt cleanup record to reference. See [Attack sessions](attack-sessions.md#credentials-remain-ephemeral) for the credential-lifetime contract.
+Authentication provenance records the adapter-verified session mode and its coverage limitations. The ordinary magic link is single-use and expires 15 minutes after issuance, so there is no live credential to store; the link is delivered by email, so there is no stored login-handoff object or per-attempt cleanup record to reference. See [Attack sessions](attack-sessions.md#credentials-remain-ephemeral) for the credential-lifetime contract.
 
 The adapter exposes observations in a harness-independent form and reports actual limit enforcement and usage availability. The runner stops new work before configured limits and reserves time to preserve evidence. A prompt telling a model to stay under budget is not enforcement.
 
