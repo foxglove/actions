@@ -12,7 +12,7 @@ The runner provides the authorized party targets/test identity, resolved limits,
 
 REPLACE_WITH_FRESH_MAGIC_LINK
 
-The runner prepares the sandbox, then retrieves this run's short-lived link from a private handoff supplied by a separate company-owned issuer. Attack Runner has no superadmin access. Do not request issuer or storage credentials, invent a mint endpoint, use a test-only retrieval shortcut on party, or ask a human to log in on a different machine as a substitute. If required inputs are unavailable, report preflight failure.
+The runner prepares the sandbox, then reads this run's short-lived ordinary magic link from a company-owned mailbox, to which a company issuer function emails the link. Attack Runner has no superadmin access. Do not request issuer, mailbox-administration or storage credentials, invent a mint endpoint, use a test-only retrieval shortcut on party, or ask a human to log in on a different machine as a substitute. If required inputs are unavailable, report preflight failure.
 
 The harness adapter must pass this file's resolved contents to the worker. The run record identifies the attack path, committed Git revision/content hash, and resolved harness/model configuration without exposing credentials.
 
