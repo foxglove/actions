@@ -100,7 +100,7 @@ stateDiagram-v2
     Assessing --> Stopped: Session check fails or validity unknown
     Assessing --> AccessBlocked: Edge challenge or access failure
     AccessBlocked --> Reconciling: Stop work, preserve prior positives and incomplete coverage
-    Assessing --> Stopped: Session loss, interruption, or assessment finishes
+    Assessing --> Stopped: Interruption or assessment finishes
     Assessing --> Stopped: Stop before spend or time limit
     Stopped --> Reconciling: Preserve completed evidence and unfinished coverage
     Reconciling --> Delivering: Per-exploit decisions, with invalid items kept unresolved

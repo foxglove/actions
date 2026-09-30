@@ -18,7 +18,7 @@ Authentication needs no employee login, personal mailbox, copied cookie, or manu
 
 Product approver: Kumar. Approval date: 2026-09-30 UTC. Approved decision revision: `AR-PM-2026-09-30-r3`, comprising reviewed packet `AR-PM-2026-09-29-r2` and the explicit amendments for restricted superadmin backend minting, direct response delivery and a 15-minute maximum login wait. The table below records the selected outcomes and coverage limits.
 
-The approved transport replaces PR #51's temporary GCS login handoff. PR #51 remains the authentication-contract parent at `1cf12d88f128a463ee95fb26f18f06ab6ff8a1e4`. Its authority separation, identity/mode checks, unknown outcomes and evidence preservation remain required. Private GCS for redacted assessment evidence is unchanged.
+Delivery uses a private request-response channel. No temporary GCS login object is part of this contract. Authority separation, identity/mode checks, unknown outcomes and evidence preservation remain required. Private GCS for redacted assessment evidence is unchanged.
 
 | Decision             | Selected outcome                                                                                                                                                          | Accountable owner                  | Accepted coverage/risk                                                                                                                         | Qualification evidence                                                                                              | Blocks engineering?                                 |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
@@ -60,7 +60,7 @@ Keep the link out of persistent storage, request/response logs, traces, caches a
 
 The ready worker redeems the fresh link once and keeps the resulting cookie in this attempt's cookie jar. Preserve the application's HttpOnly, domain, path and security behavior. Erase the run-local link after use.
 
-The preflight deadline is the earlier of 15 minutes after the runner sends its first readiness request and the original job deadline. Retries cannot reset either clock. The link has its own 15-minute lifetime from creation. Foundations approves a minimum remaining lifetime sufficient for bounded redemption plus clock allowance. Missing configuration or insufficient time fails preflight. Complete identity and mode validation within the preflight deadline even if the link was redeemed earlier.
+The preflight deadline is the earlier of 15 minutes after the runner sends its first readiness request and the original job deadline. Duplicate readiness requests cannot reset either clock. The link has its own 15-minute lifetime from creation. Foundations approves a minimum remaining lifetime sufficient for bounded redemption plus clock allowance. Missing configuration or insufficient time fails preflight. Complete identity and mode validation within the preflight deadline even if the link was redeemed earlier.
 
 Missing, stale, cancelled, wrongly bound or unexpected-mode responses fail preflight. Uncertain redemption ends the attempt. There is one login attempt per job and no fallback to a saved cookie, personal credential, impersonation or anonymous assessment.
 
@@ -92,9 +92,17 @@ Classify confirmed challenges/blocks as `EDGE_CONTROL_BLOCKED`. Insufficient evi
 
 Live links exist only in the issuer/app response path and the private run context. Cookies and authentication headers stay in the contexts that need them. No credential values enter committed files, evidence artifacts, tickets, Slack, logs or traces.
 
-The issuer clears its link buffers promptly after responding and no later than 15 minutes after the earliest cleanup trigger: login acknowledgment, cancellation/termination or link expiry. Cleanup also covers crashes and missing acknowledgments without runner cooperation. Foundations qualifies the app/issuer/proxy path so buffering or recovery facilities cannot retain recoverable links. The runner separately clears its link after use and its other run-local credentials on termination. Issuer cleanup does not certify runner cleanup or revoke the established session.
+The issuer releases its references to link buffers promptly after responding and no later than 15 minutes after the earliest cleanup trigger: login acknowledgment, cancellation/termination or link expiry. Cleanup also covers crashes and missing acknowledgments without runner cooperation. Foundations qualifies the app/issuer/proxy policy: no persistent response bodies, credential caches, body logging/tracing or credential-bearing crash dumps. Qualification uses configuration inspection and controlled synthetic-token tests; it does not claim to scan all process memory during each run. The runner separately clears its link after use and its other run-local credentials on termination. Issuer cleanup does not certify runner cleanup or revoke the established session.
 
-The issuer creates a private, credential-free cleanup record before minting. Scheduler and issuer derive its stable reference from the configured status namespace and `attempts/{runId}/{attemptId}/cleanup`, encoding IDs as individual path segments. Bootstrap supplies that reference before readiness. Record scope, update time and sanitized reason with status `pending`, `cleared`, `failed` or `not_created`. `cleared` requires observable confirmation that issuer-controlled credential material is no longer retained under the qualified process/proxy policy. It does not claim physical memory erasure everywhere. `not_created` requires confirmed failure before token creation. Record issuance and delivery observations separately from cleanup. An uncertain mint or response does not prove `not_created` and does not override observed cleanup. If cleanup cannot be confirmed, it stays `pending` during bounded reconciliation and becomes `failed` at its deadline, retaining the uncertainty reason. Do not remint to resolve it. Later confirmed cleanup updates the record while preserving failure history.
+The issuer creates a private, credential-free cleanup record before minting. Scheduler and issuer derive its stable reference from the configured status namespace and `attempts/{runId}/{attemptId}/cleanup`, encoding IDs as individual path segments. Bootstrap supplies that reference before readiness. Record scope, update time and sanitized reason with status `pending`, `cleared`, `failed` or `not_created`. `cleared` means the issuer completed the cleanup actions below. It does not prove that no credential bytes remain in process memory. `not_created` requires confirmed failure before token creation. Record issuance and delivery observations separately from cleanup. An uncertain mint or response does not prove `not_created` and does not override observed cleanup. If cleanup cannot be confirmed, it stays `pending` during bounded reconciliation and becomes `failed` at its deadline, retaining the uncertainty reason. Do not remint to resolve it. Later confirmed cleanup updates the record while preserving failure history.
+
+Before writing `cleared`, the issuer records these attempt-bound results:
+
+1. The response writer completed or was aborted and closed. A completed write does not prove that the runner received it.
+2. The issuer released its owned references to the app response, link and response buffers. Its cleanup routine reports completion without recording their contents.
+3. The attempt used the qualified app/issuer/proxy policy revision, with body persistence, credential caching, body logging/tracing and credential-bearing crash dumps disabled. Missing or mismatched configuration prevents `cleared`.
+
+The record names the action results, policy revision and observation time. Qualification verifies these actions with instrumented synthetic-token fixtures, including fault injection. Per-run status records the actions; it does not repeat a global search for credential bytes. After a crash, a missing cleanup acknowledgment remains unknown. A supervisor may supply equivalent termination evidence only if qualification proves that the identified runtime owned all resources covered by the missing actions. Otherwise cleanup remains `pending`, then `failed` at the deadline. Token expiry is still enforced independently.
 
 The runner can read only its own redacted status. Deny listing, other-attempt access and every status write/delete, including inherited grants. The harness has no status credentials. Acknowledgments and cancellation identify only the authorized attempt and cannot change the cleanup target. Delayed responses cannot restart a cancelled or expired attempt.
 
@@ -125,31 +133,44 @@ sequenceDiagram
     R->>I: Authenticated readiness request for authorized attempt
     I->>I: Claim once and create pending cleanup record
     I->>A: Request restricted ordinary test-user link
-    A-->>I: Fresh registered ordinary link
-    I-->>R: Private response with link and attempt binding
-    I->>I: Clear response material under cleanup policy
-    alt Response valid and enough time remains
-        R->>B: Redeem once
-        B-->>R: Application session evidence
-        R->>R: Verify identity and actual ordinary mode
-        alt Verification passes before deadline
-            R-->>I: Authenticated login acknowledgment
-            R->>B: Release attack work
-            B->>B: Same session, checks every 300 seconds
-        else Failed or uncertain login or verification
-            R-->>S: Fail attempt, no attack work
+    alt App confirms rejection before token creation
+        A-->>I: Confirmed pre-mint failure
+        I->>I: Record not_created with sanitized reason
+        I-->>R: Redacted attempt failure
+        R-->>S: Fail preflight and end attempt, no attacks
+        S->>I: Terminate attempt
+    else Mint outcome uncertain, including timeout or generic error
+        I->>I: Record unknown issuance and reconcile cleanup
+        I-->>R: Redacted unknown outcome
+        R-->>S: Fail preflight and end attempt, no attacks
+        S->>I: Terminate attempt, no remint
+    else App confirms token creation
+        A-->>I: Fresh registered ordinary link
+        I-->>R: Private response with link and attempt binding
+        I->>I: Complete and record cleanup actions
+        alt Response valid and enough time remains
+            R->>B: Redeem once
+            B-->>R: Application session evidence
+            R->>R: Verify identity and actual ordinary mode
+            alt Verification passes before deadline
+                R-->>I: Authenticated login acknowledgment
+                R->>B: Release attack work
+                B->>B: Same session, checks every 300 seconds
+            else Failed or uncertain login or verification
+                R-->>S: Fail attempt, no attack work
+                S->>I: Terminate attempt
+            end
+        else Missing, expired, cancelled or mismatched response
+            R-->>S: Fail attempt, no retry mint or login
             S->>I: Terminate attempt
         end
-    else Missing, expired, cancelled or mismatched response
-        R-->>S: Fail attempt, no retry mint or login
-        S->>I: Terminate attempt
     end
     Note over I,A: No runner superadmin or signing authority
     Note over I,R: Issuer cleanup covers lost responses and acknowledgments
     Note over R,B: Stop on session failure; preserve prior exploit evidence
 ```
 
-Scheduler authorization alone does not mint. The issuer waits for authenticated readiness. Cancellation reaches both issuer and runner; expiry covers lost cancellation messages. The runner can terminate without waiting for issuer cleanup. A response sent does not prove receipt, and an acknowledgment sent does not prove cleanup.
+Scheduler authorization alone does not mint. The issuer waits for authenticated readiness. If the app confirms failure before creating a token, the issuer records `not_created` and returns a redacted failure. A timeout or generic error does not establish that no token was created: the issuer records unknown issuance and reconciles cleanup, with no remint. The runner emits `PREFLIGHT_FAILED`, ends the attempt and informs the scheduler; the scheduler terminates authorization. If no issuer response arrives, the runner takes the same failure path by its deadline. Issuer cleanup continues independently. A post-mint error cannot produce `not_created`. Cancellation reaches both issuer and runner; expiry covers lost cancellation messages. The runner can terminate without waiting for issuer cleanup. A response sent does not prove receipt, and an acknowledgment sent does not prove cleanup.
 
 ## Product dimensions
 
