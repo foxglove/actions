@@ -92,7 +92,8 @@ stateDiagram-v2
     Configuring --> Ready: Validate profile, operator, private storage, and edge access
     Configuring --> FailedBeforeAssessment: Invalid settings or private storage unavailable
     Configuring --> AccessBlocked: Edge challenge or access failure
-    Ready --> SigningIn: Separate issuer returns private response after readiness
+    Ready --> SigningIn: Send readiness and start login deadline
+    SigningIn --> SigningIn: Wait for private issuer response within deadline
     SigningIn --> Assessing: Redeem once, verify identity and ordinary mode before deadline
     SigningIn --> FailedBeforeAssessment: Issuance, login, identity or mode fails; deadline expires
     SigningIn --> AccessBlocked: Edge challenge or access failure
