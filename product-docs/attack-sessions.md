@@ -52,15 +52,21 @@ Authenticate the issuer's app call with a company-owned identity and a restricte
 
 The issuer returns the link over the authenticated request-response channel to the independently authorized runner. The response binds schema version, run, attempt, approved profile, expected member/org, declared ordinary mode, allowed sign-in URL and issuance/expiry times. The adapter checks these against trusted bootstrap configuration before redemption. The payload cannot change the expected identity or target.
 
-Claim the authorized attempt before minting. Duplicate or concurrent requests cannot cause additional minting or parallel redemption. Do not retry a credential response or a mint operation after an uncertain outcome. Return only redacted attempt state for duplicates; end a lost-response attempt visibly. A later test is a new authorized job, not a restart of this job. Record uncertain mint or delivery as unknown, not as proof that no link exists.
+Claim dispatch on the durable attempt guard before minting. Duplicate or concurrent requests cannot cause additional minting or parallel redemption. Do not retry a credential response or a mint operation after an uncertain outcome. Return only redacted attempt state for duplicates; end a lost-response attempt visibly. A later test is a new authorized job, not a restart of this job. Record uncertain mint or delivery as unknown, not as proof that no link exists.
 
 Keep the link out of persistent storage, request/response logs, traces, caches and retained reports. No temporary GCS login bucket is part of this contract. Secret-free attempt and cleanup records remain durable. The harness receives only the test link/session and its private local files, not issuer, status-service or evidence-storage credentials.
 
 ### Dispatch and closure use durable evidence
 
-The issuer stores one durable guard for each authorized attempt. Its private fields are `closed`, `dispatchClaimed` and `writerClaimed`. All start as `false` and can change only to `true`. Guard updates are atomic, durable compare-and-set operations shared by all issuer instances. A missing record or an uncertain write is not proof of a `false` field. Never recreate or reset a missing guard to resume an attempt.
+Before runner bootstrap, the issuer creates the attempt authorization and its durable guard in one atomic create-if-absent write. This write stores the fixed run/attempt/profile binding, original job deadline, and initial observation values. Its guard fields are `closed=false`, `dispatchClaimed=false` and `writerClaimed=false`; observations are `issuance=not_requested`, `delivery=not_sent` and cleanup `pending`.
 
-Before the app call, persist the issuance write-ahead record, then atomically claim dispatch only if `closed=false` and `dispatchClaimed=false`. Only the worker that receives confirmed success may send the app call, once. A failed or uncertain claim must not send it. Recovery cannot reuse a recorded claim, even if the worker might have crashed before the call.
+Authorization must have a durable order relative to job cancellation and expiry. If cancellation or expiry wins, reject authorization. If authorization wins, cancellation or expiry closes the existing guard. The scheduler releases bootstrap only after authorization is confirmed. An uncertain authorization result requires readback of the same attempt; it cannot release bootstrap or authorize another attempt.
+
+Duplicate authorization reads the existing record and rejects conflicting bindings. It cannot reset fields, observations or deadlines. Readiness, cancellation and recovery only read or update the existing guard; they never initialize one. A missing guard after authorization is lost evidence, not a new attempt. Fail closed and use existing operational handling; never recreate it to resume work.
+
+Guard fields can change only from `false` to `true`. Updates are atomic, durable compare-and-set operations shared by all issuer instances. A missing record or an uncertain write is not proof of a `false` field.
+
+Before the app call, persist the issuance write-ahead record with an atomic conditional update. At update time, require `closed=false`, `dispatchClaimed=false` and `issuance=not_requested`; set only `issuance=unknown`. A stale readiness snapshot cannot authorize this write. A duplicate whose condition fails returns redacted state without rewriting observations or closing another handler’s active attempt. Storage failure or an uncertain write result still ends the attempt under the prerequisite-failure rule. After a confirmed write, atomically claim dispatch only if `closed=false` and `dispatchClaimed=false`. Only the worker that receives confirmed success may send the app call, once. A failed or uncertain claim must not send it. Recovery cannot reuse a recorded claim, even if the worker might have crashed before the call.
 
 Before starting the credential writer, persist the creation result and delivery preparation. Then atomically claim the writer only if `closed=false`, `dispatchClaimed=true` and `writerClaimed=false`. The same one-use and uncertain-result rules apply.
 
@@ -127,7 +133,7 @@ The same private attempt record has two separate observation fields. `issuance` 
 | `delivery` | `sent`                     | The response writer reports successful completion; this does not prove runner receipt                                                    |
 | `delivery` | `unknown`                  | The credential response may have started, but writer completion is not confirmed; includes partial writes and missing completion records |
 
-Create the record with `issuance=not_requested`, `delivery=not_sent` and cleanup `pending`. Persist `issuance=unknown` before the app call can start. The durable dispatch claim must then succeed before the app call. Update issuance only from a correlated app result.
+Initialize these observations only in the authorization write described above. Readiness and duplicate authorization cannot reset them. Persist `issuance=unknown` before the app call can start. The durable dispatch claim must then succeed before the app call. Update issuance only from a correlated app result.
 
 After the app confirms creation, persist `issuance=created`. Only after that write succeeds, persist `delivery=unknown`. Only after both writes and the durable writer claim succeed may the credential response begin. Set `delivery=sent` only after writer success. A failed or uncertain prerequisite write blocks the next external operation and ends the attempt. In particular, failure to persist `issuance=created` prevents both the delivery preparation and the credential response.
 
@@ -179,11 +185,14 @@ sequenceDiagram
     participant A as App backend
     participant B as Prepared browser
     S->>I: Authorize fixed run, attempt and profile with original job deadline
-    S->>R: Bootstrap trusted identity and cleanup reference
+    I->>I: Atomically create authorization, guard and initial observations once
+    I-->>S: Confirm authorization; otherwise withhold bootstrap
+    S->>R: Bootstrap trusted identity and cleanup reference after confirmation
     R->>B: Prepare browser
     R->>I: Authenticated readiness request for authorized attempt
-    I->>I: Initialize durable attempt guard; record not_requested and not_sent, cleanup pending
-    I->>I: Attempt issuance unknown write before app dispatch
+    I->>I: Read existing authorization and guard; never initialize from readiness
+    I->>I: Conditional issuance unknown write while open, unclaimed and not_requested
+    Note over I: Duplicate condition failure returns redacted state without resetting observations
     I->>I: Claim dispatch durably after issuance write succeeds
     alt Prerequisite or claim is unconfirmed, or closure prevents claim
         I->>I: Close attempt against dispatch and late callbacks
@@ -240,6 +249,8 @@ sequenceDiagram
     Note over I,R: Issuer cleanup covers lost responses and acknowledgments
     Note over R,B: Stop on session failure; preserve prior exploit evidence
 ```
+
+Cancellation or job expiry before readiness closes the guard with `closed=true`, `dispatchClaimed=false` and `writerClaimed=false`. Record cleanup `not_created`; no credential cleanup actions are required. Late readiness cannot reopen the guard or cause minting. Authorization rejected before creation has no authorized attempt to clean up.
 
 Scheduler authorization alone does not mint. The issuer waits for authenticated readiness. If the app confirms failure before creating a token, the issuer records `issuance=rejected_before_creation`, `delivery=not_sent` and cleanup `not_created`, then returns a redacted failure. A timeout or generic error does not establish that no token was created: the issuer records `issuance=unknown`, leaves `delivery=not_sent` and reconciles cleanup, with no remint. The runner emits `PREFLIGHT_FAILED`, ends the attempt and informs the scheduler; the scheduler terminates authorization. If no issuer response arrives, the runner takes the same failure path by its deadline. Issuer cleanup continues independently. A post-mint error cannot produce `not_created`. Send cancellation to both issuer and runner. The issuer enforces known link expiry and the persisted job deadline without a cancellation message. Job-deadline termination also covers attempts that never created a token. The runner can terminate without waiting for issuer cleanup. A response sent does not prove receipt, and an acknowledgment sent does not prove cleanup.
 
