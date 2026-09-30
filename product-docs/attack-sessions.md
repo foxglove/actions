@@ -96,6 +96,22 @@ The issuer releases its references to link buffers promptly after responding and
 
 The issuer creates a private, credential-free cleanup record before minting. Scheduler and issuer derive its stable reference from the configured status namespace and `attempts/{runId}/{attemptId}/cleanup`, encoding IDs as individual path segments. Bootstrap supplies that reference before readiness. Record scope, update time and sanitized reason with status `pending`, `cleared`, `failed` or `not_created`. `cleared` means the issuer completed the cleanup actions below. It does not prove that no credential bytes remain in process memory. `not_created` requires confirmed failure before token creation. Record issuance and delivery observations separately from cleanup. An uncertain mint or response does not prove `not_created` and does not override observed cleanup. If cleanup cannot be confirmed, it stays `pending` during bounded reconciliation and becomes `failed` at its deadline, retaining the uncertainty reason. Do not remint to resolve it. Later confirmed cleanup updates the record while preserving failure history.
 
+The same private attempt record has two separate observation fields. `issuance` describes the app mint operation. `delivery` describes the issuer's credential response, not its redacted error response. Neither field is inferred from cleanup status.
+
+| Field      | Value                      | Required observation                                                                                                                     |
+| ---------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `issuance` | `not_requested`            | The issuer has not started the app mint call                                                                                             |
+| `issuance` | `rejected_before_creation` | A correlated app result confirms that this attempt failed before creating a token                                                        |
+| `issuance` | `created`                  | A correlated app result confirms creation of the registered token                                                                        |
+| `issuance` | `unknown`                  | The app call may have started, but its creation result is not known; includes in-flight calls, timeout and generic error                 |
+| `delivery` | `not_sent`                 | The issuer has not started the credential response                                                                                       |
+| `delivery` | `sent`                     | The response writer reports successful completion; this does not prove runner receipt                                                    |
+| `delivery` | `unknown`                  | The credential response may have started, but writer completion is not confirmed; includes partial writes and missing completion records |
+
+Create the record with `issuance=not_requested`, `delivery=not_sent` and cleanup `pending`. Persist `issuance=unknown` before the app call can start, then update it only from the correlated app result. Persist `delivery=unknown` before the credential response can start, then set `sent` only after writer success. If a required record write fails, do not start that external operation. This order prevents a crash from leaving a false `not_requested` or `not_sent` observation. A missing completion record stays `unknown`; it is not a reason to repeat the operation.
+
+For confirmed pre-mint rejection, record `issuance=rejected_before_creation`, `delivery=not_sent` and cleanup `not_created`. For app timeout, keep `issuance=unknown` and `delivery=not_sent`; cleanup follows its own action evidence. After confirmed creation, issuance stays `created` even if delivery or cleanup later fails. A sent response can be lost before runner receipt. A partial response can be closed and cleaned up while delivery remains `unknown`. Missing issuer records remain unavailable, not default-valued observations.
+
 Before writing `cleared`, the issuer records these attempt-bound results:
 
 1. The response writer completed or was aborted and closed. A completed write does not prove that the runner received it.
@@ -131,23 +147,25 @@ sequenceDiagram
     S->>R: Bootstrap trusted identity and cleanup reference
     R->>B: Prepare browser
     R->>I: Authenticated readiness request for authorized attempt
-    I->>I: Claim once and create pending cleanup record
+    I->>I: Claim once, record not_requested and not_sent, cleanup pending
+    I->>I: Persist issuance unknown before app call
     I->>A: Request restricted ordinary test-user link
     alt App confirms rejection before token creation
         A-->>I: Confirmed pre-mint failure
-        I->>I: Record not_created with sanitized reason
+        I->>I: Record rejected_before_creation, not_sent, cleanup not_created
         I-->>R: Redacted attempt failure
         R-->>S: Fail preflight and end attempt, no attacks
         S->>I: Terminate attempt
     else Mint outcome uncertain, including timeout or generic error
-        I->>I: Record unknown issuance and reconcile cleanup
+        I->>I: Keep issuance unknown and delivery not_sent; reconcile cleanup
         I-->>R: Redacted unknown outcome
         R-->>S: Fail preflight and end attempt, no attacks
         S->>I: Terminate attempt, no remint
     else App confirms token creation
         A-->>I: Fresh registered ordinary link
+        I->>I: Record issuance created and delivery unknown
         I-->>R: Private response with link and attempt binding
-        I->>I: Complete and record cleanup actions
+        I->>I: Record writer outcome, then cleanup actions
         alt Response valid and enough time remains
             R->>B: Redeem once
             B-->>R: Application session evidence
@@ -170,7 +188,7 @@ sequenceDiagram
     Note over R,B: Stop on session failure; preserve prior exploit evidence
 ```
 
-Scheduler authorization alone does not mint. The issuer waits for authenticated readiness. If the app confirms failure before creating a token, the issuer records `not_created` and returns a redacted failure. A timeout or generic error does not establish that no token was created: the issuer records unknown issuance and reconciles cleanup, with no remint. The runner emits `PREFLIGHT_FAILED`, ends the attempt and informs the scheduler; the scheduler terminates authorization. If no issuer response arrives, the runner takes the same failure path by its deadline. Issuer cleanup continues independently. A post-mint error cannot produce `not_created`. Cancellation reaches both issuer and runner; expiry covers lost cancellation messages. The runner can terminate without waiting for issuer cleanup. A response sent does not prove receipt, and an acknowledgment sent does not prove cleanup.
+Scheduler authorization alone does not mint. The issuer waits for authenticated readiness. If the app confirms failure before creating a token, the issuer records `not_created` and returns a redacted failure. A timeout or generic error does not establish that no token was created: the issuer records `issuance=unknown`, leaves `delivery=not_sent` and reconciles cleanup, with no remint. The runner emits `PREFLIGHT_FAILED`, ends the attempt and informs the scheduler; the scheduler terminates authorization. If no issuer response arrives, the runner takes the same failure path by its deadline. Issuer cleanup continues independently. A post-mint error cannot produce `not_created`. Cancellation reaches both issuer and runner; expiry covers lost cancellation messages. The runner can terminate without waiting for issuer cleanup. A response sent does not prove receipt, and an acknowledgment sent does not prove cleanup.
 
 ## Product dimensions
 
