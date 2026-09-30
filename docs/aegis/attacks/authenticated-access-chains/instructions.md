@@ -12,7 +12,7 @@ The runner provides the authorized party targets/test identity, resolved limits,
 
 REPLACE_WITH_FRESH_MAGIC_LINK
 
-The runner prepares the sandbox, then retrieves this run's short-lived link from a private handoff supplied by a separate company-owned issuer. Attack Runner has no superadmin access. Do not request issuer or storage credentials, invent a mint endpoint, use a test-only retrieval shortcut on party, or ask a human to log in on a different machine as a substitute. If required inputs are unavailable, report preflight failure.
+The runner prepares the sandbox, then receives this attempt's short-lived link in a private authenticated response from the separate Foundations-owned issuer. Attack Runner has no superadmin access. Do not request issuer or storage credentials, invent a mint endpoint, use a test-only retrieval shortcut on party, or ask a human to log in on a different machine as a substitute. If required inputs are unavailable, report preflight failure.
 
 The harness adapter must pass this file's resolved contents to the worker. The run record identifies the attack path, committed Git revision/content hash, and resolved harness/model configuration without exposing credentials.
 
@@ -22,7 +22,7 @@ Open the freshly issued magic link immediately in the prepared sandbox/headless 
 
 Retain the issued session cookie in this run's browser context/cookie jar. Use the application's real session-cookie mechanism, preserving HttpOnly/domain/path/security behavior; the magic-link JWT is not the session credential.
 
-Wait for the runner to report `PREFLIGHT_PASSED` or `PREFLIGHT_FAILED`. Start attack work only after `PREFLIGHT_PASSED`. Stop after `PREFLIGHT_FAILED` and preserve its failure classification. For example, keep `EDGE_CONTROL_BLOCKED` separate from an application login failure. The runner reports failure when login or validation fails or reaches the configured preflight deadline. Do not continue anonymously.
+Wait for the runner to report `PREFLIGHT_PASSED` or `PREFLIGHT_FAILED`. Start attack work only after `PREFLIGHT_PASSED`. Stop after `PREFLIGHT_FAILED` and preserve its failure classification. For example, keep `EDGE_CONTROL_BLOCKED` separate from an application login failure. The runner reports failure when login or validation fails or reaches the earlier of 15 minutes after the first readiness request and the original job deadline. The runner verifies actual ordinary mode as well as identity; a label on the link is insufficient. Do not continue anonymously.
 
 If the approved non-admin session gains more access through an exploit, record that exploit.
 
@@ -32,15 +32,15 @@ Do not log the live magic link, cookie, or authentication headers. Evidence shou
 
 After establishment, all authenticated activity uses the same cookie session. Preserve cookie-jar updates returned by the server; do not replace it with a fresh anonymous browser profile.
 
-The runner/adapter supplies the verified application maintenance operation. Default cadence is every 300 seconds, plus validation before a high-impact chain. This operation must keep the established session usable, not merely record a successful health check. Record successful checks as SESSION_OK without credentials.
+The runner/adapter supplies the verified application maintenance operation. Check every 300 seconds and before a high-impact chain. This operation must keep the established session usable, not merely record a successful health check. Record successful checks as SESSION_OK without credentials. If the verified session lifetime requires a supported refresh during the test, the adapter performs it at 80% of that lifetime. Do not use the 15-minute magic-link lifetime as a session refresh timer.
 
 Do not re-open the original magic link, mint another link to imitate session continuity, clear cookies, sign out, or use Google SSO during this run. A replacement cookie issued by the server as part of normal session maintenance is retained in the same jar.
 
-If maintenance fails or session validity becomes unknown, suspend active assessment while the runner diagnoses within its bounded policy. A confirmed lost/revoked session emits SESSION_LOST_NEED_FRESH_MAGIC_LINK and stops active work. Preserve completed observations and unfinished coverage. A new login requires a separately identified restart and fresh preflight; never silently substitute an anonymous run.
+If a session check fails or validity becomes unknown, stop active assessment for this job. Confirmed loss emits SESSION_LOST_NEED_FRESH_MAGIC_LINK; an unknown cause stays unknown. This diagnostic does not authorize a new login. Preserve completed observations and unfinished coverage. There is one login attempt per job; do not resume attacks, restart login or substitute an anonymous run.
 
 ### Edge-access failures
 
-Use the runner's response classification. A confirmed edge challenge/block emits EDGE_CONTROL_BLOCKED; insufficient attribution emits ACCESS_FAILURE_UNCLASSIFIED. A generic 403/429 is not by itself proof of Cloudflare blocking or application denial. Preserve the phase, affected surface, redacted signal/request identifier and observed counts for the private summary. Suspend work and use only the runner's bounded diagnosis policy; if application reachability remains unavailable, stop with incomplete coverage. Do not evade challenges, change edge policy, repeatedly redeem links or continue anonymously. Preserve completed positive evidence, and never turn an edge block into a no-issue result or an exploit ticket by itself.
+Use the runner's response classification. A confirmed edge challenge/block emits EDGE_CONTROL_BLOCKED; insufficient attribution emits ACCESS_FAILURE_UNCLASSIFIED. A generic 403/429 is not by itself proof of Cloudflare blocking or application denial. Preserve the phase, affected surface, redacted signal/request identifier and observed counts for the private summary. Stop affected assessment with incomplete coverage. The runner may perform bounded diagnosis within the remaining job time; do not resume attacks in this job. Do not evade challenges, change edge policy, repeatedly redeem links or continue anonymously. Preserve completed positive evidence, and never turn an edge block into a no-issue result or an exploit ticket by itself.
 
 ## 3. Follow the authenticated attack path
 

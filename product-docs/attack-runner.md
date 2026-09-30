@@ -33,7 +33,7 @@ Only explicitly authorized party targets are assessed. The run establishes a fre
 
 This boundary keeps the first service focused on repeatable authenticated assessment. The path and adapter contracts still support future additions.
 
-Authentication is automated through a separately deployed company-owned issuer and a private temporary handoff, as defined in [Attack sessions](attack-sessions.md). Attack Runner has no superadmin access and no dependency on an employee's login or mailbox. Operator availability is still required to observe and stop the assessment; it is not a weekly authentication step.
+Authentication is automated through a separately deployed company-owned issuer and a private authenticated response, as defined in [Attack sessions](attack-sessions.md). Attack Runner has no superadmin access and no dependency on an employee's login or mailbox. Operator availability is still required to observe and stop the assessment; it is not a weekly authentication step.
 
 ### Findings cross repository boundaries
 
@@ -63,7 +63,7 @@ The private summary records the failure phase, affected surface, classification/
 
 Each run records its unique ID, authorized environment/scope, pinned harness release or commit, provider/model and supported effort settings, attack-path ID, instructions Git revision and committed-content hash, money budget, time limit, responsible operator, edge-policy reference and access-failure observations, protected evidence destination/retention policy, coverage, stop reason, and evidence references. Secrets are excluded. The hash covers committed instructions, never a secret-bearing runtime copy.
 
-Authentication provenance records the adapter-verified session mode and its coverage limitations. For each authentication attempt, the summary also records a `handoffCleanup` snapshot: observed status (`pending`, `deleted`, `failed`, `not_created`, or `unknown` when unavailable), observation time, and a stable reference to the issuer-owned private cleanup record. The issuer record holds subsequent cleanup outcomes; a completed summary is not automatically rewritten and cannot certify future cleanup. See [Attack sessions](attack-sessions.md#credentials-remain-ephemeral) for the status and ownership contract.
+Authentication uses the [approved product decisions](attack-sessions.md#approved-product-decisions): ordinary non-admin login, a Foundations-owned separate issuer, direct response delivery, a 15-minute login deadline, one attempt per job, and checks every 300 seconds. Human PR reviewers accept release evidence, with Foundations responsible for authentication and operations. Authentication provenance records the adapter-verified session mode and its coverage limitations. For each authentication attempt, the summary also records a `handoffCleanup` snapshot: observed status (`pending`, `cleared`, `failed`, `not_created`, or `unknown` when unavailable), observation time, and a stable reference to the issuer-owned private cleanup record. The issuer record holds subsequent cleanup outcomes; a completed summary is not automatically rewritten and cannot certify future cleanup. See [Attack sessions](attack-sessions.md#credentials-remain-ephemeral) for the status and ownership contract.
 
 The adapter exposes observations in a harness-independent form and reports actual limit enforcement and usage availability. The runner stops new work before configured limits and reserves time to preserve evidence. A prompt telling a model to stay under budget is not enforcement.
 
@@ -92,20 +92,16 @@ stateDiagram-v2
     Configuring --> Ready: Validate profile, operator, private storage, and edge access
     Configuring --> FailedBeforeAssessment: Invalid settings or private storage unavailable
     Configuring --> AccessBlocked: Edge challenge or access failure
-    Ready --> SigningIn: Separate issuer supplies fresh private handoff after readiness
-    SigningIn --> Assessing: Redeem immediately once, store cookie, validate identity
-    SigningIn --> FailedBeforeAssessment: Issuance, login, or identity validation fails
+    Ready --> SigningIn: Separate issuer returns private response after readiness
+    SigningIn --> Assessing: Redeem once, verify identity and ordinary mode before deadline
+    SigningIn --> FailedBeforeAssessment: Issuance, login, identity or mode fails; deadline expires
     SigningIn --> AccessBlocked: Edge challenge or access failure
     Assessing --> Assessing: Maintain same cookie session every 300 seconds
-    Assessing --> Paused: Session validity unknown
+    Assessing --> Stopped: Session check fails or validity unknown
     Assessing --> AccessBlocked: Edge challenge or access failure
-    Paused --> Assessing: Same session confirmed usable within bounded diagnosis
-    Paused --> Stopped: Session lost or diagnosis deadline reached
-    Paused --> AccessBlocked: Edge challenge or access failure
     AccessBlocked --> Reconciling: Stop work, preserve prior positives and incomplete coverage
     Assessing --> Stopped: Session loss, interruption, or assessment finishes
     Assessing --> Stopped: Stop before spend or time limit
-    Paused --> Stopped: Stop before spend or time limit
     Stopped --> Reconciling: Preserve completed evidence and unfinished coverage
     Reconciling --> Delivering: Per-exploit decisions, with invalid items kept unresolved
     Reconciling --> ReconciliationFailed: Whole-stage failure before delivery
@@ -123,7 +119,7 @@ stateDiagram-v2
     note right of Assessing
         Validate before high-impact chains too.
         Retain server cookie updates beyond magic-link expiry.
-        Do not remint or continue anonymously.
+        Do not remint, restart login in the job or continue anonymously.
     end note
     note right of SummaryAvailable
         A persisted summary can describe a failed run.
