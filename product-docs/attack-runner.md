@@ -9,7 +9,7 @@ Engineers use the results to understand an exploit, fix its complete activity ch
 ## Terms
 
 - **Assessment run**: one bounded execution with a unique identity, explicit target scope, resolved configuration, and evidence record.
-- **Run profile**: the harness, model, attack-path revision, money budget, and time limit selected for a run.
+- **Run profile**: the harness, model, attack-path revision, money budget, run duration, and time limit selected for a run.
 
 ## Decisions
 
@@ -21,7 +21,7 @@ The assessment is not a required merge gate. Failures and incomplete delivery re
 
 ### Configuration components are independently replaceable
 
-Strix OSS is the first harness. The default assessment model is **Sonnet-4-8**. The adapter resolves this selected model to an explicit provider model identifier and records that value; it must not silently substitute another model if unsupported. Harness, model, instruction path/revision, money budget, and time limit are independent settings. The initial budget is $100 and the initial total job limit is 60 minutes. A harness adapter translates this common contract into supported harness options. Unsupported settings fail validation instead of silently falling back.
+Strix OSS is the first harness. The default assessment model is **Sonnet-4-8**. The adapter resolves this selected model to an explicit provider model identifier and records that value; it must not silently substitute another model if unsupported. Harness, model, instruction path/revision, money budget, run duration, and time limit are independently replaceable settings, but the combination is jointly validated. The initial budget is $100 and the initial total job limit is 75 minutes, which holds preflight, the configured run duration, and the reporting reserve. Configuration validation rejects a combination whose configured run duration plus the reporting reserve plus the preflight allowance exceeds the total job limit. A harness adapter translates this common contract into supported harness options. Unsupported settings fail validation instead of silently falling back.
 
 Sonnet-4-8 is the operator-selected starting default, not a claim that it is the cheapest, strongest or a validated optimum for this task. Before live release, engineering must verify the exact provider identifier, pinned-harness compatibility, required tool behavior, evidence output, usage reporting and stopping support. An unavailable or unqualified default blocks launch rather than triggering silent substitution. Terra and Grok are also possible configured assessment models if those same requirements are verified; naming them here does not establish support or select a particular provider version.
 
@@ -32,6 +32,8 @@ We keep these settings separate so model or harness experiments do not change fi
 Only explicitly authorized party targets are assessed. The run establishes a fresh session and maintains it throughout authenticated work. The first path is Authenticated Access Chains. Production assessment, deliberate anonymous phases, additional implemented paths, CI scanner gates, automated ticketing for gaps in continuous integration checks, and formal deployed-version tracking are outside this release.
 
 This boundary keeps the first service focused on repeatable authenticated assessment. The path and adapter contracts still support future additions.
+
+Authentication is automated through a company-owned issuer function that emails a fresh ordinary magic link to a company-owned mailbox the runner reads, as defined in [Attack sessions](attack-sessions.md). Attack Runner has no superadmin access and no dependency on an employee's login or personal mailbox. Operator availability is still required to observe and stop the assessment; it is not a weekly authentication step.
 
 ### Findings cross repository boundaries
 
@@ -59,7 +61,9 @@ The private summary records the failure phase, affected surface, classification/
 
 ### Resolved run record
 
-Each run records its unique ID, authorized environment/scope, pinned harness release or commit, provider/model and supported effort settings, attack-path ID, instructions Git revision and committed-content hash, money budget, time limit, responsible operator, edge-policy reference and access-failure observations, protected evidence destination/retention policy, coverage, stop reason, and evidence references. Secrets are excluded. The hash covers committed instructions, never a secret-bearing runtime copy.
+Each run records its unique ID, authorized environment/scope, pinned harness release or commit, provider/model and supported effort settings, attack-path ID, instructions Git revision and committed-content hash, money budget, run duration, time limit, responsible operator, edge-policy reference and access-failure observations, protected evidence destination/retention policy, coverage, stop reason, and evidence references. Secrets are excluded. The hash covers committed instructions, never a secret-bearing runtime copy.
+
+Authentication provenance records the adapter-verified session mode and its coverage limitations. The ordinary magic link is single-use and expires 15 minutes after issuance, so there is no live credential to store; the link is delivered by email, so there is no stored login-handoff object or per-attempt cleanup record to reference. See [Attack sessions](attack-sessions.md#credentials-remain-ephemeral) for the credential-lifetime contract.
 
 The adapter exposes observations in a harness-independent form and reports actual limit enforcement and usage availability. The runner stops new work before configured limits and reserves time to preserve evidence. A prompt telling a model to stay under budget is not enforcement.
 
@@ -88,8 +92,8 @@ stateDiagram-v2
     Configuring --> Ready: Validate profile, operator, private storage, and edge access
     Configuring --> FailedBeforeAssessment: Invalid settings or private storage unavailable
     Configuring --> AccessBlocked: Edge challenge or access failure
-    Ready --> SigningIn: Worker ready, mint and retrieve fresh magic link
-    SigningIn --> Assessing: Redeem immediately once, store cookie, validate identity
+    Ready --> SigningIn: Issuer emails fresh ordinary link to company mailbox after readiness
+    SigningIn --> Assessing: Read link from mailbox, redeem once, store cookie, validate identity
     SigningIn --> FailedBeforeAssessment: Issuance, login, or identity validation fails
     SigningIn --> AccessBlocked: Edge challenge or access failure
     Assessing --> Assessing: Maintain same cookie session every 300 seconds
@@ -135,15 +139,15 @@ stateDiagram-v2
 
 ## Product dimensions
 
-| Dimension            | Decision                                                                                                                      | Source                                                                         |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Access               | Authorized operators invoke runs using explicitly authorized test identities and targets.                                     | This document                                                                  |
-| Seats and plans      | Not applicable; this is internal security automation, not a customer entitlement.                                             | This document                                                                  |
-| Billing and metering | Harness spend is bounded per run; the first default is $100. It is not a customer billing meter.                              | This document                                                                  |
-| Limits               | Initial total job limit is 60 minutes; supported budget/time overrides retain the authorized scope.                           | This document                                                                  |
-| Security and data    | Authentication material is ephemeral; findings contain redacted evidence.                                                     | [Attack sessions](attack-sessions.md), [Exploit findings](exploit-findings.md) |
-| Deployment           | Runs target the authorized party environment; production and self-managed assessments are outside this release.               | This document                                                                  |
-| Interfaces           | Scheduled/manual GitHub Actions, Git-tracked instructions, Linear tickets, run summary artifacts; Slack delivery is deferred. | This document                                                                  |
+| Dimension            | Decision                                                                                                                                                            | Source                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Access               | Authorized operators invoke runs using explicitly authorized test identities and targets.                                                                           | This document                                                                  |
+| Seats and plans      | Not applicable; this is internal security automation, not a customer entitlement.                                                                                   | This document                                                                  |
+| Billing and metering | Harness spend is bounded per run; the first default is $100. It is not a customer billing meter.                                                                    | This document                                                                  |
+| Limits               | Initial total job limit is 75 minutes, holding preflight, the run duration, and the reporting reserve; supported budget/time overrides retain the authorized scope. | This document                                                                  |
+| Security and data    | Authentication material is ephemeral; findings contain redacted evidence.                                                                                           | [Attack sessions](attack-sessions.md), [Exploit findings](exploit-findings.md) |
+| Deployment           | Runs target the authorized party environment; production and self-managed assessments are outside this release.                                                     | This document                                                                  |
+| Interfaces           | Scheduled/manual GitHub Actions, Git-tracked instructions, Linear tickets, run summary artifacts; Slack delivery is deferred.                                       | This document                                                                  |
 
 ## Resources
 
