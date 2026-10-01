@@ -9,7 +9,7 @@ Engineers use the results to understand an exploit, fix its complete activity ch
 ## Terms
 
 - **Assessment run**: one bounded execution with a unique identity, explicit target scope, resolved configuration, and evidence record.
-- **Run profile**: the harness, model, attack-path revision, money budget, and time limit selected for a run.
+- **Run profile**: the harness, model, attack-path revision, money budget, run duration, and time limit selected for a run.
 
 ## Decisions
 
@@ -21,7 +21,7 @@ The assessment is not a required merge gate. Failures and incomplete delivery re
 
 ### Configuration components are independently replaceable
 
-Strix OSS is the first harness. The default assessment model is **Sonnet-4-8**. The adapter resolves this selected model to an explicit provider model identifier and records that value; it must not silently substitute another model if unsupported. Harness, model, instruction path/revision, money budget, and time limit are independent settings. The initial budget is $100 and the initial total job limit is 75 minutes, which holds preflight, the configured run duration, and the reporting reserve. A harness adapter translates this common contract into supported harness options. Unsupported settings fail validation instead of silently falling back.
+Strix OSS is the first harness. The default assessment model is **Sonnet-4-8**. The adapter resolves this selected model to an explicit provider model identifier and records that value; it must not silently substitute another model if unsupported. Harness, model, instruction path/revision, money budget, run duration, and time limit are independently replaceable settings, but the combination is jointly validated. The initial budget is $100 and the initial total job limit is 75 minutes, which holds preflight, the configured run duration, and the reporting reserve. Configuration validation rejects a combination whose configured run duration plus the reporting reserve plus the preflight allowance exceeds the total job limit. A harness adapter translates this common contract into supported harness options. Unsupported settings fail validation instead of silently falling back.
 
 Sonnet-4-8 is the operator-selected starting default, not a claim that it is the cheapest, strongest or a validated optimum for this task. Before live release, engineering must verify the exact provider identifier, pinned-harness compatibility, required tool behavior, evidence output, usage reporting and stopping support. An unavailable or unqualified default blocks launch rather than triggering silent substitution. Terra and Grok are also possible configured assessment models if those same requirements are verified; naming them here does not establish support or select a particular provider version.
 
@@ -61,7 +61,7 @@ The private summary records the failure phase, affected surface, classification/
 
 ### Resolved run record
 
-Each run records its unique ID, authorized environment/scope, pinned harness release or commit, provider/model and supported effort settings, attack-path ID, instructions Git revision and committed-content hash, money budget, time limit, responsible operator, edge-policy reference and access-failure observations, protected evidence destination/retention policy, coverage, stop reason, and evidence references. Secrets are excluded. The hash covers committed instructions, never a secret-bearing runtime copy.
+Each run records its unique ID, authorized environment/scope, pinned harness release or commit, provider/model and supported effort settings, attack-path ID, instructions Git revision and committed-content hash, money budget, run duration, time limit, responsible operator, edge-policy reference and access-failure observations, protected evidence destination/retention policy, coverage, stop reason, and evidence references. Secrets are excluded. The hash covers committed instructions, never a secret-bearing runtime copy.
 
 Authentication provenance records the adapter-verified session mode and its coverage limitations. The ordinary magic link is single-use and expires 15 minutes after issuance, so there is no live credential to store; the link is delivered by email, so there is no stored login-handoff object or per-attempt cleanup record to reference. See [Attack sessions](attack-sessions.md#credentials-remain-ephemeral) for the credential-lifetime contract.
 
