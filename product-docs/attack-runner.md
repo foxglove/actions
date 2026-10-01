@@ -21,7 +21,7 @@ The assessment is not a required merge gate. Failures and incomplete delivery re
 
 ### Configuration components are independently replaceable
 
-Strix OSS is the first harness. The default assessment model is **Sonnet-4-8**. The adapter resolves this selected model to an explicit provider model identifier and records that value; it must not silently substitute another model if unsupported. Harness, model, instruction path/revision, money budget, and time limit are independent settings. The initial budget is $100 and the initial total job limit is 60 minutes. A harness adapter translates this common contract into supported harness options. Unsupported settings fail validation instead of silently falling back.
+Strix OSS is the first harness. The default assessment model is **Sonnet-4-8**. The adapter resolves this selected model to an explicit provider model identifier and records that value; it must not silently substitute another model if unsupported. Harness, model, instruction path/revision, money budget, and time limit are independent settings. The initial budget is $100 and the initial total job limit is 70 minutes, which holds the configured run duration plus the reporting reserve. A harness adapter translates this common contract into supported harness options. Unsupported settings fail validation instead of silently falling back.
 
 Sonnet-4-8 is the operator-selected starting default, not a claim that it is the cheapest, strongest or a validated optimum for this task. Before live release, engineering must verify the exact provider identifier, pinned-harness compatibility, required tool behavior, evidence output, usage reporting and stopping support. An unavailable or unqualified default blocks launch rather than triggering silent substitution. Terra and Grok are also possible configured assessment models if those same requirements are verified; naming them here does not establish support or select a particular provider version.
 
@@ -139,15 +139,15 @@ stateDiagram-v2
 
 ## Product dimensions
 
-| Dimension            | Decision                                                                                                                      | Source                                                                         |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Access               | Authorized operators invoke runs using explicitly authorized test identities and targets.                                     | This document                                                                  |
-| Seats and plans      | Not applicable; this is internal security automation, not a customer entitlement.                                             | This document                                                                  |
-| Billing and metering | Harness spend is bounded per run; the first default is $100. It is not a customer billing meter.                              | This document                                                                  |
-| Limits               | Initial total job limit is 60 minutes; supported budget/time overrides retain the authorized scope.                           | This document                                                                  |
-| Security and data    | Authentication material is ephemeral; findings contain redacted evidence.                                                     | [Attack sessions](attack-sessions.md), [Exploit findings](exploit-findings.md) |
-| Deployment           | Runs target the authorized party environment; production and self-managed assessments are outside this release.               | This document                                                                  |
-| Interfaces           | Scheduled/manual GitHub Actions, Git-tracked instructions, Linear tickets, run summary artifacts; Slack delivery is deferred. | This document                                                                  |
+| Dimension            | Decision                                                                                                                                                 | Source                                                                         |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Access               | Authorized operators invoke runs using explicitly authorized test identities and targets.                                                                | This document                                                                  |
+| Seats and plans      | Not applicable; this is internal security automation, not a customer entitlement.                                                                        | This document                                                                  |
+| Billing and metering | Harness spend is bounded per run; the first default is $100. It is not a customer billing meter.                                                         | This document                                                                  |
+| Limits               | Initial total job limit is 70 minutes, holding the run duration plus the reporting reserve; supported budget/time overrides retain the authorized scope. | This document                                                                  |
+| Security and data    | Authentication material is ephemeral; findings contain redacted evidence.                                                                                | [Attack sessions](attack-sessions.md), [Exploit findings](exploit-findings.md) |
+| Deployment           | Runs target the authorized party environment; production and self-managed assessments are outside this release.                                          | This document                                                                  |
+| Interfaces           | Scheduled/manual GitHub Actions, Git-tracked instructions, Linear tickets, run summary artifacts; Slack delivery is deferred.                            | This document                                                                  |
 
 ## Resources
 
