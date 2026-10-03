@@ -308,6 +308,43 @@ for (const [label, bad] of [
       processedEvents: [null],
     },
   ],
+  // Non-array containers that are iterable-unsafe: only the explicit Array check turns
+  // these into a PlannerInputError (otherwise a TypeError escapes).
+  [
+    "obs-object",
+    { run: { runId: "r", targetEnvironment: "party" }, observations: {} },
+  ],
+  [
+    "existing-not-array",
+    {
+      run: { runId: "r", targetEnvironment: "party" },
+      observations: [],
+      existingIssues: {},
+    },
+  ],
+  [
+    "processed-not-array",
+    {
+      run: { runId: "r", targetEnvironment: "party" },
+      observations: [],
+      processedEvents: {},
+    },
+  ],
+  [
+    "missing-issueid",
+    {
+      run: { runId: "r", targetEnvironment: "party" },
+      observations: [],
+      existingIssues: [{ targetEnvironment: "party" }],
+    },
+  ],
+  [
+    "missing-observationid",
+    {
+      run: { runId: "r", targetEnvironment: "party" },
+      observations: [{ kind: "non-observation", validity: "valid" }],
+    },
+  ],
   [
     "bad-existing",
     {

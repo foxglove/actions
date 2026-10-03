@@ -327,14 +327,15 @@ export function plan(input) {
         );
       });
       // A same-environment ticket we cannot compare (chain does not normalize and no
-      // alias) means we cannot prove this observation is a distinct exploit -> triage.
+      // usable alias) means we cannot prove this observation is a distinct exploit ->
+      // triage. An empty-string alias identifies nothing, so it does not count.
       const uncomparable = existingIssues.filter(
         (iss) =>
           normEnv(iss.targetEnvironment) === normEnv(runEnv) &&
           normalizeChain(iss.normalizedChain) === null &&
           !(
             Array.isArray(iss.fingerprintAliases) &&
-            iss.fingerprintAliases.length > 0
+            iss.fingerprintAliases.some(nonEmptyString)
           ),
       );
       if (uncomparable.length) {

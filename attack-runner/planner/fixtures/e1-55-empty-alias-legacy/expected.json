@@ -1,0 +1,39 @@
+{
+  "runId": "run-e55",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "unresolved",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": null,
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "none",
+        "issueId": null
+      },
+      "proposedActions": [],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": false,
+      "neededEvidence": [
+        "a normalized chain or alias for ticket(s) with no comparable identity: SEC-LEGACY"
+      ]
+    }
+  ],
+  "runSummary": {
+    "batchStatus": "partial",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "unresolved": ["obs-1"],
+    "notObserved": [],
+    "edgeAccess": {
+      "classification": "none"
+    }
+  }
+}
