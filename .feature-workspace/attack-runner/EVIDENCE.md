@@ -110,3 +110,25 @@
   PASS; mutation-test 128 mutants, 125 killed, 3 equivalent, 0 noapply; ajv valid for e1-53..56.
 - Round 5 record: `self-review-pr55-r5.md` (added verbatim after the round completes).
 - cost: unavailable (cloud transcript not local).
+
+## 2026-10-03 — Decision R3-F4: ignore legacy tickets (session 2)
+
+- Human oracle: the user, as the product decision authority, answered the R3-F4 question:
+  ignore legacy tickets. Recorded in STATUS ("Decision R3-F4") and `retro-log.json`.
+- Stage 3, test first: e1-50, e1-55 and e1-56 changed to expect `new`; run-fixtures then
+  reported 58 passed, 3 failed (the expected failure). After the triage branch was removed:
+  61 passed, 0 failed.
+- Gates after the code change: run-fixtures 61/0 + 15 structural-reject; check-fixtures
+  PASS; mutation-test 124 mutants, 121 killed, 3 equivalent, 0 noapply.
+- Same session: the user confirmed `.feature-workspace` stays (thread resolved), approved a
+  follow-up PR that removes names from `product-docs/attack-sessions.md`, and approved marking
+  PR #55 ready for review once CI is green.
+- Self-review round 6 (`self-review-pr55-r6.md`): verdict fail on four Low findings: F1 stale
+  STATUS text, F2 code comments, F3 the term "comparable", F4 no fixture for a legacy ticket
+  in a non-open state. All four repaired: fixture e1-57 and mutant
+  `legacy-ticket-state-blocks` added. Gates: run-fixtures 62/0 + 15 structural-reject;
+  check-fixtures PASS; mutation-test 125 mutants, 122 killed, 3 equivalent, 0 noapply.
+- Self-review round 7 (`self-review-pr55-r7.md`): verdict fail on F5 (TRACEABILITY and
+  retro-log still used the retired term "comparable identity"); repaired to "legacy ticket".
+- Self-review round 8 record: `self-review-pr55-r8.md` (added verbatim after a pass).
+- cost: unavailable (cloud transcript not local).

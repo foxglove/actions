@@ -172,6 +172,13 @@
       "type": "review",
       "stage": "3",
       "note": "Self-review round 3 on the c6872b4 delta: fail on F1 stale counts, F2 whitespace alias untested, F3 stale comment, F4 uncomparable rule has no acceptance owner. F1-F3 repaired; F4 routed to the acceptance owner as R3-F4."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "human-input",
+      "stage": "3",
+      "oracle": "the user (product decision authority)",
+      "note": "R3-F4 answered: ignore legacy tickets. A legacy ticket (its chain does not normalize) matches only through a fingerprint alias, takes no part in overlap triage, and never blocks a new ticket, whatever its state. Accepted risk: a duplicate ticket for a finding tracked only on such a ticket. Also: .feature-workspace stays; follow-up PR to remove names from product-docs/attack-sessions.md approved; mark PR #55 ready for review once CI is green."
     }
   ]
 }

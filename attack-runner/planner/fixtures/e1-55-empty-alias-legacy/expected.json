@@ -3,26 +3,71 @@
   "decisions": [
     {
       "observationId": "obs-1",
-      "outcome": "unresolved",
+      "outcome": "new",
       "reason": "authored-intent",
       "exploitIdentity": {
         "exploitId": null,
         "matchReason": "authored-intent"
       },
       "target": {
-        "type": "none",
+        "type": "new-issue",
         "issueId": null
       },
-      "proposedActions": [],
+      "proposedActions": [
+        {
+          "type": "create-ticket",
+          "ticketMaterial": {
+            "exploitId": null,
+            "fingerprint": "v1:{\"env\":\"party\",\"chain\":[{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"export-download-api\",\"operation\":\"download\",\"boundaryType\":\"ownership-check\",\"violation\":\"unauthorized-read\"}]}",
+            "fingerprintVersion": "v1",
+            "chain": [
+              {
+                "actorCapability": "member of tenant A",
+                "targetAndOperation": "demonstrated transition",
+                "expectedBoundary": "boundary should prevent this",
+                "observedTransition": "boundary crossed",
+                "evidence": ["req-redacted"],
+                "semantics": {
+                  "actorRole": "tenant-member",
+                  "resourceRelation": "cross-tenant",
+                  "surface": "export-download-api",
+                  "operation": "download",
+                  "boundaryType": "ownership-check",
+                  "violation": "unauthorized-read"
+                }
+              }
+            ],
+            "labels": ["Bug", "pentesting", "harness"],
+            "severity": "high",
+            "productionImpact": {
+              "value": "unknown",
+              "rationale": "party only"
+            },
+            "affectedSurfaces": ["export-download-api"],
+            "ownership": "unknown",
+            "remediation": [
+              {
+                "component": "api",
+                "change": "enforce the boundary"
+              }
+            ],
+            "retestExpectations": "re-test the end-to-end chain after the fix",
+            "evidenceReferences": ["req-redacted"]
+          }
+        },
+        {
+          "type": "increment-confirmed-count",
+          "amount": 1
+        }
+      ],
       "evidenceReferences": ["req-redacted"],
-      "notificationEligible": false,
-      "neededEvidence": [
-        "a normalized chain or alias for ticket(s) with no comparable identity: SEC-LEGACY"
-      ]
+      "notificationEligible": true,
+      "neededEvidence": [],
+      "idempotencyKey": "run-e55:v1:{\"env\":\"party\",\"chain\":[{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"export-download-api\",\"operation\":\"download\",\"boundaryType\":\"ownership-check\",\"violation\":\"unauthorized-read\"}]}"
     }
   ],
   "runSummary": {
-    "batchStatus": "partial",
+    "batchStatus": "complete",
     "runCompletion": "completed",
     "sessionStatus": "ok",
     "coverage": {
@@ -30,7 +75,7 @@
       "untested": [],
       "interrupted": []
     },
-    "unresolved": ["obs-1"],
+    "unresolved": [],
     "notObserved": [],
     "edgeAccess": {
       "classification": "none"

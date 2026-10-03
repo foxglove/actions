@@ -276,6 +276,10 @@ for (const [label, bad] of [
     { run: { runId: "r", targetEnvironment: "party" }, observations: "x" },
   ],
   ["missing-env", { run: { runId: "r" }, observations: [] }],
+  [
+    "blank-runid",
+    { run: { runId: "  ", targetEnvironment: "party" }, observations: [] },
+  ],
   ["missing-runid", { run: { targetEnvironment: "party" }, observations: [] }],
   [
     "dup-observation-id",

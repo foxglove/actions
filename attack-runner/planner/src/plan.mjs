@@ -60,11 +60,8 @@ function validateInput(input) {
         throw new PlannerInputError(
           `existing issue ${iss.issueId} needs targetEnvironment`,
         );
-      // An existing issue with no comparable identity (chain does not normalize and
-      // no non-blank alias) is NOT a batch error — a single legacy ticket must not throw away
-      // every valid finding. It is handled per-observation below: a would-be-new
-      // observation in that environment routes to triage instead of a speculative
-      // ticket, because we cannot prove it is distinct from the uncomparable issue.
+      // A legacy issue (its chain does not normalize) is NOT a batch error: one legacy
+      // ticket must not throw away every valid finding. plan() ignores it below.
       // Only reject a fixClaim whose `claimed` is present but not a boolean. An
       // absent/empty fixClaim (undefined, null, {}) simply means "no claim" and must
       // not throw away the whole batch.
@@ -321,41 +318,13 @@ export function plan(input) {
       const relatedToIssue = existingIssues.some((iss) => {
         if (normEnv(iss.targetEnvironment) !== normEnv(runEnv)) return false;
         const issNorm = normalizeChain(iss.normalizedChain);
+        // A legacy ticket (no normalizable chain) can match only through an alias, so
+        // it takes no part in overlap triage and never blocks a new ticket.
         if (issNorm === null) return false;
         return (
           isSubsequence(obsNorm, issNorm) || isSubsequence(issNorm, obsNorm)
         );
       });
-      // A same-environment ticket we cannot compare (chain does not normalize and no
-      // usable alias) means we cannot prove this observation is a distinct exploit ->
-      // triage. An empty-string alias identifies nothing, so it does not count.
-      const uncomparable = existingIssues.filter(
-        (iss) =>
-          normEnv(iss.targetEnvironment) === normEnv(runEnv) &&
-          normalizeChain(iss.normalizedChain) === null &&
-          !(
-            Array.isArray(iss.fingerprintAliases) &&
-            iss.fingerprintAliases.some(nonEmptyString)
-          ),
-      );
-      if (uncomparable.length) {
-        decisions.push(
-          decision({
-            observationId,
-            outcome: "unresolved",
-            reason:
-              "An existing ticket in this environment has no comparable identity; cannot confirm this is a distinct exploit.",
-            matchReason: "uncomparable existing ticket",
-            evidenceReferences,
-            neededEvidence: [
-              `a normalized chain or alias for ticket(s) with no comparable identity: ${uncomparable
-                .map((i) => i.issueId)
-                .join(", ")}`,
-            ],
-          }),
-        );
-        continue;
-      }
       // Also compare against every other valid positive in THIS run (computed up
       // front, so the result is independent of observation order): a partial/superset
       // overlap with a different fingerprint is ambiguous, not two new tickets.

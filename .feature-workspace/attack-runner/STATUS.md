@@ -14,9 +14,9 @@ rounds plus a committed mutation-testing gate (0 unexpected survivors).
   non-observation zero-writes; strict input validation; complete-ticket-material gate;
   append-remediation; run status in summary; non-production runs cannot assert prod impact.
 - **Verification** — `run-fixtures.mjs` (deep-equal authored expected + invariants on actual
-  - round-trip + mutation self-test + structural-reject), 60 fixtures, **61 passed / 0 failed**
-    - 14 structural-reject; `check-fixtures.mjs` PASS; `mutation-test.mjs` (committed convergence
-      gate) **128 mutants, 125 killed, 0 unexpected survivors** (3 documented equivalents);
+  - round-trip + mutation self-test + structural-reject), 61 fixtures, **62 passed / 0 failed**
+    - 15 structural-reject; `check-fixtures.mjs` PASS; `mutation-test.mjs` (committed convergence
+      gate) **125 mutants, 122 killed, 0 unexpected survivors** (3 documented equivalents);
       inputs/expected/actual schema-valid via ajv (negative-input fixtures marked
       `INPUT_SCHEMA_INVALID`).
 - **Reviews** — rounds 1, 2, 3 + a PR #55 review round and an isolated self-review complete;
@@ -31,15 +31,21 @@ needs either an acceptance.md amendment (declare it Engineering 2's durable-stat
 planner input field carrying "this fix-claim contradiction was already notified". Needs the
 acceptance owner's decision; not unilaterally closed.
 
-## Open product question (R3-F4, for the acceptance owner)
+## Decision R3-F4 — legacy tickets are ignored (2026-10-03)
 
-**Uncomparable legacy ticket blocks creation.** A same-environment ticket in any state
-(open, resolved, or unknown) with no
-normalizable chain and no non-blank alias routes every would-be-`new` observation in that
-environment to `unresolved` (fixtures e1-50, e1-53..56; README "Triage rules worth knowing").
-This follows the "ambiguity routes to triage" rule (E1-18, exploit-findings.md:24,85), but no
-acceptance criterion names it. Decide: ratify it as an E1 criterion (and its pre-first-run
-backfill duty), or narrow it. Until then it is implemented, gated, and unratified.
+**Question:** must a same-environment ticket in any state with no normalizable chain and no
+non-blank alias block creation of every new ticket in its environment?
+**Answer (the user, as the product decision authority, 2026-10-03):** no. **Ignore legacy
+tickets.** A legacy ticket (its chain does not normalize) matches only through a
+fingerprint alias, takes no part in overlap triage, and never blocks a `new` ticket,
+whatever its state. Accepted risk: a
+finding already tracked only on such a ticket can get a duplicate ticket until the legacy
+ticket is backfilled with a chain or an alias.
+**Implemented (session 2):** fixtures e1-50, e1-55 and e1-56 now expect `new`; the failure
+was observed before the code change. The triage branch is removed; the mutant
+`legacy-ticket-triages` pins the rule; fixture e1-57 and the mutant
+`legacy-ticket-state-blocks` pin it for resolved and unknown tickets. The five mutants of the removed branch are retired.
+The structural case `blank-runid` now pins whitespace rejection (it kills `nonempty-no-trim`).
 
 ## Coverage note
 
@@ -98,14 +104,14 @@ Append-only detail per item in `retro-log.json`.
 **Where things are:** Offline planner (WP1/E1) is built, converged, and under review as
 draft PR **foxglove/actions#55** (branch `claude/exciting-cerf-vkmwu5` → `main`). Three
 Claude-review batches + three isolated self-reviews done in session 1 (verdict **SHIP** on
-c6872b4). Session 2 (this session owns the PR, per the user) ran self-review rounds 3–5 on the
-c6872b4 delta; see `EVIDENCE.md` for verdicts. PM gate is CLEARED (table above).
+c6872b4). Session 2 (this session owns the PR, per the user) ran self-review rounds 3–8 on the
+commits after c6872b4; see `EVIDENCE.md` for verdicts. PM gate is CLEARED (table above).
 
 **Gates (all green) — run these to confirm on resume:**
 
-- `node attack-runner/planner/run-fixtures.mjs` → 61 passed, 0 failed + 14 structural-reject
+- `node attack-runner/planner/run-fixtures.mjs` → 62 passed, 0 failed + 15 structural-reject
 - `node attack-runner/planner/check-fixtures.mjs` → PASS
-- `node attack-runner/planner/mutation-test.mjs` → 128 mutants, 125 killed, 3 equivalent, 0 noapply
+- `node attack-runner/planner/mutation-test.mjs` → 125 mutants, 122 killed, 3 equivalent, 0 noapply
 - ajv: inputs (only the 5 `INPUT_SCHEMA_INVALID`-marked fail, by design), expected, actual all valid.
 - Fixtures e1-01..52 came from a session-local generator that no longer exists; e1-53..56
   were authored by a small script deriving from e1-01/e1-50. New fixtures: author them the
@@ -119,16 +125,18 @@ c6872b4 delta; see `EVIDENCE.md` for verdicts. PM gate is CLEARED (table above).
    still subscribed and also replied; several threads carry duplicate replies.
 2. ~~M2 coverage~~ **DONE** (bb8aaa9): fixtures e1-53..56 + mutants `unc-env-ignored`,
    `unc-alias-clause-off`, `unc-empty-alias-comparable`, `unc-blank-alias-comparable`,
-   `related-state-skip-restored`.
+   `related-state-skip-restored`. The four `unc-*` mutants (and `uncomparable-off`) were
+   later **retired** with the triage branch they mutated (decision R3-F4).
 3. ~~Minor~~ **DONE**: L2 (blank aliases ignored, e1-56); L5 (5 structural-reject cases +
    `obs/existing/processed-array-off`, `issueid-off`, `obsid-off` mutants); L1 accepted and
    documented in README ("Triage wins over replay").
-4. **Flag to user:** `product-docs/attack-sessions.md` on `main` still names individuals
-   (source contract, outside this PR). Ask whether to open a follow-up PR to scrub it there.
-5. Reply on the T3 thread (comment 4171668354) with the fix commit, then resolve it.
-6. **R3-F4** open product question (above) needs the acceptance owner.
-7. When PR is green + approved: it's a DRAFT — mark ready-for-review when the user says.
+4. **Names on `main`:** the user approved a follow-up PR that replaces the named individuals
+   in `product-docs/attack-sessions.md` with teams (branch `claude/confident-dirac-zal2xi`).
+5. ~~T3 thread~~ done (7503a34, replied and resolved). ~~`.feature-workspace` thread~~ the
+   user confirmed the directory stays; replied and resolved.
+6. ~~R3-F4~~ decided (ignore legacy tickets) and implemented; see the section above.
+7. The user approved marking PR #55 ready for review once CI is green on the final head.
 
 **Review logs:** `review-wp1.md`, `review-wp1-round2.md`, `review-wp1-round3.md`,
 `self-review-pr55.md`, `self-review-pr55-r2.md`, `self-review-pr55-r3.md`,
-`self-review-pr55-r4.md`, `self-review-pr55-r5.md`. **PR:** `pr.json`.
+`self-review-pr55-r4.md`, `self-review-pr55-r5.md`, `self-review-pr55-r6.md`, `self-review-pr55-r7.md`, `self-review-pr55-r8.md`. **PR:** `pr.json`.
