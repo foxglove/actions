@@ -3,14 +3,21 @@
     "runId": "run-2026-10-26",
     "targetEnvironment": "party",
     "evidenceLocation": "gs://aegis-evidence/run-2026-10-26",
-    "completion": { "status": "completed" },
-    "session": { "status": "ok", "maintenanceVerified": true },
+    "completion": {
+      "status": "completed"
+    },
+    "session": {
+      "status": "ok",
+      "maintenanceVerified": true
+    },
     "coverage": {
       "tested": ["exports.download"],
       "untested": [],
       "interrupted": []
     },
-    "edgeAccess": { "classification": "none" }
+    "edgeAccess": {
+      "classification": "none"
+    }
   },
   "observations": [
     {
@@ -33,7 +40,10 @@
       "issueId": "SEC-101",
       "exploitId": "exp-crossorg-export-dl",
       "state": "resolved",
-      "fixClaim": { "claimed": true, "reference": "app#4821" },
+      "fixClaim": {
+        "claimed": true,
+        "reference": "app#4821"
+      },
       "confirmedRunCount": 4
     }
   ],

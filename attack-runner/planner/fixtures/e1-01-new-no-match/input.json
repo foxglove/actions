@@ -3,14 +3,21 @@
     "runId": "run-2026-10-05",
     "targetEnvironment": "party",
     "evidenceLocation": "gs://aegis-evidence/run-2026-10-05",
-    "completion": { "status": "completed" },
-    "session": { "status": "ok", "maintenanceVerified": true },
+    "completion": {
+      "status": "completed"
+    },
+    "session": {
+      "status": "ok",
+      "maintenanceVerified": true
+    },
     "coverage": {
       "tested": ["exports.download"],
       "untested": [],
       "interrupted": []
     },
-    "edgeAccess": { "classification": "none" }
+    "edgeAccess": {
+      "classification": "none"
+    }
   },
   "observations": [
     {
@@ -18,7 +25,9 @@
       "kind": "confirmed-positive",
       "validity": "valid",
       "eventId": "ev-1",
-      "execution": { "status": "completed" },
+      "execution": {
+        "status": "completed"
+      },
       "exploit": {
         "chain": [
           {
@@ -27,7 +36,15 @@
             "expectedBoundary": "ownership check must reject cross-tenant read",
             "observedTransition": "unauthorized read of tenant B export",
             "prerequisites": [],
-            "evidence": ["req-redacted-1"]
+            "evidence": ["req-redacted-1"],
+            "semantics": {
+              "actorRole": "tenant-member",
+              "resourceRelation": "cross-tenant",
+              "surface": "export-download-api",
+              "operation": "download",
+              "boundaryType": "ownership-check",
+              "violation": "unauthorized-read"
+            }
           }
         ],
         "severity": "high",
@@ -45,7 +62,9 @@
         ],
         "retestExpectations": "member of A cannot download B export after fix"
       },
-      "evidence": { "references": ["req-redacted-1"] }
+      "evidence": {
+        "references": ["req-redacted-1"]
+      }
     }
   ],
   "existingIssues": [],

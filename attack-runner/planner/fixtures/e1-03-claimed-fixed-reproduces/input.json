@@ -3,14 +3,21 @@
     "runId": "run-2026-10-19",
     "targetEnvironment": "party",
     "evidenceLocation": "gs://aegis-evidence/run-2026-10-19",
-    "completion": { "status": "completed" },
-    "session": { "status": "ok", "maintenanceVerified": true },
+    "completion": {
+      "status": "completed"
+    },
+    "session": {
+      "status": "ok",
+      "maintenanceVerified": true
+    },
     "coverage": {
       "tested": ["exports.download"],
       "untested": [],
       "interrupted": []
     },
-    "edgeAccess": { "classification": "none" }
+    "edgeAccess": {
+      "classification": "none"
+    }
   },
   "observations": [
     {
@@ -18,7 +25,9 @@
       "kind": "confirmed-positive",
       "validity": "valid",
       "eventId": "ev-200",
-      "execution": { "status": "completed" },
+      "execution": {
+        "status": "completed"
+      },
       "retestTarget": {
         "exploitId": "exp-crossorg-export-dl",
         "issueId": "SEC-101"
@@ -30,13 +39,26 @@
             "targetAndOperation": "export download API for an export owned by tenant B",
             "expectedBoundary": "ownership check must reject cross-tenant read",
             "observedTransition": "unauthorized read of tenant B export still succeeds",
-            "evidence": ["req-redacted-33"]
+            "evidence": ["req-redacted-33"],
+            "semantics": {
+              "actorRole": "tenant-member",
+              "resourceRelation": "cross-tenant",
+              "surface": "export-download-api",
+              "operation": "download",
+              "boundaryType": "ownership-check",
+              "violation": "unauthorized-read"
+            }
           }
         ],
         "severity": "high",
-        "productionImpact": { "value": "unknown", "rationale": "party only" }
+        "productionImpact": {
+          "value": "unknown",
+          "rationale": "party only"
+        }
       },
-      "evidence": { "references": ["req-redacted-33"] }
+      "evidence": {
+        "references": ["req-redacted-33"]
+      }
     }
   ],
   "existingIssues": [
@@ -44,13 +66,24 @@
       "issueId": "SEC-101",
       "exploitId": "exp-crossorg-export-dl",
       "state": "resolved",
-      "fixClaim": { "claimed": true, "reference": "app#4821" },
+      "fixClaim": {
+        "claimed": true,
+        "reference": "app#4821"
+      },
       "normalizedChain": [
         {
           "actorCapability": "member of another tenant",
           "targetAndOperation": "export download API for another tenant's export",
           "expectedBoundary": "ownership check must reject cross-tenant read",
-          "observedTransition": "unauthorized read of another tenant's export"
+          "observedTransition": "unauthorized read of another tenant's export",
+          "semantics": {
+            "actorRole": "tenant-member",
+            "resourceRelation": "cross-tenant",
+            "surface": "export-download-api",
+            "operation": "download",
+            "boundaryType": "ownership-check",
+            "violation": "unauthorized-read"
+          }
         }
       ],
       "confirmedRunCount": 3

@@ -1,37 +1,42 @@
 # STATUS — Attack Runner
 
-**Stage:** 2 (semantic model + plan) complete; entering Stage 3 build at WP0.1.
-**Latest revision:** see branch `claude/exciting-cerf-vkmwu5` (this session's commit).
+**Stage:** 3 (Build), in progress.
+**Working branch:** `claude/exciting-cerf-vkmwu5`.
 **Approved plan:** work-packet breakdown accepted by engineering lead.
+
+## Done
+
+- **WP0.1** — offline planner I/O contract + fixtures (`attack-runner/planner/`).
+  Schemas validate with ajv (draft 2020-12); fixture guard passes.
 
 ## In progress
 
-- **WP0.1** — offline planner I/O schema + fixtures. Artifacts under
-  `attack-runner/planner/`. Status: initial contract + fixtures landed; the executable
-  planner (`plan()`) is WP1.\*, not yet implemented.
+- **WP1.1–WP1.4** — planner implemented (`attack-runner/planner/src/`):
+  normalization/identity from structured `semantics` (WP1.1), five-outcome decision
+  engine (WP1.2), count-once/replay dedup + eligibility (WP1.3), non-observation
+  zero-writes + invalid→unresolved (WP1.4). Oracle `run-fixtures.mjs`: **7/7 pass**,
+  deterministic, no input mutation (WP1.5 partial).
+- **Self-review gate:** isolated adversarial review in flight; findings (if any) land
+  in `review-wp1.md` and route to a follow-up commit before Stage 4 / any PR.
+
+## Remaining in WP1 (next slices)
+
+Fixtures currently cover E1-01,02,03,04,08,12,17. Still to add + implement:
+E1-05 (known issue absent, no re-test → no closure), E1-06 (interrupted re-test),
+E1-07 (positive survives later session loss), E1-09 (same open finding, different run),
+E1-10 (cross-repo / cross-harness single ticket), E1-11 (ambiguous match + unknown repo),
+E1-13 (mixed batch not wholly successful), E1-14 (production impact unknown),
+E1-18 (independent control failures stay distinct), E1-19 (notification eligibility once),
+E1-20 (fingerprint-version migration/aliases).
 
 ## Open failures / blockers — Stage-1→2 gate (PM must resolve)
 
-No build packet that depends on one of these starts until it is resolved. WP0.1 and the
-E1 packets (WP1.\*) do **not** depend on any of these and may proceed.
-
-1. Issuer-service ownership acceptance (proposed owners, no acceptance/rotation). BLOCKING.
-2. Out-of-repo deps: issuer function + mailbox provisioning (owner/repo/timeline). BLOCKING.
-3. Authorized target set + test identity (concrete party hosts/accounts). BLOCKING to run.
-4. Mode-oracle fallback: app-owned session signal if ordinary≠impersonation undecidable.
-5. DKIM trusted config (signing domain, selectors, sender, mailbox) + selector-investigation owner.
-6. GCS project/bucket/authorized reader group.
-7. Linear destination team + status/fix-claim/reopen mapping ("mapped open state").
-8. Edge/Cloudflare scoped-policy owner (conditional on reachability probe I-23).
-9. Concurrency depth required for v1 (WP2.10 now or deferred).
-10. Operator coverage model for Mon 09:00 / manual runs.
-11. Slack deferral confirmation (eligibility recorded, no transport).
-
-Full PM message: `pm-clarifications.md`.
+WP0.1 and WP1.\* do not depend on these; E2/Release packets do. 11 items; see
+`pm-clarifications.md`. Blocking: (1) issuer-service ownership acceptance,
+(2) out-of-repo issuer-function + mailbox dependencies. (Spawned task: "Get PM answers".)
 
 ## Next action
 
-1. Complete WP0.1 review (schema + fixtures exercise every E1 branch).
-2. On PM gate resolution for the blocking items, sequence WP1.\* (E1 planner) build,
-   test-first, one slice per context.
-3. Create Linear tickets per packet once the destination team (item 7) is known.
+1. Incorporate self-review findings for WP1.1–1.4 (follow-up commit).
+2. Add the remaining E1 fixtures + extend `plan()` to cover them (test-first).
+3. On PM gate resolution, sequence the E2 packets.
