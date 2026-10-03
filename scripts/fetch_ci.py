@@ -216,11 +216,16 @@ def pr_files() -> list[Path]:
 
 
 def fetch_running() -> bool:
+    # The tmux supervisor's argv also contains this script name, so a plain
+    # pgrep -f match stays true after the Python process exits.
     try:
-        subprocess.check_output(["pgrep", "-f", "python3 scripts/fetch_prs.py"])
-        return True
+        out = subprocess.check_output(["pgrep", "-af", "scripts/fetch_prs.py"], text=True)
     except subprocess.CalledProcessError:
         return False
+    return any(
+        "python3" in line and "scripts/fetch_prs.py" in line and "tmux" not in line
+        for line in out.splitlines()
+    )
 
 
 def main() -> None:
