@@ -5,19 +5,33 @@ Uses FOX_FINE_GRAINED_TOKEN only. Never logs the token or Authorization header.
 
 from __future__ import annotations
 
-import http.client
 import json
 import os
-import signal
+import shutil
+import subprocess
+import tempfile
 import time
-import urllib.error
-import urllib.request
 
 API = "https://api.github.com"
+# curl --max-time is enforced by the curl process, so a stuck poll cannot
+# outlive it the way urlopen and SIGALRM have on this host.
+_CURL_MAX_TIME = 45
+_CURL_CONNECT_TIMEOUT = 15
 
 
-def _request_timeout(signum, frame) -> None:
-    raise TimeoutError("GitHub request exceeded 65s")
+def _parse_curl_headers(raw: bytes) -> dict:
+    """Headers from the last response. --location appends every hop to one file."""
+    text = raw.decode("iso-8859-1", "replace")
+    blocks = [block for block in text.split("\r\n\r\n") if block.strip()]
+    if not blocks:
+        return {}
+    headers: dict[str, str] = {}
+    for line in blocks[-1].splitlines()[1:]:
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        headers[key.strip().lower()] = value.strip()
+    return headers
 
 
 class GitHubError(RuntimeError):
@@ -55,6 +69,65 @@ class GitHub:
         print(f"rate limit ({reason}); sleeping {wait}s", flush=True)
         time.sleep(wait)
 
+    def _curl(
+        self, method: str, url: str, data: bytes | None, extra: dict
+    ) -> tuple[int, dict, bytes]:
+        """One GitHub call. The token stays in a mode-600 curl config, never on argv."""
+        cfg_dir = tempfile.mkdtemp(prefix="ghcurl-")
+        try:
+            cfg_path = os.path.join(cfg_dir, "curl.cfg")
+            body_path = os.path.join(cfg_dir, "body")
+            hdr_path = os.path.join(cfg_dir, "headers")
+            out_path = os.path.join(cfg_dir, "out")
+            lines = ["silent", "show-error"]
+            for key, value in self._headers(extra).items():
+                safe = str(value).replace("\\", "\\\\").replace('"', '\\"')
+                lines.append(f'header = "{key}: {safe}"')
+            fd = os.open(cfg_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as fh:
+                fh.write("\n".join(lines) + "\n")
+            if data is not None:
+                with open(body_path, "wb") as fh:
+                    fh.write(data)
+            cmd = [
+                "curl",
+                "--config",
+                cfg_path,
+                "--max-time",
+                str(_CURL_MAX_TIME),
+                "--connect-timeout",
+                str(_CURL_CONNECT_TIMEOUT),
+                "--request",
+                method,
+                "--dump-header",
+                hdr_path,
+                "--output",
+                out_path,
+                "--location",
+                "--max-redirs",
+                "5",
+                "--write-out",
+                "%{http_code}",
+                url,
+            ]
+            if data is not None:
+                cmd[1:1] = ["--data-binary", f"@{body_path}"]
+            proc = subprocess.run(cmd, capture_output=True)
+            if proc.returncode == 28:
+                raise TimeoutError(f"GitHub request exceeded {_CURL_MAX_TIME}s")
+            if proc.returncode != 0:
+                err = proc.stderr.decode("utf-8", "replace")[:300]
+                if self._token and self._token in err:
+                    err = err.replace(self._token, "[redacted]")
+                raise ConnectionError(f"curl exit {proc.returncode}: {err}")
+            status_text = proc.stdout.decode("ascii", "replace").strip() or "0"
+            status = int(status_text)
+            raw = open(out_path, "rb").read() if os.path.exists(out_path) else b""
+            hdr_raw = open(hdr_path, "rb").read() if os.path.exists(hdr_path) else b""
+            return status, _parse_curl_headers(hdr_raw), raw
+        finally:
+            shutil.rmtree(cfg_dir, ignore_errors=True)
+
     def request(
         self,
         method: str,
@@ -73,34 +146,26 @@ class GitHub:
         for attempt in range(retries):
             if self.core_remaining < 5 and self.core_reset:
                 self._sleep_until(self.core_reset, "core")
-            req = urllib.request.Request(url, data=data, headers=self._headers(extra), method=method)
             try:
-                try:
-                    # urlopen's timeout has not interrupted a stuck poll on this host.
-                    # SIGALRM runs even when that poll does not return.
-                    signal.signal(signal.SIGALRM, _request_timeout)
-                    signal.alarm(65)
-                    with urllib.request.urlopen(req, timeout=60) as resp:
-                        raw = resp.read()
-                        headers = {k.lower(): v for k, v in resp.headers.items()}
-                        self._note_rest_limit(headers)
-                        if not raw:
-                            return {}, headers
-                        return json.loads(raw.decode()), headers
-                finally:
-                    signal.alarm(0)
-            except urllib.error.HTTPError as exc:
-                err_body = exc.read().decode("utf-8", "replace")
-                headers = {k.lower(): v for k, v in exc.headers.items()}
-                self._note_rest_limit(headers)
-                last_err = GitHubError(f"HTTP {exc.code} {method} {url.split('?')[0]}", exc.code, err_body[:500])
-                if exc.code in (403, 429) and "secondary" in err_body.lower():
+                status, headers, raw = self._curl(method, url, data, extra)
+            except (TimeoutError, ConnectionError) as exc:
+                last_err = exc
+                print(f"transient read error; retrying ({attempt + 1}/{retries})", flush=True)
+                time.sleep(min(30, 2 ** attempt))
+                continue
+            self._note_rest_limit(headers)
+            if status >= 400:
+                err_body = raw.decode("utf-8", "replace")
+                last_err = GitHubError(
+                    f"HTTP {status} {method} {url.split('?')[0]}", status, err_body[:500]
+                )
+                if status in (403, 429) and "secondary" in err_body.lower():
                     retry_after = headers.get("retry-after")
                     delay = int(retry_after) if retry_after and str(retry_after).isdigit() else min(120, 10 * (attempt + 1))
                     print(f"secondary rate limit; sleeping {delay}s", flush=True)
                     time.sleep(delay)
                     continue
-                if exc.code in (403, 429) and self._is_rate_limit(exc.code, err_body, headers):
+                if status in (403, 429) and self._is_rate_limit(status, err_body, headers):
                     retry_after = headers.get("retry-after")
                     if retry_after and str(retry_after).isdigit():
                         reset = int(time.time()) + int(retry_after)
@@ -108,17 +173,13 @@ class GitHub:
                         reset = int(headers.get("x-ratelimit-reset") or time.time() + 60)
                     self._sleep_until(reset, "core")
                     continue
-                if exc.code in (500, 502, 503, 504):
+                if status in (500, 502, 503, 504):
                     time.sleep(min(60, 2 ** attempt))
                     continue
-                raise last_err from exc
-            except urllib.error.URLError as exc:
-                last_err = exc
-                time.sleep(min(30, 2 ** attempt))
-            except (http.client.IncompleteRead, TimeoutError, ConnectionError) as exc:
-                last_err = exc
-                print(f"transient read error; retrying ({attempt + 1}/{retries})", flush=True)
-                time.sleep(min(30, 2 ** attempt))
+                raise last_err
+            if not raw:
+                return {}, headers
+            return json.loads(raw.decode()), headers
         raise GitHubError(f"request failed after retries: {last_err}")
 
     def _note_rest_limit(self, headers: dict) -> None:
