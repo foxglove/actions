@@ -53,4 +53,4 @@ duration + reserve + preflight exceeds the job limit.
 ## Approval status
 
 Objective + Stage 2 breakdown: approved by engineering lead (this session).
-Release authority / product decisions: Kumar Pasumarthy (per attack-sessions.md).
+Release authority / product decisions: the release authority, moving to the Foundations team over time (see attack-sessions.md).

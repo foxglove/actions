@@ -54,13 +54,13 @@ never become a silent identity — they route to `unresolved`.
 
 ## Outcomes
 
-| Outcome                    | When                                                                                    | Proposed actions                                                           |
-| -------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `new`                      | valid positive, identity established, no match                                          | create ticket (with full ticket material); count once                      |
-| `rediscovered-open`        | valid positive, one open match, no fix claim; or an in-run duplicate                    | append evidence; count once (none for a duplicate)                         |
-| `claimed-fixed-reproduces` | valid positive contradicts a fix claim (open or closed)                                 | append evidence; reopen **only if closed**; count once; identify the claim |
-| `not-observed`             | run ends without observing a tracked exploit                                            | **zero writes**; summary-only with coverage + stop reason                  |
-| `unresolved`               | invalid evidence / ambiguous identity / unknown ticket state / resolved without a claim | none; record the missing evidence                                          |
+| Outcome                    | When                                                                                                                           | Proposed actions                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `new`                      | valid positive, identity established, no match (incl. a replay or in-run duplicate of a new exploit — same outcome, no action) | create ticket (with full ticket material); count once. A replay/in-run duplicate keeps the outcome but proposes `none` |
+| `rediscovered-open`        | valid positive, one open match, no fix claim                                                                                   | append evidence (+ remediation); count once                                                                            |
+| `claimed-fixed-reproduces` | valid positive contradicts a fix claim (open or closed)                                                                        | append evidence; reopen **only if closed**; count once; identify the claim                                             |
+| `not-observed`             | run ends without observing a tracked exploit                                                                                   | **zero writes**; summary-only with coverage + stop reason                                                              |
+| `unresolved`               | invalid evidence / ambiguous or partial identity / unknown or uncomparable ticket state / resolved without a claim             | none; record the missing evidence                                                                                      |
 
 The output is an **action proposal, not proof of delivery.** It never reports a resolved
 ticket as written, never claims a reopen succeeded, and never turns a non-observation or an

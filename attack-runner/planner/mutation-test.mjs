@@ -28,9 +28,6 @@ const EQUIVALENT = new Set([
   "claimed-lax-truthy",
   // matches[0] is only reached with exactly one match (>1 routes to unresolved earlier).
   "match-any-state-open-only",
-  // the find-string first matches validateInput's usable-identity check, not the matcher;
-  // every aliased fixture issue also has a usable chain, so validation is unchanged.
-  "alias-only-chainless",
 ]);
 
 const mutants = [
@@ -107,7 +104,12 @@ const mutants = [
     "if (normEnv(iss.targetEnvironment) !== normEnv(runEnv)) return false;",
     "",
   ],
-  ["related-disabled", "src/plan.mjs", "if (related) {", "if (false) {"],
+  [
+    "related-disabled",
+    "src/plan.mjs",
+    "if (relatedToIssue || relatedInRun) {",
+    "if (false) {",
+  ],
   [
     "related-exact-only-contig",
     "src/plan.mjs",
@@ -256,7 +258,7 @@ const mutants = [
   [
     "replay-key-ignored",
     "src/plan.mjs",
-    "processedKeys.has(derivedKey);",
+    "processedKeys.has(derivedKey) ||\n      processedKeys.has(fpKey);",
     "false;",
   ],
   [
@@ -282,18 +284,6 @@ const mutants = [
     "src/plan.mjs",
     "countedThisRun.add(identityKey);",
     "countedThisRun.add(fp);",
-  ],
-  [
-    "dup-eligible",
-    "src/plan.mjs",
-    'actions = [{ type: "none" }];\n      eligible = false;\n      if (duplicateInRun',
-    'actions = [{ type: "none" }];\n      if (duplicateInRun',
-  ],
-  [
-    "dup-stays-new",
-    "src/plan.mjs",
-    'if (duplicateInRun && outcome === "new") {',
-    "if (false) {",
   ],
   [
     "replayed-not-added-to-counted",
@@ -436,19 +426,19 @@ const mutants = [
   [
     "tm-impact-forced-unknown",
     "src/plan.mjs",
-    "productionImpact: { ...e.productionImpact },",
+    "productionImpact: impact,",
     "productionImpact: { value:'unknown', rationale: e.productionImpact.rationale },",
   ],
   [
     "tm-impact-promoted-yes",
     "src/plan.mjs",
-    "productionImpact: { ...e.productionImpact },",
+    "productionImpact: impact,",
     "productionImpact: { ...e.productionImpact, value: e.productionImpact.value==='unknown'?'yes':e.productionImpact.value },",
   ],
   [
     "tm-impact-rationale-dropped",
     "src/plan.mjs",
-    "productionImpact: { ...e.productionImpact },",
+    "productionImpact: impact,",
     "productionImpact: { value:e.productionImpact.value, rationale:'x' },",
   ],
   [
@@ -514,7 +504,7 @@ const mutants = [
   [
     "incomplete-no-severity",
     "src/plan.mjs",
-    'if (!nonEmptyString(e.severity)) missing.push("severity");',
+    'if (!["low", "medium", "high", "critical"].includes(e.severity))\n    missing.push("severity");',
     "",
   ],
   [
@@ -662,6 +652,49 @@ const mutants = [
     "            evidenceReferences,\n            fixClaimRef,\n",
     "            evidenceReferences,\n",
   ],
+  // --- guards and logic added while addressing PR #55 review ---
+  [
+    "dupid-check-off",
+    "src/plan.mjs",
+    "if (seenIds.has(o.observationId))",
+    "if (false)",
+  ],
+  [
+    "fixclaim-boolean-off",
+    "src/plan.mjs",
+    'typeof iss.fixClaim.claimed !== "boolean"',
+    "false",
+  ],
+  [
+    "runid-check-off",
+    "src/plan.mjs",
+    "if (!nonEmptyString(run.runId))",
+    "if (false)",
+  ],
+  [
+    "issue-env-check-off",
+    "src/plan.mjs",
+    "if (!nonEmptyString(iss.targetEnvironment))",
+    "if (false)",
+  ],
+  [
+    "processed-entry-check-off",
+    "src/plan.mjs",
+    'if (e === null || typeof e !== "object" || Array.isArray(e))',
+    "if (false)",
+  ],
+  [
+    "uncomparable-off",
+    "src/plan.mjs",
+    "if (uncomparable.length) {",
+    "if (false) {",
+  ],
+  [
+    "runpositives-validity-off",
+    "src/plan.mjs",
+    '.filter((o) => o?.kind === "confirmed-positive" && o.validity === "valid")',
+    '.filter((o) => o?.kind === "confirmed-positive")',
+  ],
 ];
 
 let survived = [],
@@ -707,5 +740,11 @@ if (unexpected.length) {
     "UNEXPECTED SURVIVORS (coverage gaps):\n  " + unexpected.join("\n  "),
   );
 }
-console.log(unexpected.length ? "MUTATION TEST: FAIL" : "MUTATION TEST: PASS");
-process.exit(unexpected.length ? 1 : 0);
+if (noapply.length) {
+  // A mutant whose find-string is absent exercises nothing. Fail so a refactor that
+  // silently drops coverage is caught; update or remove the listed mutants.
+  console.log("MUTANTS THAT DID NOT APPLY:\n  " + noapply.join("\n  "));
+}
+const ok = !unexpected.length && !noapply.length;
+console.log(ok ? "MUTATION TEST: PASS" : "MUTATION TEST: FAIL");
+process.exit(ok ? 0 : 1);

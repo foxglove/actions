@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// WP0.1 fixture guard: dependency-free structural + branch-coverage + invariant check.
+// Fixture guard: dependency-free structural + branch-coverage + invariant check.
 // JSON Schema conformance is checked separately with ajv (see README). This guard runs
 // with plain Node so it can gate CI without a network install.
 import fs from "node:fs";

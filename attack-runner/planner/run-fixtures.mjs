@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// WP1.* oracle. Deep-compares plan() output to an authored full expected output
+// Oracle: deep-compares plan() output to an authored full expected output
 // (ignoring only the free-text `reason`/`matchReason`), asserts contract invariants
 // on the ACTUAL output, proves input->output round-trips, and self-tests that the
 // comparison is tight (a mutated output must be rejected).
@@ -108,6 +108,26 @@ function invariants(input, out, problems) {
       : "complete";
   if (out.runSummary?.batchStatus !== want)
     problems.push(`batchStatus ${out.runSummary?.batchStatus} != ${want}`);
+
+  // At most one create-ticket and one increment per identity per run (E1-08):
+  // a fingerprint is ticketed/counted at most once, no matter how many observations.
+  const creates = {};
+  const counts = {};
+  for (const d of out.decisions ?? []) {
+    for (const a of d.proposedActions ?? []) {
+      if (a.type === "create-ticket") {
+        const fp = a.ticketMaterial?.fingerprint ?? "?";
+        creates[fp] = (creates[fp] ?? 0) + 1;
+      }
+      if (a.type === "increment-confirmed-count") {
+        const k =
+          d.target?.issueId ?? d.exploitIdentity?.exploitId ?? a.amount + ":?";
+        counts[k] = (counts[k] ?? 0) + 1;
+      }
+    }
+  }
+  for (const [fp, n] of Object.entries(creates))
+    if (n > 1) problems.push(`${n} create-ticket for one fingerprint ${fp}`);
 }
 
 function selfTestTight(out, expected, problems) {
@@ -189,7 +209,7 @@ for (const name of fs.readdirSync(fixturesDir).sort()) {
   }
 }
 
-// Round-trip: a created ticket's material must be readable back as an existing issue (R2-B1).
+// Round-trip: a created ticket's material must be readable back as an existing issue.
 {
   const first = plan(
     JSON.parse(
@@ -253,6 +273,33 @@ for (const [label, bad] of [
     { run: { runId: "r", targetEnvironment: "party" }, observations: "x" },
   ],
   ["missing-env", { run: { runId: "r" }, observations: [] }],
+  ["missing-runid", { run: { targetEnvironment: "party" }, observations: [] }],
+  [
+    "dup-observation-id",
+    {
+      run: { runId: "r", targetEnvironment: "party" },
+      observations: [
+        { observationId: "x", kind: "non-observation", validity: "valid" },
+        { observationId: "x", kind: "non-observation", validity: "valid" },
+      ],
+    },
+  ],
+  [
+    "fixclaim-nonboolean",
+    {
+      run: { runId: "r", targetEnvironment: "party" },
+      observations: [],
+      existingIssues: [
+        {
+          issueId: "I",
+          state: "open",
+          targetEnvironment: "party",
+          normalizedChain: [],
+          fixClaim: { claimed: "true" },
+        },
+      ],
+    },
+  ],
   [
     "processed-null",
     {

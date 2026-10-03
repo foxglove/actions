@@ -1,4 +1,4 @@
-// Attack Runner offline planner entry point (WP1.*).
+// Attack Runner offline planner entry point.
 export { plan, PlannerInputError } from "./plan.mjs";
 export {
   fingerprint,

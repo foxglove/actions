@@ -1,4 +1,4 @@
-// WP1.1 — chain identity & normalization.
+// Chain identity & normalization.
 //
 // Identity is built only from the structured, controlled-vocabulary `semantics`
 // tuple on each transition, plus the target environment. Prose, titles, resource

@@ -12,7 +12,7 @@ Items 1–2 are flagged _proposed/pending_ in the docs themselves. Ordered by bl
 
 1. **Issuer-service ownership — needs acceptance.**
    `attack-sessions.md` lists the issuer owners as _proposed_
-   (`@foxglove/data-curation-search`, `@wimagguc`, `@dante-foxglove`) and notes "no separate
+   (`@foxglove/data-curation-search`) and notes "no separate
    on-call rotation yet." Which team accepts operational ownership of the new company issuer
    function + test identity + mailbox access, and who signs off (person + date)?
 

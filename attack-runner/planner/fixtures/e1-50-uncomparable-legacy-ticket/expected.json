@@ -1,0 +1,75 @@
+{
+  "runId": "run-e50",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "unresolved",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": null,
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "none",
+        "issueId": null
+      },
+      "proposedActions": [],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": false,
+      "neededEvidence": [
+        "a normalized chain or alias for ticket(s) with no comparable identity: SEC-LEGACY"
+      ]
+    },
+    {
+      "observationId": "obs-2",
+      "outcome": "rediscovered-open",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": "exp-SEC-200",
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "existing-issue",
+        "issueId": "SEC-200"
+      },
+      "proposedActions": [
+        {
+          "type": "append-evidence"
+        },
+        {
+          "type": "append-remediation",
+          "remediation": [
+            {
+              "component": "api",
+              "change": "enforce the boundary"
+            }
+          ]
+        },
+        {
+          "type": "increment-confirmed-count",
+          "amount": 1
+        }
+      ],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": false,
+      "neededEvidence": [],
+      "fixClaimRef": null,
+      "idempotencyKey": "run-e50:exp-SEC-200"
+    }
+  ],
+  "runSummary": {
+    "batchStatus": "partial",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "unresolved": ["obs-1"],
+    "notObserved": [],
+    "edgeAccess": {
+      "classification": "none"
+    }
+  }
+}

@@ -1,4 +1,4 @@
-// WP1.2–1.4 — deterministic reconciliation decision engine.
+// Deterministic reconciliation decision engine.
 //
 // Pure and side-effect free (E1-15): no network, secret reads, ticket writes,
 // Slack, harness execution, or workflow changes. Output is an action PROPOSAL,
@@ -60,19 +60,17 @@ function validateInput(input) {
         throw new PlannerInputError(
           `existing issue ${iss.issueId} needs targetEnvironment`,
         );
-      // A usable identity is required: a chain that actually normalizes, or at
-      // least one alias. An array of prose-only transitions is not usable (R3-M1).
-      const usableChain = normalizeChain(iss.normalizedChain) !== null;
-      const usableAlias =
-        Array.isArray(iss.fingerprintAliases) &&
-        iss.fingerprintAliases.length > 0;
-      if (!usableChain && !usableAlias)
-        throw new PlannerInputError(
-          `existing issue ${iss.issueId} needs a usable normalizedChain or a non-empty fingerprintAliases`,
-        );
+      // An existing issue with no comparable identity (chain does not normalize and
+      // no alias) is NOT a batch error — a single legacy ticket must not throw away
+      // every valid finding. It is handled per-observation below: a would-be-new
+      // observation in that environment routes to triage instead of a speculative
+      // ticket, because we cannot prove it is distinct from the uncomparable issue.
+      // Only reject a fixClaim whose `claimed` is present but not a boolean. An
+      // absent/empty fixClaim (undefined, null, {}) simply means "no claim" and must
+      // not throw away the whole batch.
       if (
-        iss.fixClaim !== undefined &&
-        typeof iss.fixClaim?.claimed !== "boolean"
+        iss.fixClaim?.claimed !== undefined &&
+        typeof iss.fixClaim.claimed !== "boolean"
       )
         throw new PlannerInputError(
           `existing issue ${iss.issueId} fixClaim.claimed must be boolean`,
@@ -144,7 +142,7 @@ function ticketMaterial(obs, fp, exploitId, runEnv) {
     exploitId: exploitId ?? null,
     fingerprint: fp,
     fingerprintVersion: FINGERPRINT_VERSION,
-    // Full structured chain, round-trippable as existingIssues[].normalizedChain (R2-B1).
+    // Full structured chain, round-trippable as existingIssues[].normalizedChain.
     chain: JSON.parse(JSON.stringify(e.chain)),
     labels: [...TICKET_LABELS],
     severity: e.severity,
@@ -178,7 +176,8 @@ export function plan(input) {
       norm: normalizeChain(o.exploit?.chain),
       fp: fingerprint(o.exploit?.chain, runEnv),
     }))
-    .filter((p) => p.norm !== null && p.fp !== null);
+    // fp is null exactly when norm is null (env is validated non-empty), so one check suffices.
+    .filter((p) => p.fp !== null);
   const decisions = [];
   const notObserved = [];
 
@@ -313,22 +312,56 @@ export function plan(input) {
     // No exact match: a related-but-not-equal chain (partial/superset) in the same
     // environment is ambiguous, not a new exploit (E1-18).
     if (matches.length === 0) {
+      // A partial/superset overlap with any same-environment ticket (whatever its
+      // state) is ambiguous: it could be the same exploit as an open ticket, a
+      // contradiction of a resolved/claimed one, or distinct. Ambiguity routes to
+      // triage rather than a speculative new ticket (exact matches are handled above).
+      // An exact match would be in `matches`, so by here no same-env issue shares this
+      // fingerprint; only a partial/superset overlap is possible.
       const relatedToIssue = existingIssues.some((iss) => {
         if (normEnv(iss.targetEnvironment) !== normEnv(runEnv)) return false;
         const issNorm = normalizeChain(iss.normalizedChain);
         if (issNorm === null) return false;
-        if (fingerprint(iss.normalizedChain, iss.targetEnvironment) === fp)
-          return false;
         return (
           isSubsequence(obsNorm, issNorm) || isSubsequence(issNorm, obsNorm)
         );
       });
+      // A same-environment ticket we cannot compare (chain does not normalize and no
+      // alias) means we cannot prove this observation is a distinct exploit -> triage.
+      const uncomparable = existingIssues.filter(
+        (iss) =>
+          normEnv(iss.targetEnvironment) === normEnv(runEnv) &&
+          normalizeChain(iss.normalizedChain) === null &&
+          !(
+            Array.isArray(iss.fingerprintAliases) &&
+            iss.fingerprintAliases.length > 0
+          ),
+      );
+      if (uncomparable.length) {
+        decisions.push(
+          decision({
+            observationId,
+            outcome: "unresolved",
+            reason:
+              "An existing ticket in this environment has no comparable identity; cannot confirm this is a distinct exploit.",
+            matchReason: "uncomparable existing ticket",
+            evidenceReferences,
+            neededEvidence: [
+              `a normalized chain or alias for ticket(s) with no comparable identity: ${uncomparable
+                .map((i) => i.issueId)
+                .join(", ")}`,
+            ],
+          }),
+        );
+        continue;
+      }
       // Also compare against every other valid positive in THIS run (computed up
       // front, so the result is independent of observation order): a partial/superset
       // overlap with a different fingerprint is ambiguous, not two new tickets.
+      // `p.fp !== fp` also excludes this observation's own entry (one observation
+      // has one fingerprint); exact duplicates are handled by the dedup logic below.
       const relatedInRun = runPositives.some(
         (p) =>
-          p.observationId !== observationId &&
           p.fp !== fp &&
           (isSubsequence(obsNorm, p.norm) || isSubsequence(p.norm, obsNorm)),
       );
@@ -476,19 +509,23 @@ export function plan(input) {
     }
 
     const derivedKey = `${run.runId}:${exploitId ?? fp}`;
+    // Also check the fingerprint-only key form: a ticket created on a first attempt
+    // gains an exploitId, so a retry of the same run would otherwise compute a
+    // different key and double-count (E1-08). The fingerprint is stable across attempts.
+    const fpKey = `${run.runId}:${fp}`;
     const replayed =
       (obs.eventId && processedIds.has(obs.eventId)) ||
-      processedKeys.has(derivedKey);
+      processedKeys.has(derivedKey) ||
+      processedKeys.has(fpKey);
     const duplicateInRun = countedThisRun.has(identityKey);
 
     let actions;
     if (replayed || duplicateInRun) {
+      // A replayed or in-run-duplicate observation proposes no write and keeps its
+      // computed outcome (a duplicate of a `new` exploit stays `new` with no action,
+      // like a replayed `new`); the earlier decision owns the ticket and the count.
       actions = [{ type: "none" }];
       eligible = false;
-      if (duplicateInRun && !replayed && outcome === "new") {
-        outcome = "rediscovered-open";
-        matchReason = "duplicate of an exploit already identified in this run";
-      }
     } else {
       actions = [
         ...baseActions,

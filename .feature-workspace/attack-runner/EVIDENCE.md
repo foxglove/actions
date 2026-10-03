@@ -73,3 +73,21 @@
   / 0 unexpected; ajv valid (ex. 4 marked negative-input fixtures). R3-M3 left as an open
   acceptance-owner question.
 - cost: unavailable (cloud transcript not local).
+
+## 2026-10-03 — PR #55 review round + isolated self-review
+
+- Claude PR review (2 batches) + a required isolated self-review (verdict HOLD: 3 major,
+  5 minor) before pushing. Fixes: idempotency fp-key double-count; in-run duplicate stays
+  `new`+none; partial-overlap triage is state-independent and no longer skips non-open
+  tickets (F1); an uncomparable legacy ticket no longer throws the batch — it triages the
+  would-be-new finding (F2); input validation (dup id, fixClaim boolean, runId, issue env,
+  processedEvents entry) and the new logic are now pinned by structural tests + mutants (F3);
+  CI workflow push→main + actions @v6 + dead overlap guard removed; README outcomes table
+  corrected; ≤1-create-ticket-per-fingerprint oracle invariant added; names replaced with
+  team/role (public repo); stale counts corrected.
+- Gates: run-fixtures **57/0** + 9 structural-reject; check-fixtures PASS; mutation-test
+  **117 mutants, 114 killed, 0 unexpected** (3 equivalents), 0 noapply; ajv valid.
+- Deferred/minor: in-run duplicate remediation-union (F4) and duplicate-observationId
+  dedup-vs-reject (F5) — documented on the PR threads. product-docs/attack-sessions.md on
+  `main` still names an individual (source contract, outside this PR) — flagged to the user.
+- cost: unavailable (cloud transcript not local).
