@@ -237,8 +237,6 @@ def chart_size_time(prs: pd.DataFrame) -> str:
     bp = ax.boxplot(data, tick_labels=[f"{lb}\nn={n}" for lb, n in zip(labels, ns)], showfliers=False)
     for i, n in enumerate(ns, start=1):
         if n < 10:
-            for element in ("boxes", "whiskers", "caps", "medians"):
-                pass
             plt.setp(bp["boxes"][i - 1], color=GRAY)
     ax.set_yscale("log")
     # title from ends
@@ -463,7 +461,6 @@ def examples(findings: pd.DataFrame, prs: pd.DataFrame, n: int = 10) -> str:
     real = findings[findings["category"].notna()].copy()
     if real.empty:
         return "<p>No classified findings.</p>"
-    rng = np.random.default_rng(20260401)
     take = real.sample(n=min(n, len(real)), random_state=20260401)
     bits = []
     for _, row in take.iterrows():
@@ -581,7 +578,33 @@ def main() -> None:
         }
     )
     no_appr = int(((merged_lgtm["human_approval_count"] == 0) & (merged_lgtm["review_dismissals"].fillna(0) == 0)).sum()) if len(merged_lgtm) else 0
-    not_mergeable = int((merged_lgtm["mergeable_at_lgtm"] == False).sum()) if "mergeable_at_lgtm" in merged_lgtm.columns else 0
+    if "mergeable_at_lgtm" in merged_lgtm.columns and "ci_known" in merged_lgtm.columns:
+        known = merged_lgtm[merged_lgtm["ci_known"] == True]
+        not_mergeable = int((known["mergeable_at_lgtm"] == False).sum())
+    else:
+        not_mergeable = int(summary.get("not_mergeable") or 0)
+    members_path = ROOT / "data/raw/app/meta/members.json"
+    member_n = len(json.loads(members_path.read_text())) if members_path.exists() else None
+    member_phrase = f"{member_n} members" if member_n is not None else "the org member snapshot"
+    examples_path = ROOT / "data/interim/lgtm_examples.json"
+    lgtm_examples = []
+    if examples_path.exists():
+        lgtm_examples = [row for row in json.loads(examples_path.read_text()) if (row.get("body") or "").strip() == "LGTM"][:3]
+    if lgtm_examples:
+        example_html = "".join(
+            f'<li><a href="{html.escape(row["url"])}">app#{row["number"]}</a> {html.escape(row.get("kind") or "review")} body <code>LGTM</code></li>'
+            for row in lgtm_examples
+        )
+    else:
+        example_html = "<li>Exact LGTM examples are written to <code>data/interim/lgtm_examples.json</code> by <code>parse_prs.py</code>.</li>"
+    bypass = main_rules.get("bypass_actors") or []
+    if bypass:
+        bypass_txt = ", ".join(
+            f'{html.escape(str(row.get("actor_type")))} {html.escape(str(row.get("actor_id")))} ({html.escape(str(row.get("bypass_mode")))})'
+            for row in bypass
+        )
+    else:
+        bypass_txt = "none recorded"
 
     def section_charts(*keys):
         return "".join(f'<div class="chart">{svgs[k]}</div>' for k in keys)
@@ -610,7 +633,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <h2>2. Method</h2>
 <p>The study measures defect-catching: bugs, security issues, and data loss or corruption, with other comment categories kept as context. It does not measure knowledge sharing, shared ownership, mentoring, or design alignment. A bot-sufficient PR is one where those defect catches were not observed. It is not a claim that human review added nothing.</p>
 {flow}
-<p>First bot LGTM is the earliest <code>claude</code> / <code>claude[bot]</code> review or comment whose body contains the token <code>LGTM</code>. In this data the signal is a review body that is exactly <code>LGTM</code>, submitted as a comment, not as an approval. The prompt started requiring that exact body on 18 Jun 2026. Before that, a clean review often submitted nothing. April and May coverage is therefore a property of the signal, not only of the bot's judgment.</p>
+<p>First bot LGTM is the earliest <code>claude</code> / <code>claude[bot]</code> review or comment whose body contains the token <code>LGTM</code>. From 18 Jun 2026 the prompt requires that body to be exactly <code>LGTM</code>, submitted as a comment, not as an approval. Before that, a clean review often submitted nothing. April and May coverage is therefore a property of the signal, not only of the bot's judgment. Comment LGTMs use the last commit at or before the comment.</p>
 <p>Counterfactual merge SHA: the commit the first LGTM reviewed, if required checks passed there; otherwise the first later commit where those checks passed and the latest bot review on that commit was still an LGTM. Stale reviews are not dismissed on push.</p>
 <p>Bucket A is a real medium or high bug, security, or data-loss finding after the LGTM that led to a code change or an explicit author acknowledgment, and that CI at the counterfactual SHA would not have caught. A-ci is that same finding when the comment ties it to a failing required check. A-ci counts as bot-sufficient. Bucket B is a later fix whose blamed lines were already in the counterfactual SHA. Bucket D is a later fix whose lines were added after that SHA. B is a lower bound. Bucket C is none of A, A-ci, B, or D.</p>
 <p>Primary model, chosen before looking at results: <code>bot_sufficient ~ month</code> (April = 0 … September = 5), then the same model plus size bucket and author-tenure bucket. Repo is constant in this pilot, so it is omitted. Engagement (non-nit human comments after the LGTM) is a sensitivity check only.</p>
@@ -627,9 +650,9 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <li>Defect-catching only. Bot-sufficient does not mean human review has no other value.</li>
 <li>Reviewers see the LGTM and may comment less as trust grows. The engagement sensitivity check is there for that reason. The check is partly downstream of the same behavior that creates bucket A.</li>
 <li>Bucket A depends on the classifier. Bucket B depends on a fix-title and blame heuristic. Recall of that heuristic is estimated from Linear bug tickets when the escape step has run; Sentry is not connected, so recall is incomplete and B is a lower bound.</li>
-<li>The Checks API returns 403 for this token. Successful workflow runs are treated as their required jobs passing. In a sample, a successful CI workflow hid a skipped <code>docker-build</code> once in 38 runs, and a successful Storybook workflow hid a skipped <code>superadmin-storybook</code> on 3 of 35 runs. Job-level results are fetched when the workflow did not succeed. <code>Storybook / app screenshots</code> is read from commit statuses.</li>
+<li>The Checks API returns 403 for this token. Job conclusions are fetched for every selected workflow run. A skipped required job counts as a pass, because GitHub reports it as Success and does not block merge. A 30-SHA comparison of a workflow-level proxy agreed on 23 SHAs and is not used. <code>Storybook / app screenshots</code> is read from commit statuses.</li>
 <li>The ruleset audit log is 403. The required-check list and the one-approval rule are the ruleset as of its <code>updated_at</code> ({html.escape(str(main_rules.get('updated_at')))}), applied across the whole window.</li>
-<li>Current org membership is a snapshot of 68 members. The audit log cannot separate people who left from external collaborators.</li>
+<li>Current org membership is a snapshot of {member_phrase}. The audit log cannot separate people who left from external collaborators. The member list is not committed.</li>
 <li>Squash merges collapse the PR into one commit. B versus D uses the file text at the LGTM SHA and at the final head. Non-unique lines are low confidence and are not counted in the headline B or D rates.</li>
 <li>A-ci requires the review comment to mention CI, tests, or lint, because check logs are not readable. That under-counts A-ci.</li>
 <li>September's follow-up window runs only through 3 Oct 2026.</li>
@@ -641,12 +664,10 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <p>Login: <code>claude[bot]</code> on REST, <code>claude</code> on GraphQL. The bot submits <code>COMMENT</code> reviews, never <code>APPROVE</code>. First appearance in app: 15 Feb 2026, before the window (<code>#12483</code>).</p>
 <h3>Three LGTM examples</h3>
 <ul>
-<li><a href="https://github.com/foxglove/app/pull/19578">app#19578</a> review body <code>LGTM</code></li>
-<li><a href="https://github.com/foxglove/app/pull/19577">app#19577</a> review body <code>LGTM</code></li>
-<li><a href="https://github.com/foxglove/app/pull/19400">app#19400</a> review body <code>LGTM</code> after earlier non-LGTM bot reviews</li>
+{example_html}
 </ul>
 <h3>Branch protection</h3>
-<p>Classic branch protection is unset. Active ruleset "{html.escape(main_rules.get('name',''))}" targets the default branch, requires 1 approving review, does not dismiss stale reviews on push, requires linear history, and requires the status checks listed in the method. Bypass actor: team <code>foxglovebot</code> (id 9800048), bypass mode always. A disabled ruleset named "no merges - active incident" also exists.</p>
+<p>Classic branch protection is unset. Active ruleset "{html.escape(main_rules.get('name',''))}" targets the default branch, requires 1 approving review, does not dismiss stale reviews on push, requires linear history, and requires the status checks listed in the method. Bypass actors: {bypass_txt}. A disabled ruleset named "no merges - active incident" also exists.</p>
 <h3>Config changes in foxglove/actions during the window</h3>
 <ul>
 {''.join(f'<li>{html.escape(r["date"])} {html.escape(r["summary"])}</li>' for r in history.get('actions', []))}

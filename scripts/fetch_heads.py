@@ -7,24 +7,17 @@ the pre-merge head and its ancestors are not, until refs/pull/N/head is fetched.
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import time
 from pathlib import Path
 
+from common import git_env, study_repo
+
 ROOT = Path(__file__).resolve().parents[1]
 PRS = ROOT / "data" / "raw" / "app" / "prs"
-REPO = Path("/tmp/foxglove-app")
+FAILED = ROOT / "data" / "raw" / "app" / "meta" / "head_fetch_failed.json"
+REPO = study_repo()
 BATCH = 40
-
-
-def git_env() -> dict:
-    env = os.environ.copy()
-    env["GIT_CONFIG_GLOBAL"] = "/tmp/empty-gitconfig"
-    env["GIT_CONFIG_NOSYSTEM"] = "1"
-    env["GIT_TERMINAL_PROMPT"] = "0"
-    env["GIT_ASKPASS"] = "/tmp/git-askpass.sh"
-    return env
 
 
 def has_ref(number: int) -> bool:
@@ -57,6 +50,7 @@ def fetch_batch(numbers: list[int]) -> None:
         print(f"batch failed ({proc.returncode}); splitting {numbers[0]}..{numbers[-1]}", flush=True)
         print(proc.stderr[-300:].replace("\n", " "), flush=True)
         if len(numbers) == 1:
+            record_failure(numbers[0])
             return
         mid = len(numbers) // 2
         fetch_batch(numbers[:mid])
@@ -71,14 +65,33 @@ def fetch_running() -> bool:
         return False
 
 
+def load_failures() -> set[int]:
+    if not FAILED.exists():
+        return set()
+    try:
+        return {int(n) for n in json.loads(FAILED.read_text())}
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return set()
+
+
+def record_failure(number: int) -> None:
+    failed = load_failures()
+    failed.add(number)
+    FAILED.parent.mkdir(parents=True, exist_ok=True)
+    FAILED.write_text(json.dumps(sorted(failed)))
+    print(f"head fetch failed for {number}", flush=True)
+
+
 def pending() -> list[int]:
+    failed = load_failures()
     out = []
     for path in PRS.glob("*.json"):
         if not path.stem.isdigit():
             continue
         number = int(path.stem)
-        if not has_ref(number):
-            out.append(number)
+        if number in failed or has_ref(number):
+            continue
+        out.append(number)
     return out
 
 

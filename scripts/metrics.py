@@ -15,9 +15,11 @@ from pathlib import Path
 import pandas as pd
 
 from common import (
+    CI_REF_RE,
     MONTHS,
     SIZE_ORDER,
     hours_between,
+    load_ci_index,
     month_index,
     parse_ts,
     percentile,
@@ -42,32 +44,7 @@ def read_jsonl(path: Path) -> list[dict]:
 
 
 def ci_index() -> dict[int, dict]:
-    out = {}
-    eval_dir = ROOT / "data" / "raw" / "app" / "ci" / "eval"
-    for path in eval_dir.glob("*.json"):
-        data = json.loads(path.read_text())
-        shas = data.get("shas") or []
-        chosen = None
-        mergeable = False
-        first_eval = None
-        for ev in data.get("evals") or []:
-            if first_eval is None:
-                first_eval = ev
-            if ev.get("passed"):
-                chosen = ev.get("sha")
-                mergeable = bool(shas) and ev.get("sha") == shas[0]
-                break
-        if chosen is None and shas:
-            chosen = shas[0]
-        out[int(data["number"])] = {
-            "counterfactual_sha": chosen,
-            "mergeable_at_lgtm": mergeable if chosen else False,
-            "lgtm_sha_failed_checks": (first_eval or {}).get("failed") or [],
-            "lgtm_sha_missing_checks": (first_eval or {}).get("missing") or [],
-            "lgtm_sha_passed": bool(first_eval and first_eval.get("passed")),
-            "ci_known": True,
-        }
-    return out
+    return load_ci_index(ROOT / "data" / "raw" / "app" / "ci" / "eval")
 
 
 def load_labels() -> dict[str, dict]:
@@ -95,10 +72,6 @@ def load_labels() -> dict[str, dict]:
     if path.exists():
         for row in read_jsonl(path):
             labels[row["finding_id"]] = row
-    if labels:
-        with path.open("w") as fh:
-            for row in labels.values():
-                fh.write(json.dumps(row, separators=(",", ":")) + "\n")
     return labels
 
 
@@ -180,8 +153,7 @@ def aci_for_finding(f: dict, ci: dict | None) -> bool:
     failed = ci.get("lgtm_sha_failed_checks") or []
     if not failed:
         return False
-    text = f"{f.get('body') or ''}\n{f.get('path') or ''}".lower()
-    if any(token in text for token in ("ci", "test", "lint", "typecheck", "tsc", "failing check")):
+    if CI_REF_RE.search(f.get("body") or ""):
         return True
     return False
 
@@ -576,6 +548,10 @@ def main() -> None:
         for f in by_pr_findings.get(int(p["number"]), []):
             people.add(f.get("login"))
     people.discard(None)
+    members_path = ROOT / "data" / "raw" / "app" / "meta" / "members.json"
+    member_logins = set()
+    if members_path.exists():
+        member_logins = {row.get("login") for row in json.loads(members_path.read_text()) if row.get("login")}
 
     dev_rows = []
     periods = [*MONTHS, "all"]
@@ -623,16 +599,7 @@ def main() -> None:
             repos = {"app": len(authored)}
             for p in authored:
                 sizes[p.get("size_bucket")] += 1
-            member = None
-            if authored:
-                member = authored[0].get("current_org_member")
-            else:
-                member = next((p.get("current_org_member") for p, _rev in reviews if p.get("author") == person), None)
-            # current member flag from any authored pr, else unknown; membership is of the person not the author role
-            if member is None:
-                member = any(p.get("author") == person and p.get("current_org_member") for p in cohort)
-                if not any(p.get("author") == person for p in cohort):
-                    member = None
+            member = person in member_logins if member_logins else None
             hm_raised = [
                 f
                 for f in raised
@@ -681,10 +648,7 @@ def main() -> None:
                 {
                     "person": person,
                     "month": period,
-                    "current_org_member": member if authored else next(
-                        (True for p in cohort if p.get("author") == person and p.get("current_org_member")),
-                        member,
-                    ),
+                    "current_org_member": member,
                     "authored_prs": len(authored),
                     "low_sample_author": len(authored) < 10,
                     "size_mix": dict(sizes),

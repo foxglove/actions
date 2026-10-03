@@ -81,15 +81,22 @@ class GitHub:
                 headers = {k.lower(): v for k, v in exc.headers.items()}
                 self._note_rest_limit(headers)
                 last_err = GitHubError(f"HTTP {exc.code} {method} {url.split('?')[0]}", exc.code, err_body[:500])
+                if exc.code in (403, 429) and "secondary" in err_body.lower():
+                    retry_after = headers.get("retry-after")
+                    delay = int(retry_after) if retry_after and str(retry_after).isdigit() else min(120, 10 * (attempt + 1))
+                    print(f"secondary rate limit; sleeping {delay}s", flush=True)
+                    time.sleep(delay)
+                    continue
                 if exc.code in (403, 429) and self._is_rate_limit(exc.code, err_body, headers):
-                    reset = int(headers.get("x-ratelimit-reset") or time.time() + 60)
+                    retry_after = headers.get("retry-after")
+                    if retry_after and str(retry_after).isdigit():
+                        reset = int(time.time()) + int(retry_after)
+                    else:
+                        reset = int(headers.get("x-ratelimit-reset") or time.time() + 60)
                     self._sleep_until(reset, "core")
                     continue
                 if exc.code in (500, 502, 503, 504):
                     time.sleep(min(60, 2 ** attempt))
-                    continue
-                if exc.code == 403 and "secondary" in err_body.lower():
-                    time.sleep(min(120, 10 * (attempt + 1)))
                     continue
                 raise last_err from exc
             except urllib.error.URLError as exc:
@@ -110,7 +117,9 @@ class GitHub:
         if headers.get("x-ratelimit-remaining") == "0":
             return True
         text = body.lower()
-        return "rate limit" in text or "secondary rate" in text
+        if "secondary rate" in text:
+            return False
+        return "rate limit" in text
 
     def graphql(self, query: str, variables: dict | None = None, retries: int = 6) -> dict:
         payload = {"query": query}

@@ -1,7 +1,8 @@
 """Turn cached PR payloads into interim JSONL tables.
 
-Does not classify findings. Tags each human finding before/after the first bot LGTM
-only after the timestamp is known; the classifier is a later step and does not see the tag.
+Does not classify findings. findings.jsonl includes a before/after timing field for
+the metrics step. Classifier batches are a separate file and contain only id,
+comment, path, diff_hunk, and replies. They do not include timing.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from common import (
     ACK_RE,
     WINDOW_END,
     WINDOW_START,
+    bot_lgtm_events,
     contains_lgtm,
     hours_between,
     is_bot_author,
@@ -95,57 +97,7 @@ def author_login(author: dict | None) -> str | None:
 
 
 def collect_lgtm_events(pr: dict) -> list[dict]:
-    events = []
-    for rev in nodes(pr, "reviews"):
-        if not is_review_bot(rev.get("author")):
-            continue
-        body = rev.get("body") or ""
-        if contains_lgtm(body):
-            events.append(
-                {
-                    "at": parse_ts(rev.get("submittedAt")),
-                    "sha": (rev.get("commit") or {}).get("oid"),
-                    "kind": "review",
-                    "exact": body.strip() == "LGTM",
-                    "body": body,
-                    "database_id": rev.get("databaseId"),
-                }
-            )
-    for comment in nodes(pr, "comments"):
-        if not is_review_bot(comment.get("author")):
-            continue
-        body = comment.get("body") or ""
-        if contains_lgtm(body):
-            events.append(
-                {
-                    "at": parse_ts(comment.get("createdAt")),
-                    "sha": None,
-                    "kind": "issue_comment",
-                    "exact": body.strip() == "LGTM",
-                    "body": body,
-                    "database_id": comment.get("databaseId"),
-                }
-            )
-    for thread in nodes(pr, "reviewThreads"):
-        for comment in (thread.get("comments") or {}).get("nodes") or []:
-            if not is_review_bot(comment.get("author")):
-                continue
-            body = comment.get("body") or ""
-            if contains_lgtm(body):
-                events.append(
-                    {
-                        "at": parse_ts(comment.get("createdAt")),
-                        "sha": None,
-                        "kind": "review_comment",
-                        "exact": body.strip() == "LGTM",
-                        "body": body,
-                        "database_id": comment.get("databaseId"),
-                        "path": comment.get("path"),
-                    }
-                )
-    events = [e for e in events if e["at"] is not None]
-    events.sort(key=lambda e: e["at"])
-    return events
+    return bot_lgtm_events(pr)
 
 
 def bot_reviews(pr: dict) -> list[dict]:
@@ -304,7 +256,7 @@ def closed_info(pr: dict) -> dict:
     comments = []
     for c in nodes(pr, "comments"):
         at = parse_ts(c.get("createdAt"))
-        if closed_at and at and at <= closed_at + (closed_at - closed_at):
+        if closed_at and at and at <= closed_at:
             comments.append((at, author_login(c.get("author")), c.get("body") or ""))
     comments = [c for c in comments if c[0] is not None]
     comments.sort(key=lambda x: x[0])
@@ -408,7 +360,7 @@ def main() -> None:
     members = load_members()
     print("loading git history for tenure", flush=True)
     first_login, first_email = git_first_commits()
-    paths = sorted(PRS_DIR.glob("*.json"), key=lambda p: int(p.stem))
+    paths = sorted((p for p in PRS_DIR.glob("*.json") if p.stem.isdigit()), key=lambda p: int(p.stem))
     print(f"parsing {len(paths)} pr files", flush=True)
     email_logins = build_email_login_map(paths)
     # Fold email first-seen into logins.

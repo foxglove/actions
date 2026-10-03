@@ -277,13 +277,13 @@ def fetch_batch(gh: GitHub, numbers: list[int], batch_idx: int) -> dict[int, dic
     return out
 
 
-def paginate_connection(gh: GitHub, number: int, field: str, inner: str, cursor: str) -> dict:
+def paginate_connection(gh: GitHub, number: int, field: str, inner: str, cursor: str, extra_args: str = "") -> dict:
     query = f"""
     query($cursor: String!) {{
       rateLimit {{ cost remaining resetAt }}
       repository(owner: "foxglove", name: "app") {{
         pullRequest(number: {number}) {{
-          {field}(first: 50, after: $cursor) {{
+          {field}(first: 50, after: $cursor{extra_args}) {{
             pageInfo {{ hasNextPage endCursor }}
             nodes {{ {inner} }}
           }}
@@ -311,6 +311,73 @@ commit { oid committedDate authoredDate messageHeadline authors(first: 5) { node
 
 FILE_NODE = "path additions deletions"
 COMMENT_NODE = "databaseId body createdAt author { ... on User { login __typename } ... on Bot { login __typename } }"
+_ACTOR = "actor { ... on User { login __typename } ... on Bot { login __typename } }"
+TIMELINE_NODE = f"""
+__typename
+... on ReviewRequestedEvent {{ createdAt {_ACTOR} }}
+... on ReviewRequestRemovedEvent {{ createdAt {_ACTOR} }}
+... on HeadRefForcePushedEvent {{ createdAt {_ACTOR} beforeCommit {{ oid }} afterCommit {{ oid }} }}
+... on HeadRefRestoredEvent {{ createdAt {_ACTOR} }}
+... on ClosedEvent {{ createdAt {_ACTOR} }}
+... on MergedEvent {{ createdAt {_ACTOR} commit {{ oid }} }}
+... on ReopenedEvent {{ createdAt {_ACTOR} }}
+... on ReadyForReviewEvent {{ createdAt {_ACTOR} }}
+... on ConvertToDraftEvent {{ createdAt {_ACTOR} }}
+... on ReviewDismissedEvent {{ createdAt {_ACTOR} dismissalMessage }}
+... on PullRequestCommit {{ commit {{ oid committedDate }} }}
+... on AutomaticBaseChangeSucceededEvent {{ createdAt }}
+... on BaseRefChangedEvent {{ createdAt }}
+"""
+
+THREAD_COMMENT_NODE = (
+    "databaseId body createdAt path diffHunk line originalLine "
+    "author { ... on User { login __typename } ... on Bot { login __typename } }"
+)
+
+
+def extend_thread_comments(gh: GitHub, number: int, pr: dict) -> None:
+    for thread in ((pr.get("reviewThreads") or {}).get("nodes") or []):
+        comments = thread.get("comments") or {}
+        nodes = list(comments.get("nodes") or [])
+        page = comments.get("pageInfo") or {}
+        thread_id = thread.get("id")
+        guard = 0
+        while page.get("hasNextPage") and page.get("endCursor") and thread_id and guard < 10:
+            guard += 1
+            query = f"""
+            query($id: ID!, $cursor: String!) {{
+              rateLimit {{ cost remaining resetAt }}
+              node(id: $id) {{
+                ... on PullRequestReviewThread {{
+                  comments(first: 50, after: $cursor) {{
+                    pageInfo {{ hasNextPage endCursor }}
+                    nodes {{ {THREAD_COMMENT_NODE} }}
+                  }}
+                }}
+              }}
+            }}
+            """
+            data = gh.graphql(query, {"id": thread_id, "cursor": page["endCursor"]})
+            block = ((data.get("data") or {}).get("node") or {}).get("comments") or {}
+            nodes.extend(block.get("nodes") or [])
+            page = block.get("pageInfo") or {"hasNextPage": False}
+        thread["comments"] = {"pageInfo": page, "nodes": nodes}
+
+
+def note_truncation(pr: dict) -> None:
+    truncated = []
+    for field in ("reviews", "commits", "files", "comments", "reviewThreads", "labels", "timelineItems"):
+        page = (pr.get(field) or {}).get("pageInfo") or {}
+        if page.get("hasNextPage"):
+            truncated.append(field)
+    more_threads = 0
+    for thread in ((pr.get("reviewThreads") or {}).get("nodes") or []):
+        if ((thread.get("comments") or {}).get("pageInfo") or {}).get("hasNextPage"):
+            more_threads += 1
+    pr["_truncated_fields"] = truncated
+    pr["_threads_with_more_comments"] = more_threads
+
+
 THREAD_NODE = """
 id isResolved isOutdated path line
 comments(first: 30) {
@@ -327,15 +394,22 @@ def extend_pages(gh: GitHub, number: int, pr: dict) -> None:
         ("files", FILE_NODE),
         ("comments", COMMENT_NODE),
         ("reviewThreads", THREAD_NODE),
+        ("labels", "name", ""),
+        (
+            "timelineItems",
+            TIMELINE_NODE,
+            ", itemTypes: [REVIEW_REQUESTED_EVENT, REVIEW_REQUEST_REMOVED_EVENT, HEAD_REF_FORCE_PUSHED_EVENT, HEAD_REF_RESTORED_EVENT, CLOSED_EVENT, MERGED_EVENT, REOPENED_EVENT, READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT, REVIEW_DISMISSED_EVENT, AUTOMATIC_BASE_CHANGE_SUCCEEDED_EVENT, BASE_REF_CHANGED_EVENT]",
+        ),
     ]
-    for field, inner in specs:
+    for field, inner, *rest in specs:
+        extra_args = rest[0] if rest else ""
         conn = pr.get(field) or {}
         nodes = list(conn.get("nodes") or [])
         page = conn.get("pageInfo") or {}
         guard = 0
         while page.get("hasNextPage") and page.get("endCursor") and guard < 20:
             guard += 1
-            nxt = paginate_connection(gh, number, field, inner, page["endCursor"])
+            nxt = paginate_connection(gh, number, field, inner, page["endCursor"], extra_args)
             nodes.extend(nxt.get("nodes") or [])
             page = nxt.get("pageInfo") or {"hasNextPage": False}
             save(
@@ -410,9 +484,11 @@ def main() -> None:
         for n, pr in got.items():
             try:
                 extend_pages(gh, n, pr)
+                extend_thread_comments(gh, n, pr)
             except GitHubError as exc:
                 print(f"pagination failed for {n}: {exc}", flush=True)
                 pr["_pagination_error"] = str(exc)
+            note_truncation(pr)
             save(PRS / f"{n}.json", pr)
         done += len(chunk)
         elapsed = time.time() - started

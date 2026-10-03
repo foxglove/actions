@@ -3,22 +3,18 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from collections import defaultdict
 from pathlib import Path
 
+from common import git_env, study_repo
+
 ROOT = Path(__file__).resolve().parents[1]
 INTERIM = ROOT / "data" / "interim"
-REPO = Path("/tmp/foxglove-app")
+REPO = study_repo()
 
 
-def name_only(sha_a: str, sha_b: str) -> set[str]:
-    env = os.environ.copy()
-    env["GIT_CONFIG_GLOBAL"] = "/tmp/empty-gitconfig"
-    env["GIT_CONFIG_NOSYSTEM"] = "1"
-    env["GIT_TERMINAL_PROMPT"] = "0"
-    env["GIT_ASKPASS"] = "/tmp/git-askpass.sh"
+def name_only(sha_a: str, sha_b: str) -> set[str] | None:
     proc = subprocess.run(
         [
             "git",
@@ -35,10 +31,10 @@ def name_only(sha_a: str, sha_b: str) -> set[str]:
         ],
         text=True,
         capture_output=True,
-        env=env,
+        env=git_env(),
     )
     if proc.returncode != 0:
-        return set()
+        return None
     return {line.strip() for line in proc.stdout.splitlines() if line.strip()}
 
 
@@ -55,7 +51,8 @@ def main() -> None:
     by_pr = defaultdict(list)
     for f in findings:
         by_pr[int(f["pr"])].append(f)
-    cache: dict[tuple[str, str], set[str]] = {}
+    cache: dict[tuple[str, str], set[str] | None] = {}
+    diff_failures = 0
     for number, group in by_pr.items():
         pr = prs.get(number)
         if not pr:
@@ -77,13 +74,20 @@ def main() -> None:
                 if c.get("at") and at and c["at"] <= at:
                     base = c["sha"]
             if base is None:
-                base = commits[0]["sha"]
+                # A rebase rewrites committedDate, so every commit can look later
+                # than the finding. Diff from the parent of the first commit so
+                # that commit's own files are included.
+                base = f"{commits[0]['sha']}^"
             if base == head:
                 continue
             key = (base, head)
             if key not in cache:
                 cache[key] = name_only(base, head)
             changed = cache[key]
+            if changed is None:
+                finding["code_change_confidence"] = "diff_failed"
+                diff_failures += 1
+                continue
             if path and path in changed:
                 finding["code_change"] = True
                 finding["code_change_confidence"] = "high" if finding.get("author_acknowledged") else "medium"
@@ -96,7 +100,10 @@ def main() -> None:
         for finding in findings:
             fh.write(json.dumps(finding, separators=(",", ":")) + "\n")
     changed = sum(1 for f in findings if f.get("code_change"))
-    print(f"findings {len(findings)} with code change {changed} diffs {len(cache)}", flush=True)
+    print(
+        f"findings {len(findings)} with code change {changed} diffs {len(cache)} diff_failed {diff_failures}",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

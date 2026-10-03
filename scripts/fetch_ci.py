@@ -1,21 +1,23 @@
-"""Cache commit statuses and Actions runs for the first bot-LGTM SHA.
+"""Cache commit statuses and Actions job results for the first bot-LGTM SHA.
 
 Checks API and GraphQL CheckRun are 403 for this fine-grained token.
-Required checks are inferred as follows:
+Required checks are read as follows:
 
-- A workflow run whose conclusion is success is treated as its required jobs
-  passing. On a 38-run sample, a successful CI workflow disagreed with a
-  required job once (docker-build skipped). Storybook success disagreed for
-  superadmin-storybook on 3/35 runs (job skipped). Those rates are reported
-  as a coverage gap; they are not re-fetched for every SHA.
-- If the selected run's conclusion is not success, job conclusions are fetched
-  and matched by name. Playwright jobs whose name ends in "(e2e-web)" or
-  "(e2e-desktop)" count, including the uninterpolated template form.
+- Every selected workflow run is expanded to job conclusions. A 30-SHA sample
+  in data/raw/app/meta/ci_proxy_validation.json agreed with a workflow-level
+  proxy on 23 SHAs and set use_workflow_proxy false, so the proxy is not used.
+  Disagreements included a success proxy whose Playwright jobs were missing.
+- A skipped job counts as a pass. GitHub reports a skipped required job as
+  Success and does not block merge. Skipped docker-build or
+  superadmin-storybook jobs are not coverage errors.
+- Playwright jobs whose name ends in "(e2e-web)" or "(e2e-desktop)" count,
+  including the uninterpolated template form.
 - "Storybook / app screenshots" is a commit status, read from the Statuses API.
-  Missing or failing status means the SHA was not mergeable under the current
-  ruleset.
 
-Run selection prefers a success/failure conclusion over a later cancelled run.
+The first LGTM SHA comes from common.first_lgtm_sha, which includes bot issue
+comments and review-thread comments. A comment LGTM uses the last commit at or
+before that comment. Run selection prefers a success/failure conclusion over a
+later cancelled run.
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from common import JOB_CHECKS, STATUS_CHECKS, WORKFLOW_FOR_JOB, contains_lgtm, is_review_bot
+from common import STATUS_CHECKS, contains_lgtm, first_lgtm_sha, is_review_bot, pr_commits
 from ghutil import GitHub, GitHubError
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -72,6 +74,9 @@ def get_cached(gh: GitHub, path: Path, url: str):
 
 
 def lgtm_sha_chain(pr: dict) -> list[str]:
+    start = first_lgtm_sha(pr)
+    if not start:
+        return []
     reviews = []
     for rev in (pr.get("reviews") or {}).get("nodes") or []:
         if not is_review_bot(rev.get("author")):
@@ -80,16 +85,6 @@ def lgtm_sha_chain(pr: dict) -> list[str]:
         sha = (rev.get("commit") or {}).get("oid")
         if submitted:
             reviews.append({"at": submitted, "sha": sha, "body": rev.get("body") or ""})
-    reviews.sort(key=lambda r: r["at"])
-    lgtm = [r for r in reviews if contains_lgtm(r["body"]) and r.get("sha")]
-    if not lgtm:
-        return []
-    commits = []
-    for c in (pr.get("commits") or {}).get("nodes") or []:
-        commit = c.get("commit") or {}
-        if commit.get("oid") and (commit.get("committedDate") or commit.get("authoredDate")):
-            commits.append((commit.get("committedDate") or commit.get("authoredDate"), commit["oid"]))
-    commits.sort()
     by_sha: dict[str, list] = {}
     for rev in reviews:
         if rev.get("sha"):
@@ -98,19 +93,24 @@ def lgtm_sha_chain(pr: dict) -> list[str]:
     seen = False
     started = False
     wanted = []
-    for _at, sha in commits:
+    for commit in pr_commits(pr):
+        sha = commit["sha"]
         if sha in by_sha:
             last = max(by_sha[sha], key=lambda r: r["at"])
             stands = contains_lgtm(last["body"])
             seen = True
-        if sha == lgtm[0]["sha"]:
+        if sha == start:
             started = True
+            if not seen:
+                # A comment LGTM stands until a later bot review replaces it.
+                stands = True
+                seen = True
         if started and seen and stands:
             wanted.append(sha)
         elif started and seen and not stands:
             break
     if not wanted:
-        wanted = [lgtm[0]["sha"]]
+        wanted = [start]
     out = []
     for sha in wanted:
         if sha not in out:
@@ -177,12 +177,7 @@ def evaluate_sha(gh: GitHub, sha: str) -> dict:
     source: dict[str, str] = {}
     for path, names in NEEDED.items():
         run = by_path.get(path)
-        conclusion = (run or {}).get("conclusion") or "missing"
-        if conclusion == "success":
-            for name in names:
-                checks[name] = "success"
-                source[name] = "workflow_success"
-        elif run is None:
+        if run is None:
             for name in names:
                 checks[name] = "missing"
                 source[name] = "no_run"
@@ -193,8 +188,13 @@ def evaluate_sha(gh: GitHub, sha: str) -> dict:
                 jobs = {}
                 source["_error"] = str(exc)[:180]
             for name in names:
-                checks[name] = match_job(jobs, name)
-                source[name] = "job"
+                conclusion = match_job(jobs, name)
+                if conclusion == "skipped":
+                    checks[name] = "success"
+                    source[name] = "skipped"
+                else:
+                    checks[name] = conclusion
+                    source[name] = "job"
     for name in STATUS_CHECKS:
         checks[name] = statuses.get(name, "missing")
         source[name] = "commit_status"

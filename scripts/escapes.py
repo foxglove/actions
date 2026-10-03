@@ -19,11 +19,11 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from common import FIX_TITLE_RE, PR_REF_RE, parse_ts
+from common import FIX_TITLE_RE, PR_REF_RE, git_env, parse_ts, study_repo
 
 ROOT = Path(__file__).resolve().parents[1]
 INTERIM = ROOT / "data" / "interim"
-REPO = Path("/tmp/foxglove-app")
+REPO = study_repo()
 OUT = INTERIM / "escapes.jsonl"
 
 PR_IN_SUBJECT = re.compile(r"\(#(\d{3,6})\)\s*$")
@@ -33,11 +33,7 @@ SKIP_PATH = re.compile(
 
 
 def git(*args: str, check: bool = True) -> str:
-    env = os.environ.copy()
-    env["GIT_CONFIG_GLOBAL"] = "/tmp/empty-gitconfig"
-    env["GIT_CONFIG_NOSYSTEM"] = "1"
-    env["GIT_TERMINAL_PROMPT"] = "0"
-    env["GIT_ASKPASS"] = "/tmp/git-askpass.sh"
+    env = git_env()
     cmd = [
         "git",
         "-C",
@@ -63,10 +59,17 @@ def parse_removed_lines(diff_text: str, cap: int = 80) -> list[dict]:
     old_line = None
     for line in diff_text.splitlines():
         if line.startswith("diff --git "):
-            # diff --git a/foo b/foo
-            parts = line.split(" b/", 1)
-            path = parts[1] if len(parts) == 2 else None
+            path = None
             old_line = None
+            continue
+        if line.startswith("--- "):
+            old = line[4:]
+            if old.startswith("a/"):
+                path = old[2:]
+            elif old == "/dev/null":
+                path = None
+            else:
+                path = old
             continue
         if line.startswith("@@"):
             m = re.search(r"@@ -(\d+)(?:,(\d+))? \+", line)
@@ -124,7 +127,7 @@ def blame_lines(parent: str, path: str, lines: list[int]) -> dict[int, str]:
                 current_line = int(parts[2])
             continue
         if raw.startswith("\t") and current_sha and current_line:
-            if current_line in lines or True:
+            if current_line in lines:
                 mapping[current_line] = current_sha
             current_sha = None
     return {ln: mapping[ln] for ln in lines if ln in mapping}
@@ -188,29 +191,9 @@ def line_present(text: str | None, line: str) -> str:
 
 def load_counterfactual() -> dict[int, dict]:
     """First green SHA at or after the first bot LGTM, while LGTM still stands."""
-    eval_dir = ROOT / "data" / "raw" / "app" / "ci" / "eval"
-    out = {}
-    if not eval_dir.exists():
-        return out
-    for path in eval_dir.glob("*.json"):
-        data = json.loads(path.read_text())
-        shas = data.get("shas") or []
-        chosen = None
-        mergeable = False
-        for ev in data.get("evals") or []:
-            if ev.get("passed"):
-                chosen = ev.get("sha")
-                mergeable = bool(shas) and ev.get("sha") == shas[0]
-                break
-        if chosen is None and shas:
-            chosen = shas[0]
-            mergeable = False
-        out[int(data["number"])] = {
-            "sha": chosen,
-            "mergeable_at_lgtm": mergeable,
-            "ci_known": True,
-        }
-    return out
+    from common import load_ci_index
+
+    return load_ci_index(ROOT / "data" / "raw" / "app" / "ci" / "eval")
 
 
 def candidate(pr: dict) -> bool:
