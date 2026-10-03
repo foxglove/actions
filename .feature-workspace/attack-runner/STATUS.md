@@ -20,7 +20,7 @@ rounds plus a committed mutation-testing gate (0 unexpected survivors).
       inputs/expected/actual schema-valid via ajv (negative-input fixtures marked
       `INPUT_SCHEMA_INVALID`).
 - **Reviews** — rounds 1, 2, 3 + a PR #55 review round and an isolated self-review complete;
-  findings fixed or routed (`review-wp1*.md`, `self-review-pr55.md`). Round 2
+  findings fixed or routed (see `EVIDENCE.md`). Round 2
   fixed a weak-oracle workflow failure; round 3 drove mutation survivors 46 → 4 (equivalents).
 
 ## Open product question (R3-M3, for the acceptance owner)
@@ -151,7 +151,7 @@ Append-only detail per item in `retro-log.json`.
 ## CHECKPOINT — session handoff (2026-10-03)
 
 **Where things are:** Offline planner (WP1/E1) is built, converged, and under review as
-draft PR **foxglove/actions#55** (branch `claude/exciting-cerf-vkmwu5` → `main`). Three
+PR **foxglove/actions#55** (branch `claude/exciting-cerf-vkmwu5` → `main`). Three
 Claude-review batches + three isolated self-reviews done in session 1 (verdict **SHIP** on
 c6872b4). Session 2 (this session owns the PR, per the user) ran self-review rounds 3–14 on the
 commits after c6872b4; see `EVIDENCE.md` for verdicts. PM gate is CLEARED (table above).
@@ -186,8 +186,11 @@ commits after c6872b4; see `EVIDENCE.md` for verdicts. PM gate is CLEARED (table
 5. ~~T3 thread~~ done (7503a34, replied and resolved). ~~`.feature-workspace` thread~~ the
    user confirmed the directory stays; replied and resolved.
 6. ~~R3-F4~~ decided (ignore legacy tickets) and implemented; see the section above.
-7. The user approved marking PR #55 ready for review once CI is green on the final head.
+7. ~~Mark PR #55 ready for review~~ **DONE** 2026-10-03, with CI green on 2029ecf. PR #55,
+   #56 and #57 wait on human review; #57 merges after #56.
 
-**Review logs:** `review-wp1.md`, `review-wp1-round2.md`, `review-wp1-round3.md`,
-`self-review-pr55.md`, `self-review-pr55-r2.md`, `self-review-pr55-r3.md`,
-`self-review-pr55-r4.md`, `self-review-pr55-r5.md`, `self-review-pr55-r6.md`, `self-review-pr55-r7.md`, `self-review-pr55-r8.md`, `self-review-pr55-r9.md`, `self-review-pr55-r10.md`, `self-review-pr55-r11.md`, `self-review-pr55-r12.md`, `self-review-pr55-r13.md`, `self-review-pr55-r14.md`. **PR:** `pr.json`.
+**Review logs:** the review records (`review-wp1*.md`, `self-review-pr55*.md`) were removed
+from the workspace on 2026-10-03 at the user's request; `EVIDENCE.md` keeps each round's
+verdict and findings for failing rounds. The records never reach `main`, which
+squash-merges; they remain at commit 2029ecf on the PR #55 head (`git fetch origin
+refs/pull/55/head`, then `git show 2029ecf:.feature-workspace/attack-runner/<file>`). **PR:** `pr.json`.

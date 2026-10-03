@@ -186,3 +186,16 @@
   "see below" pointers. Both repaired with the reviewer's wording.
 - Self-review round 14 record: `self-review-pr55-r14.md` (added verbatim after a pass).
 - cost: unavailable (cloud transcript not local).
+
+## 2026-10-03 — Review records removed from the workspace (session 2)
+
+- At the user's request, the review records `review-wp1.md`, `review-wp1-round2.md`,
+  `review-wp1-round3.md`, `self-review-pr55.md` and `self-review-pr55-r2.md` to
+  `self-review-pr55-r14.md` are removed from `.feature-workspace/attack-runner/`. The
+  entries above keep the verdict and findings of each failing round; passing rounds are only
+  named there. The records never reach `main`, which squash-merges. They remain at commit
+  2029ecf on the PR #55 head: `git fetch origin refs/pull/55/head`, then
+  `git show 2029ecf:.feature-workspace/attack-runner/<file>`.
+- The workspace now holds only the pipeline state: GOAL, MODEL, TRACEABILITY, STATUS,
+  EVIDENCE, retro-log, pr.json and the PM decision index.
+- cost: unavailable (cloud transcript not local).
