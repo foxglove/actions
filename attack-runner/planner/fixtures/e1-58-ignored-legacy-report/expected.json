@@ -1,0 +1,85 @@
+{
+  "runId": "run-e58",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "rediscovered-open",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": "exp-SEC-ALIAS",
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "existing-issue",
+        "issueId": "SEC-ALIAS"
+      },
+      "proposedActions": [
+        {
+          "type": "append-evidence"
+        },
+        {
+          "type": "append-remediation",
+          "remediation": [
+            {
+              "component": "api",
+              "change": "enforce the boundary"
+            }
+          ]
+        },
+        {
+          "type": "increment-confirmed-count",
+          "amount": 1
+        }
+      ],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": false,
+      "neededEvidence": [],
+      "fixClaimRef": null,
+      "idempotencyKey": "run-e58:exp-SEC-ALIAS"
+    },
+    {
+      "observationId": "obs-2",
+      "outcome": "not-observed",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": "exp-SEC-RETEST",
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "none",
+        "issueId": null
+      },
+      "proposedActions": [],
+      "evidenceReferences": [],
+      "notificationEligible": false,
+      "neededEvidence": []
+    }
+  ],
+  "runSummary": {
+    "batchStatus": "complete",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "unresolved": [],
+    "ignoredLegacyIssues": ["SEC-IDLE"],
+    "notObserved": [
+      {
+        "observationId": "obs-2",
+        "exploitId": "exp-SEC-RETEST",
+        "issueId": "SEC-RETEST",
+        "executionStatus": "completed",
+        "reason": "targeted re-test completed without reproducing",
+        "attemptedCoverage": ["exports.download"],
+        "edgeClassification": "none",
+        "evidenceReferences": []
+      }
+    ],
+    "edgeAccess": {
+      "classification": "none"
+    }
+  }
+}

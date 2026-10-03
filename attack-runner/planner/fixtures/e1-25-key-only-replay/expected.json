@@ -1,0 +1,44 @@
+{
+  "runId": "run-e125",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "rediscovered-open",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": "exp-SEC-101",
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "existing-issue",
+        "issueId": "SEC-101"
+      },
+      "proposedActions": [
+        {
+          "type": "none"
+        }
+      ],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": false,
+      "neededEvidence": [],
+      "fixClaimRef": null,
+      "idempotencyKey": "run-e125:exp-SEC-101"
+    }
+  ],
+  "runSummary": {
+    "batchStatus": "complete",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "unresolved": [],
+    "ignoredLegacyIssues": [],
+    "notObserved": [],
+    "edgeAccess": {
+      "classification": "none"
+    }
+  }
+}

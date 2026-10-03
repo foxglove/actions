@@ -1,0 +1,20 @@
+{
+  "runId": "run-e105",
+  "decisions": [],
+  "runSummary": {
+    "batchStatus": "complete",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "unresolved": [],
+    "ignoredLegacyIssues": [],
+    "notObserved": [],
+    "edgeAccess": {
+      "classification": "none"
+    }
+  }
+}

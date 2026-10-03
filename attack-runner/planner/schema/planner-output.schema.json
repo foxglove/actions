@@ -1,0 +1,305 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://foxglove.dev/aegis/attack-runner/planner-output.schema.json",
+  "title": "Attack Runner offline planner — output",
+  "description": "A deterministic action proposal. The output proposes ticket/counter/lifecycle changes and run-summary entries; it is NOT proof of delivery. Engineering 2 persists dedup state and performs the actual writes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "decisions", "runSummary"],
+  "properties": {
+    "runId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/decision"
+      }
+    },
+    "runSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "batchStatus",
+        "runCompletion",
+        "sessionStatus",
+        "coverage",
+        "notObserved",
+        "edgeAccess",
+        "unresolved",
+        "ignoredLegacyIssues"
+      ],
+      "properties": {
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tested": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "untested": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "interrupted": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "stopReason": {
+          "type": "string"
+        },
+        "notObserved": {
+          "type": "array",
+          "description": "Scoped non-observations recorded only in the summary. A resolved ticket referenced here receives no write. Never an absence/fixed claim.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["observationId", "executionStatus", "reason"],
+            "properties": {
+              "observationId": {
+                "type": "string"
+              },
+              "exploitId": {
+                "type": ["string", "null"]
+              },
+              "issueId": {
+                "type": ["string", "null"]
+              },
+              "executionStatus": {
+                "enum": [
+                  "completed",
+                  "interrupted",
+                  "timed-out",
+                  "session-lost",
+                  "not-attempted"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              },
+              "attemptedCoverage": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "evidenceReferences": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "edgeClassification": {
+                "enum": [
+                  "none",
+                  "EDGE_CONTROL_BLOCKED",
+                  "ACCESS_FAILURE_UNCLASSIFIED"
+                ]
+              }
+            }
+          }
+        },
+        "edgeAccess": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["classification"],
+          "properties": {
+            "classification": {
+              "enum": [
+                "none",
+                "EDGE_CONTROL_BLOCKED",
+                "ACCESS_FAILURE_UNCLASSIFIED"
+              ]
+            },
+            "phase": {
+              "type": "string"
+            },
+            "counts": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "batchStatus": {
+          "enum": ["complete", "partial"],
+          "description": "partial when any finding is unresolved; a partial batch is never reported wholly successful (E1-13)."
+        },
+        "unresolved": {
+          "type": "array",
+          "items": {
+            "type": ["string", "null"]
+          },
+          "description": "observationIds routed to triage."
+        },
+        "ignoredLegacyIssues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "issueIds, in input order, of existing tickets in the run's environment whose chain does not normalize and whose issueId no decision targets and no notObserved entry references. Such a legacy ticket is ignored for overlap triage and can match only through an alias; legacy tickets in an ambiguous alias match are listed. issueIds are assumed unique. The list is a standing backfill reminder: it does not depend on whether the run creates a ticket. A ticket is listed on each run until its chain normalizes, except on a run where a decision targets it or a non-observation references it. An alias alone does not end the reminder. A run that creates a ticket can duplicate a finding tracked only on a listed ticket."
+        },
+        "runCompletion": {
+          "type": "string",
+          "description": "run.completion.status echoed into the summary."
+        },
+        "sessionStatus": {
+          "type": "string",
+          "description": "run.session.status echoed into the summary."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observationId", "outcome", "reason", "proposedActions"],
+      "properties": {
+        "observationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcome": {
+          "enum": [
+            "new",
+            "rediscovered-open",
+            "claimed-fixed-reproduces",
+            "not-observed",
+            "unresolved"
+          ],
+          "description": "The five reconciliation outcomes from the handoff decision table."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exploitIdentity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "exploitId": {
+              "type": ["string", "null"]
+            },
+            "matchReason": {
+              "type": "string",
+              "description": "Why this is the same exploit as the target, or why a distinct ticket is warranted."
+            }
+          }
+        },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "enum": ["new-issue", "existing-issue", "none"]
+            },
+            "issueId": {
+              "type": ["string", "null"]
+            }
+          }
+        },
+        "proposedActions": {
+          "type": "array",
+          "description": "Proposed writes. MUST be empty (or only [{type:none}]) for outcome=not-observed against a resolved ticket and for an already-applied replayed event.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "enum": [
+                  "create-ticket",
+                  "append-evidence",
+                  "append-remediation",
+                  "increment-confirmed-count",
+                  "reopen-ticket",
+                  "none"
+                ]
+              },
+              "amount": {
+                "type": "integer",
+                "description": "For increment-confirmed-count; always 1 per distinct run."
+              },
+              "ticketMaterial": {
+                "type": "object",
+                "description": "Complete, round-trippable ticket content for a new exploit (E1-01).",
+                "additionalProperties": true,
+                "required": [
+                  "exploitId",
+                  "fingerprint",
+                  "fingerprintVersion",
+                  "chain",
+                  "labels",
+                  "severity",
+                  "productionImpact",
+                  "affectedSurfaces",
+                  "ownership",
+                  "remediation",
+                  "retestExpectations",
+                  "evidenceReferences"
+                ]
+              },
+              "remediation": {
+                "type": "array",
+                "description": "For append-remediation: remediation items to union into the existing ticket (E1-10)."
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "type": {
+                      "const": "create-ticket"
+                    }
+                  }
+                },
+                "then": {
+                  "required": ["ticketMaterial"]
+                }
+              }
+            ]
+          }
+        },
+        "evidenceReferences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notificationEligible": {
+          "type": "boolean",
+          "description": "True only for a new actionable exploit or a fresh fix-claim contradiction; false for rediscovery/non-observation. Eligibility records a summary event; no Slack transport in this release."
+        },
+        "neededEvidence": {
+          "type": "array",
+          "description": "For outcome=unresolved: what is missing. No speculative create/merge/lifecycle action.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fixClaimRef": {
+          "type": ["string", "null"],
+          "description": "The identified fix claim reference when an outcome relates to a fix claim."
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Scope key (runId + exploit identity) for cross-run dedup by Engineering 2."
+        }
+      }
+    }
+  }
+}

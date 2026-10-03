@@ -1,0 +1,90 @@
+{
+  "run": {
+    "runId": "run-e54",
+    "targetEnvironment": "party",
+    "evidenceLocation": "gs://aegis-evidence/run-e54",
+    "completion": {
+      "status": "completed"
+    },
+    "session": {
+      "status": "ok",
+      "maintenanceVerified": true
+    },
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "edgeAccess": {
+      "classification": "none"
+    }
+  },
+  "observations": [
+    {
+      "observationId": "obs-1",
+      "kind": "confirmed-positive",
+      "validity": "valid",
+      "eventId": "ev-obs-1",
+      "execution": {
+        "status": "completed"
+      },
+      "exploit": {
+        "chain": [
+          {
+            "actorCapability": "member of tenant A",
+            "targetAndOperation": "demonstrated transition",
+            "expectedBoundary": "boundary should prevent this",
+            "observedTransition": "boundary crossed",
+            "evidence": ["req-redacted"],
+            "semantics": {
+              "actorRole": "tenant-member",
+              "resourceRelation": "cross-tenant",
+              "surface": "export-download-api",
+              "operation": "download",
+              "boundaryType": "ownership-check",
+              "violation": "unauthorized-read"
+            }
+          }
+        ],
+        "severity": "high",
+        "productionImpact": {
+          "value": "unknown",
+          "rationale": "party only"
+        },
+        "affectedSurfaces": ["export-download-api"],
+        "remediation": [
+          {
+            "component": "api",
+            "change": "enforce the boundary"
+          }
+        ],
+        "retestExpectations": "re-test the end-to-end chain after the fix"
+      },
+      "evidence": {
+        "references": ["req-redacted"]
+      }
+    }
+  ],
+  "existingIssues": [
+    {
+      "issueId": "SEC-LEGACY",
+      "exploitId": "exp-SEC-LEGACY",
+      "state": "open",
+      "targetEnvironment": "staging",
+      "fixClaim": {
+        "claimed": false,
+        "reference": null
+      },
+      "normalizedChain": [
+        {
+          "actorCapability": "a",
+          "targetAndOperation": "b",
+          "expectedBoundary": "c",
+          "observedTransition": "d"
+        }
+      ],
+      "confirmedRunCount": 1
+    }
+  ],
+  "processedEvents": []
+}

@@ -1,0 +1,49 @@
+{
+  "runId": "run-e104",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "not-observed",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": "exp-SEC-101",
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "none",
+        "issueId": null
+      },
+      "proposedActions": [],
+      "evidenceReferences": [],
+      "notificationEligible": false,
+      "neededEvidence": []
+    }
+  ],
+  "runSummary": {
+    "batchStatus": "complete",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "unresolved": [],
+    "ignoredLegacyIssues": [],
+    "notObserved": [
+      {
+        "observationId": "obs-1",
+        "exploitId": "exp-SEC-101",
+        "issueId": "SEC-101",
+        "executionStatus": "completed",
+        "reason": "targeted re-test completed without reproducing",
+        "attemptedCoverage": ["exports.download"],
+        "edgeClassification": "none",
+        "evidenceReferences": []
+      }
+    ],
+    "edgeAccess": {
+      "classification": "none"
+    }
+  }
+}

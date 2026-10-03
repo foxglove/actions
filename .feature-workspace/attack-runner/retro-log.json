@@ -1,0 +1,191 @@
+{
+  "feature": "attack-runner",
+  "entries": [
+    {
+      "ts": "2026-10-03",
+      "type": "decision",
+      "stage": "2",
+      "note": "Engineering lead approved the Stage 2 work-packet breakdown and the 11-item PM clarification gate."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "decision",
+      "stage": "3",
+      "note": "Begin WP0.1 (offline planner contract + fixtures); it is not blocked by the open PM items."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "progress",
+      "stage": "3",
+      "note": "WP1.1-1.4 implemented; 7/7 fixture oracle pass; isolated self-review in flight."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "review",
+      "stage": "3",
+      "note": "WP1 isolated review: 1 blocker/8 major/8 minor. Fixed correctness + oracle-gap findings; remainder routed to E1 slices. Oracle 9/9 + structural-reject."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "progress",
+      "stage": "3",
+      "note": "E1 offline planner complete: 19 fixtures covering E1-01..E1-15,E1-17..E1-20; oracle green. Next: round-2 review then Stage 4."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "review",
+      "stage": "3",
+      "note": "Round-2 review: 1 blocker/9 major/9 minor; old oracle too weak (39/60 wrong engines passed). Reworked engine + rebuilt oracle (deep-equal + round-trip + mutation self-test). 21/21 green."
+    },
+    {
+      "ts": "2026-10-02",
+      "type": "human-input",
+      "stage": "2",
+      "oracle": "Foundations team (release/product-decision authority)",
+      "gate_item": 1,
+      "note": "BLOCKING item 1 resolved. Issuer-service operational ownership accepted for the proposed owners @foxglove/data-curation-search. Sign-off: Foundations team, 2026-10-02. No separate on-call rotation yet is accepted as-is for v1. Reviewed revision: branch claude/exciting-cerf-vkmwu5 @ b6b5071."
+    },
+    {
+      "ts": "2026-10-02",
+      "type": "human-input",
+      "stage": "2",
+      "oracle": "Foundations team (release/product-decision authority)",
+      "gate_item": 2,
+      "note": "BLOCKING item 2 resolved. Issuer function + mailbox provisioning owned by the App repo (consistent with docs' 'app/auth code owners'; app-vs-auth sub-split to confirm with owning team if a separate auth repo exists). Builder unassigned ('any available engineer'). Timeline ~1 week, target 2026-10-09. Interim: Foundations team mints the magic link manually until the issuer function lands (matches attack-sessions.md:150). Reviewed revision: branch claude/exciting-cerf-vkmwu5 @ b6b5071."
+    },
+    {
+      "ts": "2026-10-02",
+      "type": "human-input",
+      "stage": "2",
+      "oracle": "Foundations team (release/product-decision authority)",
+      "gate_item": 3,
+      "note": "BLOCKING-to-run item 3 resolved. Authorized target set = all hosts under *.foxglove.party (full wildcard; explicitly overrides the 'maximum boundary, not every host' caution; production remains out of scope per party != production). Test identity = a service account to be minted by Foundations team (concrete account/data value not yet named -> pre-first-run follow-up). Run window = Mondays 09:00 PT plus manual runs; no separate maintenance blackout provided. Owner: Foundations team."
+    },
+    {
+      "ts": "2026-10-02",
+      "type": "human-input",
+      "stage": "2",
+      "oracle": "Foundations team (release/product-decision authority)",
+      "gate_item": 4,
+      "note": "Item 4 resolved. Starting session is ordinary by default; no app-owned session-bound mode signal is pre-authorized as a v1 release dependency. Rationale (PM): treat as low-risk; the demonstrated ordinary->admin escalation is itself the exploit (exploit-findings.md:5,79), and pause-on-admin aligns with 'minimum evidence necessary; stop before irreversible damage' (instructions.md:51). Reservation: if the feasibility spike shows ordinary vs impersonation genuinely cannot be distinguished from app-derived evidence, reopen with PM rather than auto-authorize. Owner: Foundations team."
+    },
+    {
+      "ts": "2026-10-02",
+      "type": "human-input",
+      "stage": "2",
+      "oracle": "Foundations team (release/product-decision authority)",
+      "gate_item": 5,
+      "note": "Item 5 resolved. App/auth code owners confirm the four DKIM trusted-config values (d= signing domain, s= selector(s), From sender, To mailbox) against a genuine magic-link message, and own the DKIM_SELECTOR_UNAPPROVED investigation path. Rationale: they own SendGrid domain authentication (attack-sessions.md:51,150; engineering-handoff.md:94). To mailbox is the mailbox the Foundations team provisions (item 2). Accountable owner: app/auth code owners (same as item 1)."
+    },
+    {
+      "ts": "2026-10-02",
+      "type": "human-input",
+      "stage": "2",
+      "oracle": "Foundations team (release/product-decision authority)",
+      "gate_item": 6,
+      "note": "Item 6 resolved. PM initially questioned GCS ('we decided against it, right?'); reconciled against the accepted product contract, which specifies a private GCS bucket throughout (attack-runner.md:46,48,50,156; engineering-handoff.md:20,75,111; acceptance I-15/I-17; TRACEABILITY WP2.8; GOAL.md:11) with no record of a contrary decision -> GCS stands, no re-spec. Authorized reader group = all of Engineering + CEO (broader than docs' 'designated engineering/security readers'). Provisioned by the Infra team through the infra process (foxglove/infra gcs-bucket module). Pre-provision follow-up: concrete GCS project + bucket name TBD ('name it later'); I-15 requires the destination to exist and be access-tested before launch. Owners: the Foundations team (storage/reader decision), Infra team (provisioning)."
+    },
+    {
+      "ts": "2026-10-02",
+      "type": "human-input",
+      "stage": "2",
+      "oracle": "Foundations team (release/product-decision authority)",
+      "gate_item": 7,
+      "note": "Item 7 resolved. Linear destination team = Foundations (id 18ec7d7b-6e5c-4670-bfea-6087b092d784), for now. PM delegated the status mapping ('use Linear states used by Foundation; research as needed'); researched live Foundations states (Triage, Idea, Backlog, Todo, In Progress, In Review, Done, Canceled, Duplicate) and mapped: fix-claim signal = ticket reaches completed state 'Done'; mapped open state (reopen target when a Done exploit reproduces per exploit-findings.md:34) = 'Todo'; ambiguous reconciliation -> 'Triage' (per WP1.2). PM may override any state choice. Owner: Foundations team."
+    },
+    {
+      "ts": "2026-10-02",
+      "type": "human-input",
+      "stage": "2",
+      "oracle": "Foundations team (release/product-decision authority)",
+      "gate_item": 8,
+      "note": "Item 8 resolved (conditional). Edge/Cloudflare scoped-policy approval owned by Engineering; triggers only if the I-23 reachability probe shows the runner path to *.foxglove.party is blocked. Scope limited to a narrow party-only policy, no whole-zone or production change (attack-paths.md). Specific environment owner to be named at trigger time. Owner: Engineering."
+    },
+    {
+      "ts": "2026-10-02",
+      "type": "human-input",
+      "stage": "2",
+      "oracle": "Foundations team (release/product-decision authority)",
+      "gate_item": 9,
+      "note": "Item 9 resolved. Defer WP2.10 (concurrency coordination mechanism + test) for v1, relying on the single weekly run / one active attempt assumption. PM confirmed 'defer' after an explanation of concurrency (overlapping runs; lost-ack retry duplicates). Residual risk accepted for v1: manual run during the active Monday 09:00 run, or retry after a lost Linear ack, could duplicate a ticket or double-count. Operational guardrail: do not fire a manual run while the scheduled run is active (ties to item 10). Revisit if cadence/parallelism increases. Owner: Foundations team."
+    },
+    {
+      "ts": "2026-10-02",
+      "type": "human-input",
+      "stage": "2",
+      "oracle": "Foundations team (release/product-decision authority)",
+      "gate_item": 10,
+      "note": "Item 10 partially resolved (operator). Operator who observes/can stop each Monday 09:00 PT scheduled run and each manual run = the release authority for now, intended to transition to the Foundations team. Operator coverage is distinct from authentication (attack-sessions.md:7). Owner now: release authority; future owner: Foundations team. (Skip policy resolved in a following entry.)"
+    },
+    {
+      "ts": "2026-10-02",
+      "type": "human-input",
+      "stage": "2",
+      "oracle": "Foundations team (release/product-decision authority)",
+      "gate_item": 10,
+      "note": "Item 10 fully resolved (skip policy). PM: 'Run attended is fine' -> v1 runs are attended-only; when no operator is available the run does not proceed unattended (skip/defer until covered). Fail-closed. Owner: release authority now, Foundations team future."
+    },
+    {
+      "ts": "2026-10-02",
+      "type": "human-input",
+      "stage": "2",
+      "oracle": "Foundations team (release/product-decision authority)",
+      "gate_item": 11,
+      "note": "Item 11 resolved. Slack delivery stays deferred for v1: notification eligibility is computed and recorded in the run summary, but nothing is sent. Confirms the non-goal in GOAL.md and engineering-handoff.md:20. Owner: Foundations team."
+    },
+    {
+      "ts": "2026-10-02",
+      "type": "milestone",
+      "stage": "2",
+      "oracle": "Foundations team (release/product-decision authority)",
+      "note": "PM Stage-1->2 gate CLEARED: all 11 pm-clarifications items resolved and recorded (STATUS.md Resolved table + entries above). E2/Release packets unblocked. Remaining non-blocking pre-first-run follow-ups: concrete test service-account value (item 3) and concrete GCS project/bucket name (item 6)."
+    },
+    {
+      "ts": "2026-10-02",
+      "type": "confirmation",
+      "stage": "2",
+      "oracle": "Foundations team (release/product-decision authority)",
+      "note": "PM reviewed the recorded resolution and confirmed: (6) GCS stands ('we are good on GCS') \u2014 no Stage-1 re-spec; (7) Linear Foundations status mapping (Done/Todo/Triage) confirmed, clearing the 'PM may override' caveat. Pre-first-run follow-ups (item 3 service-account value, item 6 GCS project/bucket name) acknowledged as not available yet; they remain tracked for before the first live run."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "review",
+      "stage": "3",
+      "note": "Round-3: coverage-gap blocker. Added committed mutation-test.mjs; survivors 46->4 (equivalents); 47 fixtures; fixed real replay-count order bug + schema alignment. R3-M3 (cross-run episode dedup) left as open acceptance question."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "escape",
+      "stage": "3",
+      "class": "workflow failure",
+      "note": "Session 2 pushed bb8aaa9 and 2d93dfb to PR #55 before loading the feature-pipeline skill, so neither push ran the isolated self-review gate. The later self-review round 3 found F1-F3 (stale counts, untested whitespace alias, stale comment) in those commits. Cause: the skill lived only in foxglove/experimental and was not loaded in the cloud session."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "escape",
+      "stage": "3",
+      "class": "workflow failure",
+      "note": "Two sessions drove PR #55 at the same time and both replied to the same review threads, which left duplicate replies. Cause: the earlier session stayed subscribed after the checkpoint handoff. The handoff must end the prior session's subscription and check-ins."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "review",
+      "stage": "3",
+      "note": "Self-review round 3 on the c6872b4 delta: fail on F1 stale counts, F2 whitespace alias untested, F3 stale comment, F4 uncomparable rule has no acceptance owner. F1-F3 repaired; F4 routed to the acceptance owner as R3-F4."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "human-input",
+      "stage": "3",
+      "oracle": "the user (product decision authority)",
+      "note": "R3-F4 answered: ignore legacy tickets. A legacy ticket (its chain does not normalize) matches only through a fingerprint alias, takes no part in overlap triage, and never blocks a new ticket, whatever its state. Accepted risk: a duplicate ticket for a finding tracked only on such a ticket. Also: .feature-workspace stays; follow-up PR to remove names from product-docs/attack-sessions.md approved; mark PR #55 ready for review once CI is green."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "human-input",
+      "stage": "3",
+      "oracle": "the user (product decision authority)",
+      "note": "External review of 7426b97 found that the output gives no signal when a legacy ticket is ignored. The user approved adding runSummary.ignoredLegacyIssues: same-environment legacy tickets that no decision targets and no non-observation references. Decisions are unchanged."
+    }
+  ]
+}

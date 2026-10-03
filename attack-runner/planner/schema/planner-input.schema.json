@@ -1,0 +1,429 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://foxglove.dev/aegis/attack-runner/planner-input.schema.json",
+  "title": "Attack Runner offline planner — input",
+  "description": "One assessment run of normalized observations plus existing-issue snapshots and previously processed event identities. The planner owns reconciliation; it receives already-normalized states (vendor status strings are mapped to these enums at the adapter boundary) and performs no I/O.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run", "observations", "existingIssues", "processedEvents"],
+  "properties": {
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "targetEnvironment",
+        "evidenceLocation",
+        "completion",
+        "session",
+        "coverage",
+        "edgeAccess"
+      ],
+      "properties": {
+        "runId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "targetEnvironment": {
+          "type": "string",
+          "description": "Assessed environment, e.g. \"party\". Never \"production\" in the first release."
+        },
+        "evidenceLocation": {
+          "type": "string",
+          "description": "Reference to the private evidence directory/bucket prefix; never inline secrets."
+        },
+        "completion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {
+            "status": {
+              "enum": [
+                "completed",
+                "interrupted",
+                "skipped-unstaffed",
+                "failed-before-assessment"
+              ]
+            },
+            "stopReason": {
+              "type": "string"
+            }
+          }
+        },
+        "session": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {
+            "status": {
+              "enum": ["ok", "paused", "lost", "not-established"]
+            },
+            "maintenanceVerified": {
+              "type": "boolean"
+            }
+          }
+        },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tested": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "untested": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "interrupted": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "edgeAccess": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["classification"],
+          "properties": {
+            "classification": {
+              "enum": [
+                "none",
+                "EDGE_CONTROL_BLOCKED",
+                "ACCESS_FAILURE_UNCLASSIFIED"
+              ]
+            },
+            "phase": {
+              "type": "string"
+            },
+            "counts": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/observation"
+      }
+    },
+    "existingIssues": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/existingIssue"
+      }
+    },
+    "processedEvents": {
+      "type": "array",
+      "description": "Previously processed run/finding event identities, for replay/idempotency.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "eventId": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string",
+            "description": "Optional idempotency key (e.g. runId + fingerprint) for retries with a regenerated/absent eventId."
+          }
+        },
+        "anyOf": [
+          {
+            "required": ["eventId"]
+          },
+          {
+            "required": ["key"]
+          }
+        ],
+        "description": "A previously-processed event: eventId (primary) or a derived key (runId + exploit identity) for retries with a regenerated/absent eventId."
+      }
+    }
+  },
+  "$defs": {
+    "transition": {
+      "type": "object",
+      "description": "One evidence-backed causal transition. Identity is built from these, never from titles/prose.",
+      "additionalProperties": false,
+      "required": [
+        "actorCapability",
+        "targetAndOperation",
+        "expectedBoundary",
+        "observedTransition"
+      ],
+      "properties": {
+        "actorCapability": {
+          "type": "string"
+        },
+        "targetAndOperation": {
+          "type": "string"
+        },
+        "expectedBoundary": {
+          "type": "string"
+        },
+        "observedTransition": {
+          "type": "string"
+        },
+        "prerequisites": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Redacted evidence references; no secrets."
+        },
+        "semantics": {
+          "type": "object",
+          "description": "Structured, controlled-vocabulary matching tuple. The matching core is built from these fields; prose fields and resource IDs are excluded. Concrete tenant/org names appear only as relations (e.g. cross-tenant), never as literals.",
+          "additionalProperties": false,
+          "properties": {
+            "actorRole": {
+              "type": "string"
+            },
+            "resourceRelation": {
+              "type": "string"
+            },
+            "surface": {
+              "type": "string"
+            },
+            "operation": {
+              "type": "string"
+            },
+            "boundaryType": {
+              "type": "string"
+            },
+            "violation": {
+              "type": "string"
+            },
+            "incidental": {
+              "type": "boolean",
+              "description": "True marks an incidental reconnaissance step excluded from the matching core."
+            }
+          }
+        }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observationId", "kind", "execution", "validity"],
+      "properties": {
+        "observationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": ["confirmed-positive", "non-observation"]
+        },
+        "validity": {
+          "enum": ["valid", "invalid-evidence", "ambiguous-identity"]
+        },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {
+            "status": {
+              "enum": [
+                "completed",
+                "interrupted",
+                "timed-out",
+                "session-lost",
+                "not-attempted"
+              ]
+            },
+            "stopReason": {
+              "type": "string"
+            }
+          }
+        },
+        "eventId": {
+          "type": "string",
+          "description": "Identity of this observation event for replay dedup; matched against processedEvents."
+        },
+        "retestTarget": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Present when this observation is a targeted re-test of a known exploit/ticket.",
+          "properties": {
+            "exploitId": {
+              "type": "string"
+            },
+            "issueId": {
+              "type": "string"
+            }
+          }
+        },
+        "exploit": {
+          "type": "object",
+          "description": "Required when kind=confirmed-positive. Affected repositories are optional metadata, never a matching key.",
+          "additionalProperties": false,
+          "required": ["chain", "severity", "productionImpact"],
+          "properties": {
+            "chain": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/transition"
+              }
+            },
+            "severity": {
+              "enum": ["low", "medium", "high", "critical"]
+            },
+            "productionImpact": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["value", "rationale"],
+              "properties": {
+                "value": {
+                  "enum": ["yes", "no", "unknown"]
+                },
+                "rationale": {
+                  "type": "string"
+                }
+              }
+            },
+            "affectedSurfaces": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "affectedRepositories": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional metadata; unknown is allowed and does not block a ticket."
+            },
+            "remediation": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["change"],
+                "properties": {
+                  "component": {
+                    "type": "string"
+                  },
+                  "change": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "retestExpectations": {
+              "type": "string"
+            }
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "references": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "confirmed-positive"
+              }
+            }
+          },
+          "then": {
+            "required": ["exploit"]
+          }
+        }
+      ]
+    },
+    "existingIssue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issueId", "state", "targetEnvironment"],
+      "properties": {
+        "issueId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exploitId": {
+          "type": ["string", "null"],
+          "description": "Stable exploit identity if already assigned; null if unknown."
+        },
+        "state": {
+          "enum": ["open", "resolved", "unknown"],
+          "description": "Normalized at the adapter boundary from the vendor status string. 'unknown' routes to triage (no write)."
+        },
+        "fixClaim": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["claimed"],
+          "properties": {
+            "claimed": {
+              "type": "boolean"
+            },
+            "reference": {
+              "type": ["string", "null"],
+              "description": "Identifies the explicit fix claim (e.g. commit/PR/comment)."
+            }
+          }
+        },
+        "normalizedChain": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/transition"
+          }
+        },
+        "confirmedRunCount": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Known historical count; null means unknown (do not invent a starting total)."
+        },
+        "targetEnvironment": {
+          "type": "string",
+          "description": "Assessed environment the ticket's exploit belongs to; part of identity (prevents cross-environment merge)."
+        },
+        "fingerprintAliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Prior-version fingerprint strings that still identify this exploit (migration aid for E1-20)."
+        }
+      },
+      "anyOf": [
+        {
+          "required": ["normalizedChain"]
+        },
+        {
+          "required": ["fingerprintAliases"]
+        }
+      ]
+    }
+  }
+}

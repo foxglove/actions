@@ -1,0 +1,143 @@
+{
+  "runId": "run-e119",
+  "decisions": [
+    {
+      "observationId": "obs-new",
+      "outcome": "new",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": null,
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "new-issue",
+        "issueId": null
+      },
+      "proposedActions": [
+        {
+          "type": "create-ticket",
+          "ticketMaterial": {
+            "exploitId": null,
+            "fingerprint": "v1:{\"env\":\"party\",\"chain\":[{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"export-download-api\",\"operation\":\"download\",\"boundaryType\":\"ownership-check\",\"violation\":\"unauthorized-read\"}]}",
+            "fingerprintVersion": "v1",
+            "chain": [
+              {
+                "actorCapability": "member of tenant A",
+                "targetAndOperation": "demonstrated transition",
+                "expectedBoundary": "boundary should prevent this",
+                "observedTransition": "boundary crossed",
+                "evidence": ["req-redacted"],
+                "semantics": {
+                  "actorRole": "tenant-member",
+                  "resourceRelation": "cross-tenant",
+                  "surface": "export-download-api",
+                  "operation": "download",
+                  "boundaryType": "ownership-check",
+                  "violation": "unauthorized-read"
+                }
+              }
+            ],
+            "labels": ["Bug", "pentesting", "harness"],
+            "severity": "high",
+            "productionImpact": {
+              "value": "unknown",
+              "rationale": "party only"
+            },
+            "affectedSurfaces": ["export-download-api"],
+            "ownership": "unknown",
+            "remediation": [
+              {
+                "component": "api",
+                "change": "enforce the boundary"
+              }
+            ],
+            "retestExpectations": "re-test the end-to-end chain after the fix",
+            "evidenceReferences": ["req-redacted"]
+          }
+        },
+        {
+          "type": "increment-confirmed-count",
+          "amount": 1
+        }
+      ],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": true,
+      "neededEvidence": [],
+      "idempotencyKey": "run-e119:v1:{\"env\":\"party\",\"chain\":[{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"export-download-api\",\"operation\":\"download\",\"boundaryType\":\"ownership-check\",\"violation\":\"unauthorized-read\"}]}"
+    },
+    {
+      "observationId": "obs-redisc",
+      "outcome": "rediscovered-open",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": "exp-SEC-300",
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "existing-issue",
+        "issueId": "SEC-300"
+      },
+      "proposedActions": [
+        {
+          "type": "append-evidence"
+        },
+        {
+          "type": "append-remediation",
+          "remediation": [
+            {
+              "component": "api",
+              "change": "enforce the boundary"
+            }
+          ]
+        },
+        {
+          "type": "increment-confirmed-count",
+          "amount": 1
+        }
+      ],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": false,
+      "neededEvidence": [],
+      "fixClaimRef": null,
+      "idempotencyKey": "run-e119:exp-SEC-300"
+    },
+    {
+      "observationId": "obs-replay",
+      "outcome": "new",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": null,
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "new-issue",
+        "issueId": null
+      },
+      "proposedActions": [
+        {
+          "type": "none"
+        }
+      ],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": false,
+      "neededEvidence": [],
+      "idempotencyKey": "run-e119:v1:{\"env\":\"party\",\"chain\":[{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"admin-settings-api\",\"operation\":\"write\",\"boundaryType\":\"role-check\",\"violation\":\"privilege-escalation\"}]}"
+    }
+  ],
+  "runSummary": {
+    "batchStatus": "complete",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "unresolved": [],
+    "ignoredLegacyIssues": [],
+    "notObserved": [],
+    "edgeAccess": {
+      "classification": "none"
+    }
+  }
+}

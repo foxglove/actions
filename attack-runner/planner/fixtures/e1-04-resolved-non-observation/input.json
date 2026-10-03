@@ -1,0 +1,69 @@
+{
+  "run": {
+    "runId": "run-e104",
+    "targetEnvironment": "party",
+    "evidenceLocation": "gs://aegis-evidence/run-e104",
+    "completion": {
+      "status": "completed"
+    },
+    "session": {
+      "status": "ok",
+      "maintenanceVerified": true
+    },
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "edgeAccess": {
+      "classification": "none"
+    }
+  },
+  "observations": [
+    {
+      "observationId": "obs-1",
+      "kind": "non-observation",
+      "validity": "valid",
+      "eventId": "ev-obs-1",
+      "execution": {
+        "status": "completed",
+        "stopReason": "targeted re-test completed without reproducing"
+      },
+      "retestTarget": {
+        "exploitId": "exp-SEC-101",
+        "issueId": "SEC-101"
+      }
+    }
+  ],
+  "existingIssues": [
+    {
+      "issueId": "SEC-101",
+      "exploitId": "exp-SEC-101",
+      "state": "resolved",
+      "targetEnvironment": "party",
+      "fixClaim": {
+        "claimed": true,
+        "reference": "app#4821"
+      },
+      "normalizedChain": [
+        {
+          "actorCapability": "member of tenant A",
+          "targetAndOperation": "demonstrated transition",
+          "expectedBoundary": "boundary should prevent this",
+          "observedTransition": "boundary crossed",
+          "evidence": ["req-redacted"],
+          "semantics": {
+            "actorRole": "tenant-member",
+            "resourceRelation": "cross-tenant",
+            "surface": "export-download-api",
+            "operation": "download",
+            "boundaryType": "ownership-check",
+            "violation": "unauthorized-read"
+          }
+        }
+      ],
+      "confirmedRunCount": 3
+    }
+  ],
+  "processedEvents": []
+}
