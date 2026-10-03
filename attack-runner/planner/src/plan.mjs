@@ -179,9 +179,15 @@ export function plan(input) {
       continue;
     }
 
-    const matches = existingIssues.filter(
-      (iss) => fingerprint(iss.normalizedChain, iss.targetEnvironment) === fp,
-    );
+    // Match on the re-computed fingerprint of the stored structured chain, or on a
+    // recorded alias. Re-fingerprinting both sides with the current normalizer keeps
+    // identity stable across a fingerprint-version change; aliases cover a ticket that
+    // only stored a prior-version fingerprint string (E1-20).
+    const matches = existingIssues.filter((iss) => {
+      const issFp = fingerprint(iss.normalizedChain, iss.targetEnvironment);
+      if (issFp !== null && issFp === fp) return true;
+      return Array.isArray(iss.fingerprintAliases) && iss.fingerprintAliases.includes(fp);
+    });
 
     if (matches.length > 1) {
       decisions.push(

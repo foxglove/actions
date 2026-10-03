@@ -36,3 +36,12 @@
 - `check-fixtures.mjs`: PASS. Inputs validate against input schema; all actual outputs
   validate against output schema (ajv draft2020).
 - cost: unavailable (cloud transcript not local).
+
+## 2026-10-03 — WP1 E1 coverage complete (remaining slices)
+
+- Added fixtures E1-05, E1-06, E1-07, E1-09, E1-10, E1-11, E1-14, E1-18, E1-19, E1-20
+  (E1-13 covered by e1-12). Logic added: fingerprint aliases (E1-20), no-impact-promotion
+  oracle invariant (E1-14).
+- Oracle: **19 passed, 0 failed** + 3 structural-reject. Guard PASS. Inputs and all actual
+  outputs validate against the schemas (ajv draft2020).
+- cost: unavailable (cloud transcript not local).

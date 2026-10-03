@@ -1,0 +1,46 @@
+{
+  "runId": "run-e106",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "not-observed",
+      "reason": "",
+      "exploitIdentity": {
+        "exploitId": "exp-SEC-101",
+        "matchReason": ""
+      },
+      "target": {
+        "type": "none",
+        "issueId": null
+      },
+      "proposedActions": [],
+      "evidenceReferences": [],
+      "notificationEligible": false,
+      "neededEvidence": []
+    }
+  ],
+  "runSummary": {
+    "batchStatus": "complete",
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "unresolved": [],
+    "notObserved": [
+      {
+        "observationId": "obs-1",
+        "exploitId": "exp-SEC-101",
+        "issueId": "SEC-101",
+        "executionStatus": "session-lost",
+        "reason": "session lost mid re-test",
+        "attemptedCoverage": [],
+        "edgeClassification": "none",
+        "evidenceReferences": []
+      }
+    ],
+    "edgeAccess": {
+      "classification": "none"
+    }
+  }
+}

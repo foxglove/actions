@@ -1,0 +1,43 @@
+{
+  "runId": "run-e109",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "rediscovered-open",
+      "reason": "",
+      "exploitIdentity": {
+        "exploitId": "exp-SEC-101",
+        "matchReason": ""
+      },
+      "target": {
+        "type": "existing-issue",
+        "issueId": "SEC-101"
+      },
+      "proposedActions": [
+        {
+          "type": "append-evidence"
+        },
+        {
+          "type": "increment-confirmed-count",
+          "amount": 1
+        }
+      ],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": false,
+      "neededEvidence": []
+    }
+  ],
+  "runSummary": {
+    "batchStatus": "complete",
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "unresolved": [],
+    "notObserved": [],
+    "edgeAccess": {
+      "classification": "none"
+    }
+  }
+}

@@ -91,6 +91,12 @@ function checkInvariants(name, input, out, problems) {
           if (tm[k] === undefined) problems.push(`ticketMaterial missing ${k}`);
         if (REQUIRED_LABELS.some((l) => !(tm.labels ?? []).includes(l)))
           problems.push("ticketMaterial labels incomplete");
+        // Party evidence must never be promoted to a stronger production-impact
+        // claim than the source observation stated (E1-14).
+        const src = (input.observations ?? []).find((o) => o.observationId === d.observationId);
+        const srcImpact = src?.exploit?.productionImpact?.value;
+        if (srcImpact !== undefined && tm.productionImpact?.value !== srcImpact)
+          problems.push(`productionImpact promoted ${srcImpact} -> ${tm.productionImpact?.value} (E1-14)`);
       }
     }
     // aliasing: output arrays must not be the same reference as an input array

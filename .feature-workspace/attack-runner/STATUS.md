@@ -1,43 +1,39 @@
 # STATUS — Attack Runner
 
-**Stage:** 3 (Build), in progress.
+**Stage:** 3 (Build) — E1 offline planner complete; pending round-2 review then Stage 4.
 **Working branch:** `claude/exciting-cerf-vkmwu5`.
-**Approved plan:** work-packet breakdown accepted by engineering lead.
 
 ## Done
 
-- **WP0.1** — offline planner I/O contract + fixtures (`attack-runner/planner/`).
-  Schemas validate with ajv (draft 2020-12); fixture guard passes.
+- **WP0.1** — planner I/O contract + fixtures.
+- **WP1.1–WP1.5** — planner implemented (`attack-runner/planner/src/`): identity/normalization
+  from structured `semantics` + environment + incidental exclusion + fingerprint aliases;
+  five-outcome decision engine; count-once/replay/in-run dedup; non-observation zero-writes;
+  invalid/unknown-state/ambiguous → unresolved; structured input validation; batch status.
+- **E1 criteria coverage (offline):** E1-01…E1-15, E1-17…E1-20 exercised by 19 fixtures.
+  Oracle `run-fixtures.mjs`: **19 passed, 0 failed** + 3 structural-reject; asserts invariants
+  on actual output (ticket material, zero-write, no-impact-promotion, batchStatus, aliasing),
+  determinism, permutation-invariance, input immutability. Guard PASS; inputs and all actual
+  outputs validate against the schemas (ajv draft2020).
+- **Round-1 self-review** complete; findings fixed/deferred (`review-wp1.md`).
+
+## Deferred to Engineering 2 / later stages (not E1)
+
+- Cross-run durable notification + dedup state (handoff: E2 owns persistence).
+- Remediation-union on rediscovery across repos (adapter/delivery concern, WP2.7).
+- Fix-claim episode tracking across runs (WP2.7 / E2).
 
 ## In progress
 
-- **WP1.1–WP1.4** — planner implemented (`attack-runner/planner/src/`):
-  normalization/identity from structured `semantics` (WP1.1), five-outcome decision
-  engine (WP1.2), count-once/replay dedup + eligibility (WP1.3), non-observation
-  zero-writes + invalid→unresolved (WP1.4). Oracle `run-fixtures.mjs`: **7/7 pass**,
-  deterministic, no input mutation (WP1.5 partial).
-- **Self-review gate:** round-1 isolated review complete (1 blocker/8 major/8 minor);
-  correctness + oracle-gap findings fixed this slice, remainder routed to E1 slices below.
-  See `review-wp1.md` disposition. Oracle: 9/9 + structural-reject.
-
-## Remaining in WP1 (next slices)
-
-Fixtures currently cover E1-01,02,03,04,08,12,17. Still to add + implement:
-E1-05 (known issue absent, no re-test → no closure), E1-06 (interrupted re-test),
-E1-07 (positive survives later session loss), E1-09 (same open finding, different run),
-E1-10 (cross-repo / cross-harness single ticket), E1-11 (ambiguous match + unknown repo),
-E1-13 (mixed batch not wholly successful), E1-14 (production impact unknown),
-E1-18 (independent control failures stay distinct), E1-19 (notification eligibility once),
-E1-20 (fingerprint-version migration/aliases).
+- **Round-2 isolated review** over the complete WP1, then Stage 4 conformance.
 
 ## Open failures / blockers — Stage-1→2 gate (PM must resolve)
 
-WP0.1 and WP1.\* do not depend on these; E2/Release packets do. 11 items; see
-`pm-clarifications.md`. Blocking: (1) issuer-service ownership acceptance,
-(2) out-of-repo issuer-function + mailbox dependencies. (Spawned task: "Get PM answers".)
+WP1 does not depend on these; E2/Release packets do. 11 items in `pm-clarifications.md`
+(blocking: issuer-service ownership acceptance; out-of-repo issuer-function + mailbox).
+Spawned task: "Get PM answers".
 
 ## Next action
 
-1. Incorporate self-review findings for WP1.1–1.4 (follow-up commit).
-2. Add the remaining E1 fixtures + extend `plan()` to cover them (test-first).
-3. On PM gate resolution, sequence the E2 packets.
+1. Round-2 isolated review of WP1; fix any material findings (repeat until clean).
+2. Stage 4 conformance packaging; then E2 once the PM gate clears.

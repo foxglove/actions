@@ -1,5 +1,7 @@
 # TRACEABILITY — invariant → computation owner → oracle
 
+> Status (WP1): all E1 (offline) rows implemented and green via `attack-runner/planner/` (19 fixtures). E2/Release rows pending the PM gate.
+
 Work packets are defined in the approved plan. This maps each invariant to the packet
 that owns its computation and the acceptance criteria that judge it.
 

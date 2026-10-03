@@ -1,0 +1,72 @@
+{
+  "runId": "run-e107",
+  "decisions": [
+    {
+      "observationId": "obs-pos",
+      "outcome": "new",
+      "reason": "",
+      "exploitIdentity": {
+        "exploitId": null,
+        "matchReason": ""
+      },
+      "target": {
+        "type": "new-issue",
+        "issueId": null
+      },
+      "proposedActions": [
+        {
+          "type": "create-ticket"
+        },
+        {
+          "type": "increment-confirmed-count",
+          "amount": 1
+        }
+      ],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": true,
+      "neededEvidence": []
+    },
+    {
+      "observationId": "obs-int",
+      "outcome": "not-observed",
+      "reason": "",
+      "exploitIdentity": {
+        "exploitId": "exp-other",
+        "matchReason": ""
+      },
+      "target": {
+        "type": "none",
+        "issueId": null
+      },
+      "proposedActions": [],
+      "evidenceReferences": [],
+      "notificationEligible": false,
+      "neededEvidence": []
+    }
+  ],
+  "runSummary": {
+    "batchStatus": "complete",
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "unresolved": [],
+    "notObserved": [
+      {
+        "observationId": "obs-int",
+        "exploitId": "exp-other",
+        "issueId": "SEC-900",
+        "executionStatus": "interrupted",
+        "reason": "session lost",
+        "attemptedCoverage": [],
+        "edgeClassification": "none",
+        "evidenceReferences": []
+      }
+    ],
+    "edgeAccess": {
+      "classification": "none"
+    },
+    "stopReason": "session lost after a confirmed positive"
+  }
+}

@@ -399,6 +399,13 @@
         "targetEnvironment": {
           "type": "string",
           "description": "Assessed environment the ticket's exploit belongs to; part of identity (prevents cross-environment merge)."
+        },
+        "fingerprintAliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Prior-version fingerprint strings that still identify this exploit (migration aid for E1-20)."
         }
       }
     }
