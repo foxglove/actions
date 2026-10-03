@@ -7,26 +7,54 @@
   "additionalProperties": false,
   "required": ["runId", "decisions", "runSummary"],
   "properties": {
-    "runId": { "type": "string", "minLength": 1 },
+    "runId": {
+      "type": "string",
+      "minLength": 1
+    },
     "decisions": {
       "type": "array",
-      "items": { "$ref": "#/$defs/decision" }
+      "items": {
+        "$ref": "#/$defs/decision"
+      }
     },
     "runSummary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["coverage", "notObserved", "edgeAccess"],
+      "required": [
+        "coverage",
+        "notObserved",
+        "edgeAccess",
+        "batchStatus",
+        "unresolved"
+      ],
       "properties": {
         "coverage": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "tested": { "type": "array", "items": { "type": "string" } },
-            "untested": { "type": "array", "items": { "type": "string" } },
-            "interrupted": { "type": "array", "items": { "type": "string" } }
+            "tested": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "untested": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "interrupted": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
-        "stopReason": { "type": "string" },
+        "stopReason": {
+          "type": "string"
+        },
         "notObserved": {
           "type": "array",
           "description": "Scoped non-observations recorded only in the summary. A resolved ticket referenced here receives no write. Never an absence/fixed claim.",
@@ -35,9 +63,15 @@
             "additionalProperties": false,
             "required": ["observationId", "executionStatus", "reason"],
             "properties": {
-              "observationId": { "type": "string" },
-              "exploitId": { "type": ["string", "null"] },
-              "issueId": { "type": ["string", "null"] },
+              "observationId": {
+                "type": "string"
+              },
+              "exploitId": {
+                "type": ["string", "null"]
+              },
+              "issueId": {
+                "type": ["string", "null"]
+              },
               "executionStatus": {
                 "enum": [
                   "completed",
@@ -47,14 +81,27 @@
                   "not-attempted"
                 ]
               },
-              "reason": { "type": "string" },
+              "reason": {
+                "type": "string"
+              },
               "attemptedCoverage": {
                 "type": "array",
-                "items": { "type": "string" }
+                "items": {
+                  "type": "string"
+                }
               },
               "evidenceReferences": {
                 "type": "array",
-                "items": { "type": "string" }
+                "items": {
+                  "type": "string"
+                }
+              },
+              "edgeClassification": {
+                "enum": [
+                  "none",
+                  "EDGE_CONTROL_BLOCKED",
+                  "ACCESS_FAILURE_UNCLASSIFIED"
+                ]
               }
             }
           }
@@ -71,12 +118,28 @@
                 "ACCESS_FAILURE_UNCLASSIFIED"
               ]
             },
-            "phase": { "type": "string" },
+            "phase": {
+              "type": "string"
+            },
             "counts": {
               "type": "object",
-              "additionalProperties": { "type": "integer", "minimum": 0 }
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              }
             }
           }
+        },
+        "batchStatus": {
+          "enum": ["complete", "partial"],
+          "description": "partial when any finding is unresolved; a partial batch is never reported wholly successful (E1-13)."
+        },
+        "unresolved": {
+          "type": "array",
+          "items": {
+            "type": ["string", "null"]
+          },
+          "description": "observationIds routed to triage."
         }
       }
     }
@@ -87,7 +150,10 @@
       "additionalProperties": false,
       "required": ["observationId", "outcome", "reason", "proposedActions"],
       "properties": {
-        "observationId": { "type": "string", "minLength": 1 },
+        "observationId": {
+          "type": "string",
+          "minLength": 1
+        },
         "outcome": {
           "enum": [
             "new",
@@ -98,12 +164,17 @@
           ],
           "description": "The five reconciliation outcomes from the handoff decision table."
         },
-        "reason": { "type": "string", "minLength": 1 },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
         "exploitIdentity": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "exploitId": { "type": ["string", "null"] },
+            "exploitId": {
+              "type": ["string", "null"]
+            },
             "matchReason": {
               "type": "string",
               "description": "Why this is the same exploit as the target, or why a distinct ticket is warranted."
@@ -115,8 +186,12 @@
           "additionalProperties": false,
           "required": ["type"],
           "properties": {
-            "type": { "enum": ["new-issue", "existing-issue", "none"] },
-            "issueId": { "type": ["string", "null"] }
+            "type": {
+              "enum": ["new-issue", "existing-issue", "none"]
+            },
+            "issueId": {
+              "type": ["string", "null"]
+            }
           }
         },
         "proposedActions": {
@@ -145,12 +220,28 @@
                 "description": "Required for create-ticket: the complete ticket content.",
                 "additionalProperties": true
               }
-            }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "type": {
+                      "const": "create-ticket"
+                    }
+                  }
+                },
+                "then": {
+                  "required": ["ticketMaterial"]
+                }
+              }
+            ]
           }
         },
         "evidenceReferences": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "notificationEligible": {
           "type": "boolean",
@@ -159,7 +250,13 @@
         "neededEvidence": {
           "type": "array",
           "description": "For outcome=unresolved: what is missing. No speculative create/merge/lifecycle action.",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
+        },
+        "fixClaimRef": {
+          "type": ["string", "null"],
+          "description": "The identified fix claim reference when an outcome relates to a fix claim."
         }
       }
     }

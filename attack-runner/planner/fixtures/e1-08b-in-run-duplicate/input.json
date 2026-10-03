@@ -1,0 +1,77 @@
+{
+  "run": {
+    "runId": "run-2026-11-23",
+    "targetEnvironment": "party",
+    "evidenceLocation": "gs://aegis-evidence/run-2026-11-23",
+    "completion": { "status": "completed" },
+    "session": { "status": "ok", "maintenanceVerified": true },
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "edgeAccess": { "classification": "none" }
+  },
+  "observations": [
+    {
+      "observationId": "obs-1",
+      "kind": "confirmed-positive",
+      "validity": "valid",
+      "eventId": "ev-a",
+      "execution": { "status": "completed" },
+      "exploit": {
+        "chain": [
+          {
+            "actorCapability": "member of tenant A",
+            "targetAndOperation": "export download API for an export owned by tenant B",
+            "expectedBoundary": "ownership check must reject cross-tenant read",
+            "observedTransition": "unauthorized read of tenant B export",
+            "evidence": ["req-redacted-a"],
+            "semantics": {
+              "actorRole": "tenant-member",
+              "resourceRelation": "cross-tenant",
+              "surface": "export-download-api",
+              "operation": "download",
+              "boundaryType": "ownership-check",
+              "violation": "unauthorized-read"
+            }
+          }
+        ],
+        "severity": "high",
+        "productionImpact": { "value": "unknown", "rationale": "party only" }
+      },
+      "evidence": { "references": ["req-redacted-a"] }
+    },
+    {
+      "observationId": "obs-2",
+      "kind": "confirmed-positive",
+      "validity": "valid",
+      "eventId": "ev-b",
+      "execution": { "status": "completed" },
+      "exploit": {
+        "chain": [
+          {
+            "actorCapability": "member of tenant A",
+            "targetAndOperation": "same cross-tenant export download, observed again later in the run",
+            "expectedBoundary": "ownership check must reject cross-tenant read",
+            "observedTransition": "unauthorized read of tenant B export",
+            "evidence": ["req-redacted-b"],
+            "semantics": {
+              "actorRole": "tenant-member",
+              "resourceRelation": "cross-tenant",
+              "surface": "export-download-api",
+              "operation": "download",
+              "boundaryType": "ownership-check",
+              "violation": "unauthorized-read"
+            }
+          }
+        ],
+        "severity": "high",
+        "productionImpact": { "value": "unknown", "rationale": "party only" }
+      },
+      "evidence": { "references": ["req-redacted-b"] }
+    }
+  ],
+  "existingIssues": [],
+  "processedEvents": []
+}

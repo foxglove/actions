@@ -1,10 +1,10 @@
 {
-  "runId": "run-2026-10-05",
+  "runId": "run-2026-11-23",
   "decisions": [
     {
       "observationId": "obs-1",
       "outcome": "new",
-      "reason": "Valid confirmed positive; identity established; no existing match.",
+      "reason": "First sighting; create one ticket and count once.",
       "exploitIdentity": {
         "exploitId": null,
         "matchReason": "no candidate existing ticket"
@@ -22,8 +22,29 @@
           "amount": 1
         }
       ],
-      "evidenceReferences": ["req-redacted-1"],
+      "evidenceReferences": ["req-redacted-a"],
       "notificationEligible": true,
+      "neededEvidence": []
+    },
+    {
+      "observationId": "obs-2",
+      "outcome": "rediscovered-open",
+      "reason": "Second sighting of the same exploit in one run; no second ticket and no second count.",
+      "exploitIdentity": {
+        "exploitId": null,
+        "matchReason": "duplicate of an exploit already identified in this run"
+      },
+      "target": {
+        "type": "new-issue",
+        "issueId": null
+      },
+      "proposedActions": [
+        {
+          "type": "none"
+        }
+      ],
+      "evidenceReferences": ["req-redacted-b"],
+      "notificationEligible": false,
       "neededEvidence": []
     }
   ],

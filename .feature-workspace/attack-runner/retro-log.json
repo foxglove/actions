@@ -18,6 +18,12 @@
       "type": "progress",
       "stage": "3",
       "note": "WP1.1-1.4 implemented; 7/7 fixture oracle pass; isolated self-review in flight."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "review",
+      "stage": "3",
+      "note": "WP1 isolated review: 1 blocker/8 major/8 minor. Fixed correctness + oracle-gap findings; remainder routed to E1 slices. Oracle 9/9 + structural-reject."
     }
   ]
 }

@@ -9,10 +9,18 @@
         "exploitId": null,
         "matchReason": "no existing match"
       },
-      "target": { "type": "new-issue", "issueId": null },
+      "target": {
+        "type": "new-issue",
+        "issueId": null
+      },
       "proposedActions": [
-        { "type": "create-ticket" },
-        { "type": "increment-confirmed-count", "amount": 1 }
+        {
+          "type": "create-ticket"
+        },
+        {
+          "type": "increment-confirmed-count",
+          "amount": 1
+        }
       ],
       "evidenceReferences": ["req-redacted-50"],
       "notificationEligible": true,
@@ -26,7 +34,10 @@
         "exploitId": null,
         "matchReason": "identity not established without evidence"
       },
-      "target": { "type": "none", "issueId": null },
+      "target": {
+        "type": "none",
+        "issueId": null
+      },
       "proposedActions": [],
       "evidenceReferences": [],
       "notificationEligible": false,
@@ -36,12 +47,16 @@
     }
   ],
   "runSummary": {
+    "batchStatus": "partial",
     "coverage": {
       "tested": ["exports.download", "shares.token"],
       "untested": [],
       "interrupted": []
     },
+    "unresolved": ["obs-invalid"],
     "notObserved": [],
-    "edgeAccess": { "classification": "none" }
+    "edgeAccess": {
+      "classification": "none"
+    }
   }
 }

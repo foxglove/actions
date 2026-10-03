@@ -9,11 +9,21 @@
         "exploitId": "exp-crossorg-export-dl",
         "matchReason": "same normalized causal chain as SEC-101"
       },
-      "target": { "type": "existing-issue", "issueId": "SEC-101" },
+      "target": {
+        "type": "existing-issue",
+        "issueId": "SEC-101"
+      },
       "proposedActions": [
-        { "type": "append-evidence" },
-        { "type": "reopen-ticket" },
-        { "type": "increment-confirmed-count", "amount": 1 }
+        {
+          "type": "append-evidence"
+        },
+        {
+          "type": "reopen-ticket"
+        },
+        {
+          "type": "increment-confirmed-count",
+          "amount": 1
+        }
       ],
       "evidenceReferences": ["req-redacted-33"],
       "notificationEligible": true,
@@ -21,12 +31,16 @@
     }
   ],
   "runSummary": {
+    "batchStatus": "complete",
     "coverage": {
       "tested": ["exports.download"],
       "untested": [],
       "interrupted": []
     },
+    "unresolved": [],
     "notObserved": [],
-    "edgeAccess": { "classification": "none" }
+    "edgeAccess": {
+      "classification": "none"
+    }
   }
 }

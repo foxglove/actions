@@ -16,8 +16,9 @@
   engine (WP1.2), count-once/replay dedup + eligibility (WP1.3), non-observation
   zero-writes + invalid→unresolved (WP1.4). Oracle `run-fixtures.mjs`: **7/7 pass**,
   deterministic, no input mutation (WP1.5 partial).
-- **Self-review gate:** isolated adversarial review in flight; findings (if any) land
-  in `review-wp1.md` and route to a follow-up commit before Stage 4 / any PR.
+- **Self-review gate:** round-1 isolated review complete (1 blocker/8 major/8 minor);
+  correctness + oracle-gap findings fixed this slice, remainder routed to E1 slices below.
+  See `review-wp1.md` disposition. Oracle: 9/9 + structural-reject.
 
 ## Remaining in WP1 (next slices)
 

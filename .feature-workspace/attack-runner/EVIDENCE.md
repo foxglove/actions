@@ -26,3 +26,13 @@
 - Negative control: oracle confirmed to reject a deliberately wrong engine.
 - Self-review: isolated adversarial review launched; result pending in `review-wp1.md`.
 - cost: unavailable (cloud session transcript not local).
+
+## 2026-10-03 — WP1.1–WP1.4 review + repair (round 1)
+
+- Isolated adversarial review: 1 blocker, 8 major, 8 minor (`review-wp1.md`).
+- Repaired B1, M1, M2, M4, M6, M8 and m2/m4/m5/m8 (+ M3a); remainder routed to E1 slices.
+- Oracle `run-fixtures.mjs`: **9 passed, 0 failed**, + 3 structural-reject PASS;
+  invariants asserted on actual output; determinism, permutation-invariance, immutability.
+- `check-fixtures.mjs`: PASS. Inputs validate against input schema; all actual outputs
+  validate against output schema (ajv draft2020).
+- cost: unavailable (cloud transcript not local).

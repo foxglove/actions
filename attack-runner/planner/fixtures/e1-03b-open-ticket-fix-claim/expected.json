@@ -1,13 +1,13 @@
 {
-  "runId": "run-2026-10-12",
+  "runId": "run-2026-11-16",
   "decisions": [
     {
       "observationId": "obs-1",
-      "outcome": "rediscovered-open",
-      "reason": "Valid confirmed positive; exactly one open match on the normalized causal chain.",
+      "outcome": "claimed-fixed-reproduces",
+      "reason": "Open ticket carries a fix claim that this run contradicts; stays open, evidence appended, claim identified; no reopen, no duplicate.",
       "exploitIdentity": {
         "exploitId": "exp-crossorg-export-dl",
-        "matchReason": "same actor/resource relationship, download surface, ownership-check failure; wording and export IDs differ"
+        "matchReason": "same normalized causal chain as the open ticket with a fix claim"
       },
       "target": {
         "type": "existing-issue",
@@ -22,9 +22,10 @@
           "amount": 1
         }
       ],
-      "evidenceReferences": ["req-redacted-9"],
-      "notificationEligible": false,
-      "neededEvidence": []
+      "evidenceReferences": ["req-redacted-88"],
+      "notificationEligible": true,
+      "neededEvidence": [],
+      "fixClaimRef": "app#4821"
     }
   ],
   "runSummary": {

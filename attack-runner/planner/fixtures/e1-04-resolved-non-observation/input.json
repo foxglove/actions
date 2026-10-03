@@ -44,7 +44,8 @@
         "claimed": true,
         "reference": "app#4821"
       },
-      "confirmedRunCount": 4
+      "confirmedRunCount": 4,
+      "targetEnvironment": "party"
     }
   ],
   "processedEvents": []

@@ -135,6 +135,10 @@
         "properties": {
           "eventId": {
             "type": "string"
+          },
+          "key": {
+            "type": "string",
+            "description": "Optional idempotency key (e.g. runId + fingerprint) for retries with a regenerated/absent eventId."
           }
         }
       }
@@ -199,6 +203,10 @@
             },
             "violation": {
               "type": "string"
+            },
+            "incidental": {
+              "type": "boolean",
+              "description": "True marks an incidental reconnaissance step excluded from the matching core."
             }
           }
         }
@@ -360,8 +368,8 @@
           "description": "Stable exploit identity if already assigned; null if unknown."
         },
         "state": {
-          "enum": ["open", "resolved"],
-          "description": "Normalized at the adapter boundary from the vendor status string."
+          "enum": ["open", "resolved", "unknown"],
+          "description": "Normalized at the adapter boundary from the vendor status string. 'unknown' routes to triage (no write)."
         },
         "fixClaim": {
           "type": "object",
@@ -387,6 +395,10 @@
           "type": ["integer", "null"],
           "minimum": 0,
           "description": "Known historical count; null means unknown (do not invent a starting total)."
+        },
+        "targetEnvironment": {
+          "type": "string",
+          "description": "Assessed environment the ticket's exploit belongs to; part of identity (prevents cross-environment merge)."
         }
       }
     }

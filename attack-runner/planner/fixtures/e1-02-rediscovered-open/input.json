@@ -82,7 +82,8 @@
           }
         }
       ],
-      "confirmedRunCount": 2
+      "confirmedRunCount": 2,
+      "targetEnvironment": "party"
     }
   ],
   "processedEvents": []

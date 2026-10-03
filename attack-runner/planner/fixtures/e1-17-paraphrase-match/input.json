@@ -31,6 +31,15 @@
       "exploit": {
         "chain": [
           {
+            "actorCapability": "regular user of org Foo",
+            "targetAndOperation": "listing own organization's exports (reconnaissance)",
+            "expectedBoundary": "none; own-org listing is allowed",
+            "observedTransition": "enumerated own exports to find a target id",
+            "semantics": {
+              "incidental": true
+            }
+          },
+          {
             "actorCapability": "a regular user belonging to org Foo",
             "targetAndOperation": "downloading export id EXP-55123 via the export download endpoint, owned by org Bar",
             "expectedBoundary": "export owner-org check",
@@ -82,7 +91,8 @@
           }
         }
       ],
-      "confirmedRunCount": 5
+      "confirmedRunCount": 5,
+      "targetEnvironment": "party"
     }
   ],
   "processedEvents": []
