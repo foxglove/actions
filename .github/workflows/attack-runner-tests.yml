@@ -1,0 +1,52 @@
+name: Attack Runner tests
+
+on:
+  push:
+    paths:
+      - "attack-runner/**"
+      - ".github/workflows/attack-runner-tests.yml"
+  pull_request:
+    paths:
+      - "attack-runner/**"
+      - ".github/workflows/attack-runner-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  planner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Oracle (fixtures, invariants, round-trip, self-test)
+        run: node attack-runner/planner/run-fixtures.mjs
+
+      - name: Fixture guard (branch coverage)
+        run: node attack-runner/planner/check-fixtures.mjs
+
+      - name: Mutation test (convergence gate)
+        run: node attack-runner/planner/mutation-test.mjs
+
+      - name: JSON Schema validation (inputs, expected, actual outputs)
+        run: |
+          set -euo pipefail
+          S=attack-runner/planner/schema
+          for d in attack-runner/planner/fixtures/*/; do
+            if [ ! -f "${d}INPUT_SCHEMA_INVALID" ]; then
+              npx --yes ajv-cli@5 validate --spec=draft2020 \
+                -s "$S/planner-input.schema.json" -d "${d}input.json"
+            fi
+            npx --yes ajv-cli@5 validate --spec=draft2020 \
+              -s "$S/planner-output.schema.json" -d "${d}expected.json"
+          done
+          # run-fixtures.mjs wrote each actual output here
+          npx --yes ajv-cli@5 validate --spec=draft2020 \
+            -s "$S/planner-output.schema.json" -d "/tmp/aegis-planner-out/*.json"

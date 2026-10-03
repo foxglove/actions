@@ -8,13 +8,14 @@ or workflow changes (acceptance `E1-15`). Building it first makes identity, evid
 lifecycle rules testable before any live authentication, network, or external-write
 integration (engineering handoff, "Recommended implementation sequence").
 
-## Status
+## Fixtures and coverage
 
-- **WP0.1** contract (schemas + fixtures) and **WP1.1–WP1.4** implementation are landed.
-- `plan()` is implemented in `src/plan.mjs`; identity/normalization in `src/normalize.mjs`.
-- Covers the representative cases E1-01, 02, 03, 03b (open+fix-claim), 04, 08, 08b (in-run
-  duplicate), 12, 17. Remaining E1 criteria are tracked in
-  `../../.feature-workspace/attack-runner/STATUS.md`.
+`plan()` is implemented in `src/plan.mjs`; identity/normalization in `src/normalize.mjs`.
+Each directory under `fixtures/` maps to one acceptance criterion by its `e1-NN` prefix and
+holds an `input.json` plus the full authored `expected.json`. A directory with an
+`INPUT_SCHEMA_INVALID` marker carries intentionally out-of-contract input to test defensive
+handling. The mutation test (below) is the coverage gate: it fails if any source mutation
+survives the fixtures.
 
 ## Entry point
 
@@ -31,7 +32,7 @@ const proposal = plan(input); // pure; throws PlannerInputError on structurally 
 Run the example:
 
 ```
-node attack-runner/planner/example.mjs e1-03-claimed-fixed-reproduces
+node attack-runner/planner/example.mjs e1-03-claimed-fixed-resolved
 ```
 
 ## Normalized vs. planner-owned

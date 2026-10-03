@@ -79,11 +79,13 @@ function validateInput(input) {
         );
     }
   }
-  if (
-    input.processedEvents !== undefined &&
-    !Array.isArray(input.processedEvents)
-  )
-    throw new PlannerInputError("input.processedEvents must be an array");
+  if (input.processedEvents !== undefined) {
+    if (!Array.isArray(input.processedEvents))
+      throw new PlannerInputError("input.processedEvents must be an array");
+    for (const e of input.processedEvents)
+      if (e === null || typeof e !== "object" || Array.isArray(e))
+        throw new PlannerInputError("each processed event must be an object");
+  }
 }
 
 function decision(fields) {
@@ -167,7 +169,16 @@ export function plan(input) {
   );
   const existingIssues = input.existingIssues ?? [];
   const countedThisRun = new Set(); // keyed by matched identity (issueId/exploitId/fp)
-  const seenChainsThisRun = []; // {fp, norm} of prior valid positives this run (E1-18 in-run)
+  // All valid confirmed-positive chains in the run, computed up front so in-run
+  // overlap detection does not depend on observation order (E1-18).
+  const runPositives = input.observations
+    .filter((o) => o?.kind === "confirmed-positive" && o.validity === "valid")
+    .map((o) => ({
+      observationId: o.observationId,
+      norm: normalizeChain(o.exploit?.chain),
+      fp: fingerprint(o.exploit?.chain, runEnv),
+    }))
+    .filter((p) => p.norm !== null && p.fp !== null);
   const decisions = [];
   const notObserved = [];
 
@@ -312,12 +323,14 @@ export function plan(input) {
           isSubsequence(obsNorm, issNorm) || isSubsequence(issNorm, obsNorm)
         );
       });
-      // Also compare against other observations already seen in THIS run: a partial/
-      // superset overlap (not an exact duplicate) is ambiguous, not two new tickets.
-      const relatedInRun = seenChainsThisRun.some(
-        (s) =>
-          s.fp !== fp &&
-          (isSubsequence(obsNorm, s.norm) || isSubsequence(s.norm, obsNorm)),
+      // Also compare against every other valid positive in THIS run (computed up
+      // front, so the result is independent of observation order): a partial/superset
+      // overlap with a different fingerprint is ambiguous, not two new tickets.
+      const relatedInRun = runPositives.some(
+        (p) =>
+          p.observationId !== observationId &&
+          p.fp !== fp &&
+          (isSubsequence(obsNorm, p.norm) || isSubsequence(p.norm, obsNorm)),
       );
       if (relatedToIssue || relatedInRun) {
         decisions.push(
@@ -486,7 +499,6 @@ export function plan(input) {
       // fresh confirmation that follows it in the same run.
       countedThisRun.add(identityKey);
     }
-    seenChainsThisRun.push({ fp, norm: obsNorm });
 
     decisions.push(
       decision({

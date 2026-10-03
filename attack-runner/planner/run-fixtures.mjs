@@ -254,6 +254,14 @@ for (const [label, bad] of [
   ],
   ["missing-env", { run: { runId: "r" }, observations: [] }],
   [
+    "processed-null",
+    {
+      run: { runId: "r", targetEnvironment: "party" },
+      observations: [],
+      processedEvents: [null],
+    },
+  ],
+  [
     "bad-existing",
     {
       run: { runId: "r", targetEnvironment: "party" },

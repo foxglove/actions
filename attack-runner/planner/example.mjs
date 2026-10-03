@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { plan } from "./src/index.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const name = process.argv[2] ?? "e1-03-claimed-fixed-reproduces";
+const name = process.argv[2] ?? "e1-03-claimed-fixed-resolved";
 const input = JSON.parse(
   fs.readFileSync(path.join(here, "fixtures", name, "input.json"), "utf8"),
 );
