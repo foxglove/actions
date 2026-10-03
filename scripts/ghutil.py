@@ -70,7 +70,11 @@ class GitHub:
                 self._sleep_until(self.core_reset, "core")
             req = urllib.request.Request(url, data=data, headers=self._headers(extra), method=method)
             try:
-                with urllib.request.urlopen(req, timeout=120) as resp:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    sock = getattr(getattr(resp, "fp", None), "raw", None)
+                    sock = getattr(sock, "_sock", None)
+                    if sock is not None:
+                        sock.settimeout(60)
                     raw = resp.read()
                     headers = {k.lower(): v for k, v in resp.headers.items()}
                     self._note_rest_limit(headers)
