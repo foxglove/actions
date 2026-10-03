@@ -27,13 +27,41 @@
 
 - **Round-2 isolated review** over the complete WP1, then Stage 4 conformance.
 
-## Open failures / blockers — Stage-1→2 gate (PM must resolve)
+## PM gate — Stage-1→2 (E2 / Release) — ✅ CLEARED 2026-10-02
 
-WP1 does not depend on these; E2/Release packets do. 11 items in `pm-clarifications.md`
-(blocking: issuer-service ownership acceptance; out-of-repo issuer-function + mailbox).
-Spawned task: "Get PM answers".
+WP1 did not depend on these; the E2/Release packets do. All 11 `pm-clarifications.md`
+items were resolved interactively by the release/product-decision authority
+(**Kumar Pasumarthy**) on 2026-10-02 (spawned task: "Get PM answers"). Two non-blocking
+**pre-first-run follow-ups** remain (concrete test service-account value — item 3; concrete
+GCS project/bucket name — item 6); both are needed before the first live run, not before
+E2/Release build sequencing.
+
+Human oracle: **Kumar Pasumarthy** (authority per `GOAL.md` / `attack-sessions.md`).
+Append-only detail per item in `retro-log.json`.
+
+| # | Decision | Accountable owner | Date | Notes / reservations |
+| - | -------- | ----------------- | ---- | -------------------- |
+| 1 | Accept proposed issuer owners as the team that owns the company issuer function + test identity + mailbox access. | `@foxglove/data-curation-search`, `@wimagguc`, `@dante-foxglove`; sign-off **Kumar Pasumarthy** | 2026-10-02 | No separate on-call rotation yet — **accepted as-is for v1**. |
+| 2 | Issuer function + mailbox provisioning owned by the **App repo**. Build unassigned ("any available engineer"); land within ~1 week (target 2026-10-09). | App repo (app/auth code owners); interim magic-link minting by **Kumar Pasumarthy** | 2026-10-02 | Docs (`attack-sessions.md` 18–19/149–154, `engineering-handoff.md`) attribute these to "app/auth code owners" — consistent. If a distinct auth repo exists, app-vs-auth split of each piece is a sub-point for the owning team. Interim manual minting matches `attack-sessions.md:150` ("interim Kumar Pasumarthy"). |
+| 3 | Authorized target set = **all hosts** under `*.foxglove.party` (full wildcard). Test identity = a **service account minted by Kumar**. Run window = **Mondays 09:00 PT** + manual runs. | Scope/authorization: **Kumar Pasumarthy**; test account minting: **Kumar Pasumarthy** | 2026-10-02 | Full wildcard authorized — explicitly overrides the drafted "maximum boundary, not every host" caution; production stays out of scope (`party ≠ production` invariant). ⚠ **Pre-first-run follow-up:** concrete service-account identity/data not yet named. No separate maintenance blackout window provided. |
+| 4 | Starting session is **ordinary by default**. **No** app-owned session-bound mode signal is pre-authorized as a v1 release dependency. | **Kumar Pasumarthy** | 2026-10-02 | Treated as low-risk: the runner starts ordinary and the demonstrated ordinary→admin escalation is itself the exploit (`exploit-findings.md:5,79`); pause/stop on reaching admin aligns with "minimum evidence necessary; stop before irreversible damage" (`instructions.md:51`). Reservation: if the feasibility spike shows ordinary vs. impersonation genuinely cannot be distinguished from app evidence, reopen with PM — not auto-triggered. |
+| 5 | **App/auth code owners** confirm the 4 DKIM trusted-config values (`d=` signing domain, `s=` selector(s), `From` sender, `To` mailbox) against a genuine message, and own the `DKIM_SELECTOR_UNAPPROVED` investigation path. | App/auth code owners (Item-1 owners) | 2026-10-02 | They own SendGrid domain authentication, so they read the real values off a genuine magic-link email and confirm selector legitimacy before adding one (`attack-sessions.md:51,150`, `engineering-handoff.md:94`). `To` mailbox is the one Kumar provisions (Item 2). |
+| 6 | **GCS confirmed** (accepted contract stands — no re-spec). Authorized reader group = **all of Engineering + CEO**. Provisioned by the **Infra team** through the infra process. | Reader-group/storage decision: **Kumar Pasumarthy**; provisioning: **Infra team** | 2026-10-02 | PM's "decided against GCS?" reconciled against the accepted contract (`attack-runner.md:46,48,50,156`, `engineering-handoff.md:20,75,111`, I-15/I-17, WP2.8, `GOAL.md:11`) → GCS stands. ⚠ **Pre-provision follow-up:** concrete project + bucket name TBD ("name it later"); I-15 requires the destination to exist and be access-tested before launch. Note: reader group is broader than the docs' "designated engineering/security readers." |
+| 7 | Destination team = **Foundations** (`id 18ec7d7b-6e5c-4670-bfea-6087b092d784`), for now. Mapping (built from Foundations' live Linear states): **fix-claim signal** = ticket reaches completed state `Done`; **mapped open state** (reopen target when a `Done` exploit reproduces) = `Todo`; **ambiguous reconciliation** → `Triage`. | **Kumar Pasumarthy** (team choice); mapping researched from live Foundations states under PM "research as needed" delegation | 2026-10-02 | Foundations states: Triage, Idea, Backlog, Todo, In Progress, In Review, Done, Canceled, Duplicate. Mapping aligns with the five reconciliation outcomes / "ambiguous → triage" (WP1.2) and claimed-fixed-but-reproduces reopen (`exploit-findings.md:34`). PM may override any state choice. |
+| 8 | Edge/Cloudflare scoped-policy approval owned by **Engineering** (conditional — only if the I-23 reachability probe shows the runner path is blocked). | **Engineering** (specific environment owner named at trigger time) | 2026-10-02 | Conditional item; scope limited to a narrow party-only policy — no whole-zone or production change (`attack-paths.md` scope rules). ⚠ Specific person to be named if/when I-23 triggers. |
+| 9 | **Defer WP2.10** (concurrency coordination mechanism + test) for v1, relying on the single weekly run / one active attempt assumption. | **Kumar Pasumarthy** | 2026-10-02 | Residual risk accepted for v1: a manual run fired during the active Monday 09:00 run, or a retry after a lost Linear ack, could duplicate a ticket or double-count. Operational guardrail: do not fire a manual run while the scheduled run is active (ties to Item 10 coverage). Revisit if run cadence/parallelism increases. |
+| 10 | Operator who observes/can stop each Mon 09:00 PT + manual run = **Kumar Pasumarthy for now**, transitioning to the **Foundations team**. **Skip policy:** runs are **attended-only** — when no operator is available, the run **does not proceed unattended** (skip/defer until covered). | **Kumar Pasumarthy** now → **Foundations team** | 2026-10-02 | Operator coverage is distinct from authentication (`attack-sessions.md:7`). Fail-closed: no coverage → no unattended run. |
+| 11 | **Slack delivery stays deferred for v1** — notification eligibility is computed and recorded in the run summary, but nothing is sent. | **Kumar Pasumarthy** | 2026-10-02 | Confirms the non-goal in `GOAL.md` and `engineering-handoff.md:20` ("Slack delivery is deferred"); eligibility-recorded-no-transport behavior unchanged. |
 
 ## Next action
 
 1. Round-2 isolated review of WP1; fix any material findings (repeat until clean).
-2. Stage 4 conformance packaging; then E2 once the PM gate clears.
+2. Stage 4 conformance packaging.
+3. **PM gate is cleared** — sequence the E2 / Release packets (auth / delivery / infra) whose
+   blockers are now resolved.
+4. Create Linear tickets per packet in the **Foundations** team (item 7).
+5. Before the **first live run** (not before build): mint the concrete test service account
+   (item 3) and provision + access-test the GCS project/bucket (item 6, Infra team).
+6. Carry forward the recorded reservations: app-vs-auth repo split (item 2); item-4
+   feasibility-spike reopen condition; item-8 named owner if I-23 triggers; item-9
+   manual/scheduled overlap guardrail; item-10 operator transition to Foundations.
