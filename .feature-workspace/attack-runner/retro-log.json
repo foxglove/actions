@@ -133,6 +133,13 @@
       "stage": "2",
       "oracle": "Kumar Pasumarthy (release/product-decision authority)",
       "note": "PM Stage-1->2 gate CLEARED: all 11 pm-clarifications items resolved and recorded (STATUS.md Resolved table + entries above). E2/Release packets unblocked. Remaining non-blocking pre-first-run follow-ups: concrete test service-account value (item 3) and concrete GCS project/bucket name (item 6)."
+    },
+    {
+      "ts": "2026-10-02",
+      "type": "confirmation",
+      "stage": "2",
+      "oracle": "Kumar Pasumarthy (release/product-decision authority)",
+      "note": "PM reviewed the recorded resolution and confirmed: (6) GCS stands ('we are good on GCS') — no Stage-1 re-spec; (7) Linear Foundations status mapping (Done/Todo/Triage) confirmed, clearing the 'PM may override' caveat. Pre-first-run follow-ups (item 3 service-account value, item 6 GCS project/bucket name) acknowledged as not available yet; they remain tracked for before the first live run."
     }
   ]
 }
