@@ -11,8 +11,9 @@ integration (engineering handoff, "Recommended implementation sequence").
 ## Fixtures and coverage
 
 `plan()` is implemented in `src/plan.mjs`; identity/normalization in `src/normalize.mjs`.
-Each directory under `fixtures/` maps to one acceptance criterion by its `e1-NN` prefix and
-holds an `input.json` plus the full authored `expected.json`. A directory with an
+Each directory under `fixtures/` holds an `input.json` plus the full authored
+`expected.json`. Up to `e1-20`, the `e1-NN` prefix is the acceptance criterion the fixture
+exercises; later fixtures pin planner rules that refine those criteria. A directory with an
 `INPUT_SCHEMA_INVALID` marker carries intentionally out-of-contract input to test defensive
 handling. The mutation test (below) is the coverage gate: it fails if any source mutation
 survives the fixtures.

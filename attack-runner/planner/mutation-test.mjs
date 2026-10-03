@@ -720,6 +720,12 @@ const mutants = [
     'if (normEnv(iss.targetEnvironment) !== normEnv(runEnv)) return false;\n        if (iss.state !== "open") return false;',
   ],
   [
+    "nonempty-no-trim",
+    "src/plan.mjs",
+    'typeof v === "string" && v.trim() !== ""',
+    'typeof v === "string" && v !== ""',
+  ],
+  [
     "obs-array-off",
     "src/plan.mjs",
     "if (!Array.isArray(input.observations))",

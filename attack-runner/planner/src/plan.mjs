@@ -61,7 +61,7 @@ function validateInput(input) {
           `existing issue ${iss.issueId} needs targetEnvironment`,
         );
       // An existing issue with no comparable identity (chain does not normalize and
-      // no alias) is NOT a batch error — a single legacy ticket must not throw away
+      // no non-blank alias) is NOT a batch error — a single legacy ticket must not throw away
       // every valid finding. It is handled per-observation below: a would-be-new
       // observation in that environment routes to triage instead of a speculative
       // ticket, because we cannot prove it is distinct from the uncomparable issue.

@@ -120,14 +120,17 @@ function invariants(input, out, problems) {
         creates[fp] = (creates[fp] ?? 0) + 1;
       }
       if (a.type === "increment-confirmed-count") {
-        const k =
-          d.target?.issueId ?? d.exploitIdentity?.exploitId ?? a.amount + ":?";
+        // A `new` decision has no issueId; its idempotencyKey carries the fingerprint.
+        const k = d.target?.issueId ?? d.idempotencyKey ?? "?";
         counts[k] = (counts[k] ?? 0) + 1;
       }
     }
   }
   for (const [fp, n] of Object.entries(creates))
     if (n > 1) problems.push(`${n} create-ticket for one fingerprint ${fp}`);
+  for (const [k, n] of Object.entries(counts))
+    if (n > 1)
+      problems.push(`${n} increment-confirmed-count for one identity ${k}`);
 }
 
 function selfTestTight(out, expected, problems) {

@@ -14,9 +14,9 @@ rounds plus a committed mutation-testing gate (0 unexpected survivors).
   non-observation zero-writes; strict input validation; complete-ticket-material gate;
   append-remediation; run status in summary; non-production runs cannot assert prod impact.
 - **Verification** — `run-fixtures.mjs` (deep-equal authored expected + invariants on actual
-  - round-trip + mutation self-test + structural-reject), 56 fixtures, **57 passed / 0 failed**
-    - 9 structural-reject; `check-fixtures.mjs` PASS; `mutation-test.mjs` (committed convergence
-      gate) **117 mutants, 114 killed, 0 unexpected survivors** (3 documented equivalents);
+  - round-trip + mutation self-test + structural-reject), 60 fixtures, **61 passed / 0 failed**
+    - 14 structural-reject; `check-fixtures.mjs` PASS; `mutation-test.mjs` (committed convergence
+      gate) **128 mutants, 125 killed, 0 unexpected survivors** (3 documented equivalents);
       inputs/expected/actual schema-valid via ajv (negative-input fixtures marked
       `INPUT_SCHEMA_INVALID`).
 - **Reviews** — rounds 1, 2, 3 + a PR #55 review round and an isolated self-review complete;
@@ -30,6 +30,16 @@ the planner computes eligibility per run correctly, but "notify once per episode
 needs either an acceptance.md amendment (declare it Engineering 2's durable-state job) or a new
 planner input field carrying "this fix-claim contradiction was already notified". Needs the
 acceptance owner's decision; not unilaterally closed.
+
+## Open product question (R3-F4, for the acceptance owner)
+
+**Uncomparable legacy ticket blocks creation.** A same-environment ticket in any state
+(open, resolved, or unknown) with no
+normalizable chain and no non-blank alias routes every would-be-`new` observation in that
+environment to `unresolved` (fixtures e1-50, e1-53..56; README "Triage rules worth knowing").
+This follows the "ambiguity routes to triage" rule (E1-18, exploit-findings.md:24,85), but no
+acceptance criterion names it. Decide: ratify it as an E1 criterion (and its pre-first-run
+backfill duty), or narrow it. Until then it is implemented, gated, and unratified.
 
 ## Coverage note
 
@@ -72,7 +82,8 @@ Append-only detail per item in `retro-log.json`.
 
 ## Next action
 
-1. **Round-3 verification review** of the WP1 rework; fix any material findings (skill cap: 5 rounds).
+1. ~~Round-3 verification review of the WP1 rework~~ done. Current work is PR #55 review
+   handling; see the CHECKPOINT section below.
 2. Stage 4 conformance packaging.
 3. **PM gate is cleared** (table above) — sequence the E2 / Release packets; create Linear
    tickets per packet in the **Foundations** team (item 7).
@@ -86,32 +97,26 @@ Append-only detail per item in `retro-log.json`.
 
 **Where things are:** Offline planner (WP1/E1) is built, converged, and under review as
 draft PR **foxglove/actions#55** (branch `claude/exciting-cerf-vkmwu5` → `main`). Three
-Claude-review batches + three isolated self-reviews done; final self-review verdict **SHIP**
-(0 critical/high; M1, M2, and L3/L4 applied). PM gate is CLEARED (table above).
+Claude-review batches + three isolated self-reviews done in session 1 (verdict **SHIP** on
+c6872b4). Session 2 (this session owns the PR, per the user) ran self-review rounds 3–5 on the
+c6872b4 delta; see `EVIDENCE.md` for verdicts. PM gate is CLEARED (table above).
 
 **Gates (all green) — run these to confirm on resume:**
 
 - `node attack-runner/planner/run-fixtures.mjs` → 61 passed, 0 failed + 14 structural-reject
 - `node attack-runner/planner/check-fixtures.mjs` → PASS
-- `node attack-runner/planner/mutation-test.mjs` → 127 mutants, 124 killed, 3 equivalent, 0 noapply
+- `node attack-runner/planner/mutation-test.mjs` → 128 mutants, 125 killed, 3 equivalent, 0 noapply
 - ajv: inputs (only the 5 `INPUT_SCHEMA_INVALID`-marked fail, by design), expected, actual all valid.
 - Fixtures e1-01..52 came from a session-local generator that no longer exists; e1-53..56
   were authored by a small script deriving from e1-01/e1-50. New fixtures: author them the
   same way (derive from an existing fixture, deep-equal the authored expected), then prettier.
 
-**Remaining work (next session), in priority order:**
+**Remaining work, in priority order** (session 2 progress inline):
 
-1. **Reply to + resolve the PR #55 review threads.** Tools: `mcp__github__add_reply_to_pull_request_comment`
-   (commentId + pullNumber + body) and `mcp__github__resolve_review_thread` (threadId from
-   `pull_request_read method=get_review_comments`). Append the Claude Code attribution footer to each reply.
-   - Batch-1/2 findings are all FIXED (processedEvents entry, example default, README status,
-     CI workflow, in-run overlap order, idempotency fp-key, in-run-dup target, sparse-overlap,
-     mutation noapply, WP/R IDs, STATUS line). Reply "Fixed in <SHA>" + resolve.
-   - F4 (in-run dup drops remediation union) and F5 (duplicate observationId rejects batch):
-     reply as **deferred/by-design** (remediation union is a delivery concern; dup id is a
-     structural input error) — do NOT resolve if you want the author to decide.
-   - comment_id 4171540222 (remove .feature-workspace): reply that per the author the workspace
-     STAYS but was **de-personalized** (names→team).
+1. ~~Reply to + resolve the PR #55 review threads~~ **DONE** (session 2): all fixed threads
+   replied and resolved. Left OPEN on purpose: the `.feature-workspace` thread (author to
+   confirm) and the T3 `counts` invariant thread until its fix is pushed. Note: session 1 was
+   still subscribed and also replied; several threads carry duplicate replies.
 2. ~~M2 coverage~~ **DONE** (bb8aaa9): fixtures e1-53..56 + mutants `unc-env-ignored`,
    `unc-alias-clause-off`, `unc-empty-alias-comparable`, `unc-blank-alias-comparable`,
    `related-state-skip-restored`.
@@ -120,7 +125,10 @@ Claude-review batches + three isolated self-reviews done; final self-review verd
    documented in README ("Triage wins over replay").
 4. **Flag to user:** `product-docs/attack-sessions.md` on `main` still names individuals
    (source contract, outside this PR). Ask whether to open a follow-up PR to scrub it there.
-5. When PR is green + approved: it's a DRAFT — mark ready-for-review when the user says.
+5. Reply on the T3 thread (comment 4171668354) with the fix commit, then resolve it.
+6. **R3-F4** open product question (above) needs the acceptance owner.
+7. When PR is green + approved: it's a DRAFT — mark ready-for-review when the user says.
 
 **Review logs:** `review-wp1.md`, `review-wp1-round2.md`, `review-wp1-round3.md`,
-`self-review-pr55.md`, `self-review-pr55-r2.md`. **PR:** `pr.json`.
+`self-review-pr55.md`, `self-review-pr55-r2.md`, `self-review-pr55-r3.md`,
+`self-review-pr55-r4.md`, `self-review-pr55-r5.md`. **PR:** `pr.json`.

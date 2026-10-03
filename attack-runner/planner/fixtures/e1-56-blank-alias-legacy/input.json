@@ -83,7 +83,7 @@
           "observedTransition": "d"
         }
       ],
-      "fingerprintAliases": [""],
+      "fingerprintAliases": ["", "  "],
       "confirmedRunCount": 1
     }
   ],

@@ -152,6 +152,26 @@
       "type": "review",
       "stage": "3",
       "note": "Round-3: coverage-gap blocker. Added committed mutation-test.mjs; survivors 46->4 (equivalents); 47 fixtures; fixed real replay-count order bug + schema alignment. R3-M3 (cross-run episode dedup) left as open acceptance question."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "escape",
+      "stage": "3",
+      "class": "workflow failure",
+      "note": "Session 2 pushed bb8aaa9 and 2d93dfb to PR #55 before loading the feature-pipeline skill, so neither push ran the isolated self-review gate. The later self-review round 3 found F1-F3 (stale counts, untested whitespace alias, stale comment) in those commits. Cause: the skill lived only in foxglove/experimental and was not loaded in the cloud session."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "escape",
+      "stage": "3",
+      "class": "workflow failure",
+      "note": "Two sessions drove PR #55 at the same time and both replied to the same review threads, which left duplicate replies. Cause: the earlier session stayed subscribed after the checkpoint handoff. The handoff must end the prior session's subscription and check-ins."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "review",
+      "stage": "3",
+      "note": "Self-review round 3 on the c6872b4 delta: fail on F1 stale counts, F2 whitespace alias untested, F3 stale comment, F4 uncomparable rule has no acceptance owner. F1-F3 repaired; F4 routed to the acceptance owner as R3-F4."
     }
   ]
 }

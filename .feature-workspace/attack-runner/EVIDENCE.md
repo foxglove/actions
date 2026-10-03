@@ -91,3 +91,22 @@
   dedup-vs-reject (F5) — documented on the PR threads. product-docs/attack-sessions.md on
   `main` still names an individual (source contract, outside this PR) — flagged to the user.
 - cost: unavailable (cloud transcript not local).
+
+## 2026-10-03 — PR #55 review round 2 (session 2)
+
+- Resumed from the checkpoint. bb8aaa9 (M2 fixtures e1-53..56 + mutants, L2, L5) and 2d93dfb
+  (README triage rules, workspace de-personalization) were pushed **without** the isolated
+  self-review gate: an escape (workflow failure), recorded in `retro-log.json`.
+- External Claude review on c6872b4 raised T1–T4. T1, T2, T4 fixed in bb8aaa9/2d93dfb; T3
+  (count-per-identity oracle invariant never asserted) fixed in this candidate.
+- Isolated self-review round 3 (`self-review-pr55-r3.md`, effective prompt
+  `prompts/review.md` sha256 c0071167…ef4d7, recognized): verdict fail on F1 (stale counts),
+  F2 (whitespace alias untested), F3 (stale comment), F4 (uncomparable rule has no acceptance
+  owner). F1–F3 repaired; F4 routed to the acceptance owner (STATUS "R3-F4", TRACEABILITY row).
+- Self-review round 4 (`self-review-pr55-r4.md`): verdict fail on F5 (names in the copied r3
+  record), F6 (stale STATUS checkpoint), F7 (retro-log wording and stage), F8 (this entry had
+  no gate record), F9 (R3-F4 omitted that a ticket in any state blocks). All five repaired.
+  Gates on the round-4 candidate: run-fixtures 61/0 + 14 structural-reject; check-fixtures
+  PASS; mutation-test 128 mutants, 125 killed, 3 equivalent, 0 noapply; ajv valid for e1-53..56.
+- Round 5 record: `self-review-pr55-r5.md` (added verbatim after the round completes).
+- cost: unavailable (cloud transcript not local).
