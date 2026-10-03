@@ -247,11 +247,15 @@ def main() -> None:
                 wrote += 1
                 continue
             evals = []
-            for sha in shas:
-                ev = evaluate_sha(gh, sha)
-                evals.append(ev)
-                if ev["passed"]:
-                    break
+            try:
+                for sha in shas:
+                    ev = evaluate_sha(gh, sha)
+                    evals.append(ev)
+                    if ev["passed"]:
+                        break
+            except GitHubError as exc:
+                print(f"ci skip {path.stem}: {exc}", flush=True)
+                continue
             save(out, {"number": int(path.stem), "shas": shas, "evals": evals})
             wrote += 1
             if wrote % 40 == 0:

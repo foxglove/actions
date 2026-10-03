@@ -8,11 +8,16 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import signal
 import time
 import urllib.error
 import urllib.request
 
 API = "https://api.github.com"
+
+
+def _request_timeout(signum, frame) -> None:
+    raise TimeoutError("GitHub request exceeded 65s")
 
 
 class GitHubError(RuntimeError):
@@ -70,17 +75,20 @@ class GitHub:
                 self._sleep_until(self.core_reset, "core")
             req = urllib.request.Request(url, data=data, headers=self._headers(extra), method=method)
             try:
-                with urllib.request.urlopen(req, timeout=60) as resp:
-                    sock = getattr(getattr(resp, "fp", None), "raw", None)
-                    sock = getattr(sock, "_sock", None)
-                    if sock is not None:
-                        sock.settimeout(60)
-                    raw = resp.read()
-                    headers = {k.lower(): v for k, v in resp.headers.items()}
-                    self._note_rest_limit(headers)
-                    if not raw:
-                        return {}, headers
-                    return json.loads(raw.decode()), headers
+                try:
+                    # urlopen's timeout has not interrupted a stuck poll on this host.
+                    # SIGALRM runs even when that poll does not return.
+                    signal.signal(signal.SIGALRM, _request_timeout)
+                    signal.alarm(65)
+                    with urllib.request.urlopen(req, timeout=60) as resp:
+                        raw = resp.read()
+                        headers = {k.lower(): v for k, v in resp.headers.items()}
+                        self._note_rest_limit(headers)
+                        if not raw:
+                            return {}, headers
+                        return json.loads(raw.decode()), headers
+                finally:
+                    signal.alarm(0)
             except urllib.error.HTTPError as exc:
                 err_body = exc.read().decode("utf-8", "replace")
                 headers = {k.lower(): v for k, v in exc.headers.items()}
