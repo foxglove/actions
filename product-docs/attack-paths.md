@@ -20,7 +20,7 @@ Harness, model, spend, and duration belong to the run profile. The path specifie
 
 The first path starts from a validated non-admin developer session and maintains that session. It maps expected boundaries, tests authorized role/tenant/resource crossings, follows prerequisites into further permitted steps, and records the complete chain and corrective behavior.
 
-Only explicitly authorized `*.foxglove.party` targets are in scope. A wildcard is a maximum boundary, not permission to assess every reachable host. Redirects and pivots do not expand the target set. The path avoids permanent damage, mass deletion, payment changes, IAM wiping, destructive encryption, and denial-of-service flooding. Reachability or HTTP success alone does not demonstrate an unexecuted destructive effect.
+Every host under `*.foxglove.party` is an authorized target, and no other host is. The whole party environment is in scope because the assessment is a penetration test, and Engineering fixes what it finds. Redirects and pivots do not expand the target set. The path avoids permanent damage, mass deletion, payment changes, IAM wiping, destructive encryption, and denial-of-service flooding. Reachability or HTTP success alone does not demonstrate an unexecuted destructive effect.
 
 An exploit can cross services and repositories. The path follows its authorized chain and supplies complete ticket material rather than splitting by repository. The harness reports evidence; reconciliation owns ticket matching and external delivery.
 
@@ -38,15 +38,15 @@ Outputs contain preflight, session maintenance, findings, ordered chains, danger
 
 ## Product dimensions
 
-| Dimension            | Decision                                                                                       | Source                                               |
-| -------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| Access               | Instructions operate within the supplied target authorization and first-path test identity.    | This document, [Attack sessions](attack-sessions.md) |
-| Seats and plans      | Not applicable; paths are internal assessment assets.                                          | This document                                        |
-| Billing and metering | Paths honor the supplied run budget; they do not define a billing meter.                       | This document                                        |
-| Limits               | Paths obey the supplied time/spend bounds and authentication stop signals.                     | This document                                        |
-| Security and data    | Git contains placeholders; ephemeral secrets stay in the run context and evidence is redacted. | [Attack sessions](attack-sessions.md)                |
-| Deployment           | The first path is restricted to explicitly authorized party targets.                           | This document                                        |
-| Interfaces           | One `instructions.md` file per path, selected and passed through a harness adapter.            | This document                                        |
+| Dimension            | Decision                                                                                           | Source                                               |
+| -------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Access               | Instructions operate within the supplied target authorization and first-path test identity.        | This document, [Attack sessions](attack-sessions.md) |
+| Seats and plans      | Not applicable; paths are internal assessment assets.                                              | This document                                        |
+| Billing and metering | Paths honor the supplied run budget; they do not define a billing meter.                           | This document                                        |
+| Limits               | Paths obey the supplied time/spend bounds and authentication stop signals.                         | This document                                        |
+| Security and data    | Git contains placeholders; ephemeral secrets stay in the run context and evidence is redacted.     | [Attack sessions](attack-sessions.md)                |
+| Deployment           | The first path is restricted to the authorized party targets: every host under `*.foxglove.party`. | This document                                        |
+| Interfaces           | One `instructions.md` file per path, selected and passed through a harness adapter.                | This document                                        |
 
 ## Resources
 
