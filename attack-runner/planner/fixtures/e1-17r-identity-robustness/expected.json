@@ -1,0 +1,56 @@
+{
+  "runId": "run-e17r",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "rediscovered-open",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": "exp-SEC-101",
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "existing-issue",
+        "issueId": "SEC-101"
+      },
+      "proposedActions": [
+        {
+          "type": "append-evidence"
+        },
+        {
+          "type": "append-remediation",
+          "remediation": [
+            {
+              "component": "api",
+              "change": "enforce the boundary"
+            }
+          ]
+        },
+        {
+          "type": "increment-confirmed-count",
+          "amount": 1
+        }
+      ],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": false,
+      "neededEvidence": [],
+      "fixClaimRef": null,
+      "idempotencyKey": "run-e17r:exp-SEC-101"
+    }
+  ],
+  "runSummary": {
+    "batchStatus": "complete",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "unresolved": [],
+    "notObserved": [],
+    "edgeAccess": {
+      "classification": "none"
+    }
+  }
+}

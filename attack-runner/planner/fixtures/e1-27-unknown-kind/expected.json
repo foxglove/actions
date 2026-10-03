@@ -1,0 +1,37 @@
+{
+  "runId": "run-e127",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "unresolved",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": null,
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "none",
+        "issueId": null
+      },
+      "proposedActions": [],
+      "evidenceReferences": [],
+      "notificationEligible": false,
+      "neededEvidence": ["a recognized observation kind"]
+    }
+  ],
+  "runSummary": {
+    "batchStatus": "partial",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "unresolved": ["obs-1"],
+    "notObserved": [],
+    "edgeAccess": {
+      "classification": "none"
+    }
+  }
+}

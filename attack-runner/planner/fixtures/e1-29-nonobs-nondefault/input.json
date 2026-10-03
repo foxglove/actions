@@ -1,0 +1,37 @@
+{
+  "run": {
+    "runId": "run-e129",
+    "targetEnvironment": "party",
+    "evidenceLocation": "x",
+    "completion": {
+      "status": "interrupted",
+      "stopReason": "edge blocked mid-run"
+    },
+    "session": {
+      "status": "paused"
+    },
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": ["exports.download"]
+    },
+    "edgeAccess": {
+      "classification": "EDGE_CONTROL_BLOCKED",
+      "phase": "post-auth"
+    }
+  },
+  "observations": [
+    {
+      "observationId": "obs-1",
+      "kind": "non-observation",
+      "validity": "valid",
+      "eventId": "ev-1",
+      "execution": {
+        "status": "interrupted",
+        "stopReason": "blocked"
+      }
+    }
+  ],
+  "existingIssues": [],
+  "processedEvents": []
+}

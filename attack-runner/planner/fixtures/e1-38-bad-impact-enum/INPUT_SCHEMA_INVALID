@@ -1,0 +1,1 @@
+This fixture's input.json intentionally violates planner-input.schema.json to test defensive handling of out-of-contract input. Excluded from input-schema validation; its expected.json is still schema-valid.

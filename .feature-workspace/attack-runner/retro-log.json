@@ -145,7 +145,13 @@
       "type": "confirmation",
       "stage": "2",
       "oracle": "Kumar Pasumarthy (release/product-decision authority)",
-      "note": "PM reviewed the recorded resolution and confirmed: (6) GCS stands ('we are good on GCS') \u2014 no Stage-1 re-spec; (7) Linear Foundations status mapping (Done/Todo/Triage) confirmed, clearing the 'PM may override' caveat. Pre-first-run follow-ups (item 3 service-account value, item 6 GCS project/bucket name) acknowledged as not available yet; they remain tracked for before the first live run."
+      "note": "PM reviewed the recorded resolution and confirmed: (6) GCS stands ('we are good on GCS') — no Stage-1 re-spec; (7) Linear Foundations status mapping (Done/Todo/Triage) confirmed, clearing the 'PM may override' caveat. Pre-first-run follow-ups (item 3 service-account value, item 6 GCS project/bucket name) acknowledged as not available yet; they remain tracked for before the first live run."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "review",
+      "stage": "3",
+      "note": "Round-3: coverage-gap blocker. Added committed mutation-test.mjs; survivors 46->4 (equivalents); 47 fixtures; fixed real replay-count order bug + schema alignment. R3-M3 (cross-run episode dedup) left as open acceptance question."
     }
   ]
 }

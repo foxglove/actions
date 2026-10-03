@@ -58,3 +58,18 @@
     5 structural-reject; inputs, expected, and all actual outputs valid (ajv draft2020);
     guard PASS.
 - cost: unavailable (cloud transcript not local).
+
+## 2026-10-03 — WP1 round-3 repair + mutation convergence gate
+
+- Round-3 review: NOT CONVERGED (1 blocker/3 major/6 minor); the blocker was a coverage gap
+  (46/112 wrong engines passed the fixture-only oracle).
+- Added committed `mutation-test.mjs`; drove survivors 46 → 15 → **4** (all documented
+  equivalents) by adding 27 behavior fixtures and fixing genuine bugs (replay count-mark,
+  usable-identity validation, in-run partial triage, strict claimed boolean, non-prod impact
+  downgrade, dup observationId, schema alignment, path-aware strip, frozen-clone aliasing).
+- Found+fixed a real order-dependent counting bug via the harness (replayed obs suppressing a
+  fresh same-run count).
+- Gates: run-fixtures 48/0 + 5 structural-reject; check-fixtures PASS; mutation-test 102 killed
+  / 0 unexpected; ajv valid (ex. 4 marked negative-input fixtures). R3-M3 left as an open
+  acceptance-owner question.
+- cost: unavailable (cloud transcript not local).

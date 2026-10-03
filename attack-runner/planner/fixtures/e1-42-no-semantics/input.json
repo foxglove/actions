@@ -1,0 +1,61 @@
+{
+  "run": {
+    "runId": "run-e42",
+    "targetEnvironment": "party",
+    "evidenceLocation": "gs://aegis-evidence/run-e42",
+    "completion": {
+      "status": "completed"
+    },
+    "session": {
+      "status": "ok",
+      "maintenanceVerified": true
+    },
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "edgeAccess": {
+      "classification": "none"
+    }
+  },
+  "observations": [
+    {
+      "observationId": "obs-1",
+      "kind": "confirmed-positive",
+      "validity": "valid",
+      "eventId": "ev-1",
+      "execution": {
+        "status": "completed"
+      },
+      "exploit": {
+        "chain": [
+          {
+            "actorCapability": "a",
+            "targetAndOperation": "b",
+            "expectedBoundary": "c",
+            "observedTransition": "d"
+          }
+        ],
+        "severity": "high",
+        "productionImpact": {
+          "value": "unknown",
+          "rationale": "p"
+        },
+        "affectedSurfaces": ["x"],
+        "remediation": [
+          {
+            "component": "api",
+            "change": "enforce the boundary"
+          }
+        ],
+        "retestExpectations": "x"
+      },
+      "evidence": {
+        "references": ["req-redacted"]
+      }
+    }
+  ],
+  "existingIssues": [],
+  "processedEvents": []
+}

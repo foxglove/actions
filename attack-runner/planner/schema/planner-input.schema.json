@@ -131,7 +131,6 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["eventId"],
         "properties": {
           "eventId": {
             "type": "string"
@@ -140,7 +139,16 @@
             "type": "string",
             "description": "Optional idempotency key (e.g. runId + fingerprint) for retries with a regenerated/absent eventId."
           }
-        }
+        },
+        "anyOf": [
+          {
+            "required": ["eventId"]
+          },
+          {
+            "required": ["key"]
+          }
+        ],
+        "description": "A previously-processed event: eventId (primary) or a derived key (runId + exploit identity) for retries with a regenerated/absent eventId."
       }
     }
   },
@@ -357,7 +365,7 @@
     "existingIssue": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["issueId", "state"],
+      "required": ["issueId", "state", "targetEnvironment"],
       "properties": {
         "issueId": {
           "type": "string",
@@ -407,7 +415,15 @@
           },
           "description": "Prior-version fingerprint strings that still identify this exploit (migration aid for E1-20)."
         }
-      }
+      },
+      "anyOf": [
+        {
+          "required": ["normalizedChain"]
+        },
+        {
+          "required": ["fingerprintAliases"]
+        }
+      ]
     }
   }
 }

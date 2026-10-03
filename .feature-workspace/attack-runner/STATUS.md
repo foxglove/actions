@@ -8,31 +8,39 @@ rounds; round-3 verification pending.
 
 - **WP0.1** — planner I/O contract + fixtures.
 - **WP1.1–WP1.5** — planner (`attack-runner/planner/src/`): structured-semantics identity
-  (env in identity, incidental exclusion, duplicate-step collapse, fingerprint aliases,
-  partial-chain triage); five-outcome engine; count-once keyed on matched identity;
-  replay/in-run dedup with emitted idempotency key; non-observation zero-writes; strict
-  input validation; complete-ticket-material gate; append-remediation; run status in summary.
-- **Oracle** (`run-fixtures.mjs`): deep-equals authored full expected (minus prose),
-  asserts invariants on actual output, proves input→output round-trip, runs a mutation
-  self-test (proves tightness), and schema-validates inputs/expected/actual. 20 fixtures;
-  **21 passed / 0 failed** + 5 structural-reject. Guard PASS.
-- **Reviews:** round 1 and round 2 complete; findings fixed or routed (see
-  `review-wp1.md`, `review-wp1-round2.md`). Round 2 exposed and fixed a weak-oracle
-  workflow failure.
+  (env in identity + case-insensitive, incidental exclusion, duplicate-step collapse, chain
+  order significant, fingerprint aliases, partial/superset triage); five-outcome engine;
+  count-once keyed on matched identity; replay/in-run dedup with emitted idempotency key;
+  non-observation zero-writes; strict input validation; complete-ticket-material gate;
+  append-remediation; run status in summary; non-production runs cannot assert prod impact.
+- **Verification** — `run-fixtures.mjs` (deep-equal authored expected + invariants on actual
+  - round-trip + mutation self-test + structural-reject), 47 fixtures, **48 passed / 0 failed**;
+    `check-fixtures.mjs` PASS; `mutation-test.mjs` (committed convergence gate) **112 mutants,
+    102 killed, 0 unexpected survivors** (4 documented equivalents); inputs/expected/actual
+    schema-valid via ajv (4 negative-input fixtures marked `INPUT_SCHEMA_INVALID`).
+- **Reviews** — rounds 1, 2, 3 complete; findings fixed or routed (`review-wp1*.md`). Round 2
+  fixed a weak-oracle workflow failure; round 3 drove mutation survivors 46 → 4 (equivalents).
 
-## Honest coverage note (corrected after round 2)
+## Open product question (R3-M3, for the acceptance owner)
 
-- E1-01..E1-15, E1-17, E1-18, E1-20 are exercised and deep-equal-verified.
-- **Within-run** behavior only for E1-19 (eligibility) and E1-09 (per-run count):
-  **cross-run** notification-episode dedup and durable count totals are Engineering 2
-  (durable state), per the handoff — not claimed as done here.
-- E1-10 remediation-**union** is proposed via `append-remediation`; the actual union is a
-  delivery/adapter concern (WP2.7).
-- E1-16 is the final-revision handoff check (Stage 4 / WP3.2).
+Cross-run fix-claim **notification-episode** dedup (acceptance E1-19 / exploit-findings:54):
+the planner computes eligibility per run correctly, but "notify once per episode across runs"
+needs either an acceptance.md amendment (declare it Engineering 2's durable-state job) or a new
+planner input field carrying "this fix-claim contradiction was already notified". Needs the
+acceptance owner's decision; not unilaterally closed.
 
-## In progress
+## Coverage note
 
-- **Round-3 verification review**; then Stage 4 conformance packaging.
+E1-01..E1-15, E1-17..E1-20 exercised and mutation-gated. Cross-run episode dedup + durable
+count totals = Engineering 2 (handoff). E1-10 remediation **union** proposed via
+`append-remediation`; actual union is delivery (WP2.7). E1-16 = Stage-4 handoff check.
+
+## Next
+
+- Stage 4 conformance packaging for the offline planner.
+- **PM gate CLEARED** → E2 / Release unblocked (table below). Creating per-packet Linear
+  tickets in Foundations is an outward write — confirm with the user first. Most E2 adapters
+  need live runtime evidence / other repos (issuer, mailbox, GCS, Strix, party env).
 
 ## PM gate — Stage-1→2 (E2 / Release) — ✅ CLEARED 2026-10-02
 

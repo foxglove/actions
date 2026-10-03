@@ -27,8 +27,12 @@ const strip = (x) => {
   if (Array.isArray(x)) return x.map(strip);
   if (x && typeof x === "object") {
     const o = {};
+    // Drop the free-text `matchReason` anywhere, and `reason` ONLY on a decision
+    // object (which has `outcome`). notObserved[].reason carries data and is kept.
+    const dropReason = Object.prototype.hasOwnProperty.call(x, "outcome");
     for (const k of Object.keys(x).sort()) {
-      if (k === "reason" || k === "matchReason") continue;
+      if (k === "matchReason") continue;
+      if (k === "reason" && dropReason) continue;
       o[k] = strip(x[k]);
     }
     return o;
@@ -77,8 +81,15 @@ function invariants(input, out, problems) {
           (o) => o.observationId === d.observationId,
         );
         const want = src?.exploit?.productionImpact?.value;
-        if (want !== undefined && tm.productionImpact?.value !== want)
-          problems.push("productionImpact promoted");
+        // Promotion (anything -> "yes" that the source did not already assert) is
+        // forbidden; a downgrade (e.g. party "yes" -> "unknown") is allowed (E1-14).
+        if (tm.productionImpact?.value === "yes" && want !== "yes")
+          problems.push("productionImpact promoted to yes");
+        if (
+          (input.run?.targetEnvironment ?? "").toLowerCase() !== "production" &&
+          tm.productionImpact?.value === "yes"
+        )
+          problems.push("production impact asserted from non-production run");
       }
     }
     for (const obs of input.observations ?? [])
@@ -134,8 +145,9 @@ for (const name of fs.readdirSync(fixturesDir).sort()) {
   );
   const problems = [];
   let out;
+  const frozen = deepFreeze(clone(input)); // the exact object plan() runs on
   try {
-    out = plan(deepFreeze(clone(input)));
+    out = plan(frozen);
   } catch (e) {
     problems.push(`threw: ${e.message}`);
   }
@@ -161,7 +173,7 @@ for (const name of fs.readdirSync(fixturesDir).sort()) {
     };
     if (tally(out) !== tally(plan(rev)))
       problems.push("aggregate not permutation-invariant");
-    invariants(input, out, problems);
+    invariants(frozen, out, problems);
     selfTestTight(out, expected, problems);
   }
   if (problems.length) {

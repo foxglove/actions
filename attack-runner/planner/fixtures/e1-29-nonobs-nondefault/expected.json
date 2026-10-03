@@ -1,0 +1,50 @@
+{
+  "runId": "run-e129",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "not-observed",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": null,
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "none",
+        "issueId": null
+      },
+      "proposedActions": [],
+      "evidenceReferences": [],
+      "notificationEligible": false,
+      "neededEvidence": []
+    }
+  ],
+  "runSummary": {
+    "batchStatus": "partial",
+    "runCompletion": "interrupted",
+    "sessionStatus": "paused",
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": ["exports.download"]
+    },
+    "unresolved": [],
+    "notObserved": [
+      {
+        "observationId": "obs-1",
+        "exploitId": null,
+        "issueId": null,
+        "executionStatus": "interrupted",
+        "reason": "blocked",
+        "attemptedCoverage": [],
+        "edgeClassification": "EDGE_CONTROL_BLOCKED",
+        "evidenceReferences": []
+      }
+    ],
+    "edgeAccess": {
+      "classification": "EDGE_CONTROL_BLOCKED",
+      "phase": "post-auth"
+    },
+    "stopReason": "edge blocked mid-run"
+  }
+}

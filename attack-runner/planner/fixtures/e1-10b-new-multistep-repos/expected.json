@@ -1,0 +1,102 @@
+{
+  "runId": "run-e10b",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "new",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": null,
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "new-issue",
+        "issueId": null
+      },
+      "proposedActions": [
+        {
+          "type": "create-ticket",
+          "ticketMaterial": {
+            "exploitId": null,
+            "fingerprint": "v1:{\"env\":\"party\",\"chain\":[{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"export-download-api\",\"operation\":\"download\",\"boundaryType\":\"ownership-check\",\"violation\":\"unauthorized-read\"},{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"share-token-validation\",\"operation\":\"read\",\"boundaryType\":\"token-org-binding\",\"violation\":\"unauthorized-read\"}]}",
+            "fingerprintVersion": "v1",
+            "chain": [
+              {
+                "actorCapability": "member of tenant A",
+                "targetAndOperation": "demonstrated transition",
+                "expectedBoundary": "boundary should prevent this",
+                "observedTransition": "boundary crossed",
+                "evidence": ["req-redacted"],
+                "semantics": {
+                  "actorRole": "tenant-member",
+                  "resourceRelation": "cross-tenant",
+                  "surface": "export-download-api",
+                  "operation": "download",
+                  "boundaryType": "ownership-check",
+                  "violation": "unauthorized-read"
+                }
+              },
+              {
+                "actorCapability": "member of tenant A",
+                "targetAndOperation": "demonstrated transition",
+                "expectedBoundary": "boundary should prevent this",
+                "observedTransition": "boundary crossed",
+                "evidence": ["req-redacted"],
+                "semantics": {
+                  "actorRole": "tenant-member",
+                  "resourceRelation": "cross-tenant",
+                  "surface": "share-token-validation",
+                  "operation": "read",
+                  "boundaryType": "token-org-binding",
+                  "violation": "unauthorized-read"
+                }
+              }
+            ],
+            "labels": ["Bug", "pentesting", "harness"],
+            "severity": "high",
+            "productionImpact": {
+              "value": "unknown",
+              "rationale": "party only"
+            },
+            "affectedSurfaces": [
+              "export-download-api",
+              "share-token-validation"
+            ],
+            "ownership": ["app", "api"],
+            "remediation": [
+              {
+                "component": "api",
+                "change": "enforce the boundary"
+              }
+            ],
+            "retestExpectations": "re-test end to end",
+            "evidenceReferences": ["req-redacted"]
+          }
+        },
+        {
+          "type": "increment-confirmed-count",
+          "amount": 1
+        }
+      ],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": true,
+      "neededEvidence": [],
+      "idempotencyKey": "run-e10b:v1:{\"env\":\"party\",\"chain\":[{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"export-download-api\",\"operation\":\"download\",\"boundaryType\":\"ownership-check\",\"violation\":\"unauthorized-read\"},{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"share-token-validation\",\"operation\":\"read\",\"boundaryType\":\"token-org-binding\",\"violation\":\"unauthorized-read\"}]}"
+    }
+  ],
+  "runSummary": {
+    "batchStatus": "complete",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "unresolved": [],
+    "notObserved": [],
+    "edgeAccess": {
+      "classification": "none"
+    }
+  }
+}

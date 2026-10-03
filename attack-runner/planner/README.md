@@ -70,9 +70,11 @@ edge block into an absence/fixed claim.
 ```
 node attack-runner/planner/run-fixtures.mjs     # deep-equal vs authored expected + invariants + round-trip + mutation self-test + structural-reject
 node attack-runner/planner/check-fixtures.mjs   # dependency-free branch-coverage + invariant guard
+node attack-runner/planner/mutation-test.mjs    # convergence gate: applies single-line source mutations, requires 0 unexpected survivors
 ```
 
-The oracle writes each actual output to a temp dir for JSON Schema validation (ajv draft2020):
+JSON Schema validation is a separate step (ajv is not a repo dependency). The oracle writes
+each actual output to a temp dir; validate inputs, expected, and actual outputs with:
 
 ```
 npx ajv-cli@5 validate --spec=draft2020 -s attack-runner/planner/schema/planner-input.schema.json  -d "attack-runner/planner/fixtures/*/input.json"
@@ -80,6 +82,6 @@ npx ajv-cli@5 validate --spec=draft2020 -s attack-runner/planner/schema/planner-
 npx ajv-cli@5 validate --spec=draft2020 -s attack-runner/planner/schema/planner-output.schema.json -d "/tmp/aegis-planner-out/*.json"
 ```
 
-Each `expected.json` is the full authored output (its `reason`/`matchReason` are placeholders the
-oracle ignores). The oracle deep-compares everything else, so a wrong engine cannot hide a
-mis-set field; the built-in mutation self-test proves the comparison is tight.
+Fixtures carrying a `INPUT_SCHEMA_INVALID` marker hold intentionally out-of-contract input
+(to test defensive handling) and are excluded from input-schema validation. `expected.json`
+is the full authored output (its `reason`/`matchReason` are ignored by the oracle).

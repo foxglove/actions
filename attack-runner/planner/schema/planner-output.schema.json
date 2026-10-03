@@ -228,8 +228,22 @@
               },
               "ticketMaterial": {
                 "type": "object",
-                "description": "Required for create-ticket: the complete ticket content.",
-                "additionalProperties": true
+                "description": "Complete, round-trippable ticket content for a new exploit (E1-01).",
+                "additionalProperties": true,
+                "required": [
+                  "exploitId",
+                  "fingerprint",
+                  "fingerprintVersion",
+                  "chain",
+                  "labels",
+                  "severity",
+                  "productionImpact",
+                  "affectedSurfaces",
+                  "ownership",
+                  "remediation",
+                  "retestExpectations",
+                  "evidenceReferences"
+                ]
               },
               "remediation": {
                 "type": "array",

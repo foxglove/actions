@@ -34,11 +34,15 @@ function validateInput(input) {
     throw new PlannerInputError("run.targetEnvironment is required");
   if (!Array.isArray(input.observations))
     throw new PlannerInputError("input.observations must be an array");
+  const seenIds = new Set();
   for (const o of input.observations) {
     if (o === null || typeof o !== "object" || !nonEmptyString(o.observationId))
       throw new PlannerInputError(
         "each observation needs a string observationId",
       );
+    if (seenIds.has(o.observationId))
+      throw new PlannerInputError(`duplicate observationId ${o.observationId}`);
+    seenIds.add(o.observationId);
   }
   if (input.existingIssues !== undefined) {
     if (!Array.isArray(input.existingIssues))
@@ -56,12 +60,22 @@ function validateInput(input) {
         throw new PlannerInputError(
           `existing issue ${iss.issueId} needs targetEnvironment`,
         );
+      // A usable identity is required: a chain that actually normalizes, or at
+      // least one alias. An array of prose-only transitions is not usable (R3-M1).
+      const usableChain = normalizeChain(iss.normalizedChain) !== null;
+      const usableAlias =
+        Array.isArray(iss.fingerprintAliases) &&
+        iss.fingerprintAliases.length > 0;
+      if (!usableChain && !usableAlias)
+        throw new PlannerInputError(
+          `existing issue ${iss.issueId} needs a usable normalizedChain or a non-empty fingerprintAliases`,
+        );
       if (
-        !Array.isArray(iss.normalizedChain) &&
-        !Array.isArray(iss.fingerprintAliases)
+        iss.fixClaim !== undefined &&
+        typeof iss.fixClaim?.claimed !== "boolean"
       )
         throw new PlannerInputError(
-          `existing issue ${iss.issueId} needs normalizedChain or fingerprintAliases`,
+          `existing issue ${iss.issueId} fixClaim.claimed must be boolean`,
         );
     }
   }
@@ -97,7 +111,8 @@ function decision(fields) {
 function incompleteTicketFields(e) {
   const missing = [];
   if (!e || typeof e !== "object") return ["exploit"];
-  if (!nonEmptyString(e.severity)) missing.push("severity");
+  if (!["low", "medium", "high", "critical"].includes(e.severity))
+    missing.push("severity");
   if (!["yes", "no", "unknown"].includes(e.productionImpact?.value))
     missing.push("productionImpact.value");
   if (!nonEmptyString(e.productionImpact?.rationale))
@@ -109,9 +124,20 @@ function incompleteTicketFields(e) {
   return missing;
 }
 
-function ticketMaterial(obs, fp, exploitId) {
+function ticketMaterial(obs, fp, exploitId, runEnv) {
   const e = obs.exploit;
-  const repos = e.affectedRepositories ?? [];
+  const repos = Array.isArray(e.affectedRepositories)
+    ? e.affectedRepositories
+    : [];
+  // Party (non-production) evidence can never assert production impact (E1-14).
+  let impact = { ...e.productionImpact };
+  if (normEnv(runEnv) !== "production" && impact.value === "yes") {
+    impact = {
+      value: "unknown",
+      rationale:
+        `non-production (${runEnv}) evidence cannot confirm production impact; ${impact.rationale ?? ""}`.trim(),
+    };
+  }
   return {
     exploitId: exploitId ?? null,
     fingerprint: fp,
@@ -120,7 +146,7 @@ function ticketMaterial(obs, fp, exploitId) {
     chain: JSON.parse(JSON.stringify(e.chain)),
     labels: [...TICKET_LABELS],
     severity: e.severity,
-    productionImpact: { ...e.productionImpact },
+    productionImpact: impact,
     affectedSurfaces: [...(e.affectedSurfaces ?? [])],
     ownership: repos.length ? [...repos] : "unknown",
     remediation: JSON.parse(JSON.stringify(e.remediation)),
@@ -141,6 +167,7 @@ export function plan(input) {
   );
   const existingIssues = input.existingIssues ?? [];
   const countedThisRun = new Set(); // keyed by matched identity (issueId/exploitId/fp)
+  const seenChainsThisRun = []; // {fp, norm} of prior valid positives this run (E1-18 in-run)
   const decisions = [];
   const notObserved = [];
 
@@ -275,7 +302,7 @@ export function plan(input) {
     // No exact match: a related-but-not-equal chain (partial/superset) in the same
     // environment is ambiguous, not a new exploit (E1-18).
     if (matches.length === 0) {
-      const related = existingIssues.some((iss) => {
+      const relatedToIssue = existingIssues.some((iss) => {
         if (normEnv(iss.targetEnvironment) !== normEnv(runEnv)) return false;
         const issNorm = normalizeChain(iss.normalizedChain);
         if (issNorm === null) return false;
@@ -285,7 +312,14 @@ export function plan(input) {
           isSubsequence(obsNorm, issNorm) || isSubsequence(issNorm, obsNorm)
         );
       });
-      if (related) {
+      // Also compare against other observations already seen in THIS run: a partial/
+      // superset overlap (not an exact duplicate) is ambiguous, not two new tickets.
+      const relatedInRun = seenChainsThisRun.some(
+        (s) =>
+          s.fp !== fp &&
+          (isSubsequence(obsNorm, s.norm) || isSubsequence(s.norm, obsNorm)),
+      );
+      if (relatedToIssue || relatedInRun) {
         decisions.push(
           decision({
             observationId,
@@ -331,7 +365,7 @@ export function plan(input) {
       baseActions = [
         {
           type: "create-ticket",
-          ticketMaterial: ticketMaterial(obs, fp, null),
+          ticketMaterial: ticketMaterial(obs, fp, null, runEnv),
         },
       ];
     } else {
@@ -438,7 +472,7 @@ export function plan(input) {
     if (replayed || duplicateInRun) {
       actions = [{ type: "none" }];
       eligible = false;
-      if (duplicateInRun && outcome === "new") {
+      if (duplicateInRun && !replayed && outcome === "new") {
         outcome = "rediscovered-open";
         matchReason = "duplicate of an exploit already identified in this run";
       }
@@ -447,8 +481,12 @@ export function plan(input) {
         ...baseActions,
         { type: "increment-confirmed-count", amount: 1 },
       ];
+      // Only an actually-counted observation marks the exploit counted this run. A
+      // replayed observation (a prior run's/attempt's count) must not suppress a
+      // fresh confirmation that follows it in the same run.
+      countedThisRun.add(identityKey);
     }
-    countedThisRun.add(identityKey);
+    seenChainsThisRun.push({ fp, norm: obsNorm });
 
     decisions.push(
       decision({
