@@ -76,6 +76,7 @@
       "interrupted": []
     },
     "unresolved": [],
+    "ignoredLegacyIssues": ["SEC-ALIAS"],
     "notObserved": [],
     "edgeAccess": {
       "classification": "none"

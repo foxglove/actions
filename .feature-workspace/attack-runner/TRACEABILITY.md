@@ -1,6 +1,6 @@
 # TRACEABILITY — invariant → computation owner → oracle
 
-> Status (WP1): all E1 (offline) rows implemented and gated by `attack-runner/planner/` (61 fixtures + committed mutation test: 125 mutants, 122 killed, 0 unexpected survivors). E2/Release rows pending the (now-cleared) PM gate and live runtime evidence.
+> Status (WP1): all E1 (offline) rows implemented and gated by `attack-runner/planner/` (63 fixtures + committed mutation test: 135 mutants, 132 killed, 0 unexpected survivors). E2/Release rows pending the (now-cleared) PM gate and live runtime evidence.
 
 Work packets are defined in the approved plan. This maps each invariant to the packet
 that owns its computation and the acceptance criteria that judge it.
@@ -24,6 +24,7 @@ that owns its computation and the acceptance criteria that judge it.
 | Private evidence store; fail-closed; no public fallback; retention                 | WP2.8                      | I-15, I-17                                       |
 | Summary persists every run; bounded reporting; failure ≠ success                   | WP2.9                      | I-10, I-13, I-14                                 |
 | Legacy ticket (chain does not normalize) is ignored (decision R3-F4, 2026-10-03)   | WP1.2                      | fixtures e1-50, e1-53..57                        |
+| Ignored legacy tickets are named in `runSummary.ignoredLegacyIssues`               | WP1.2                      | fixtures e1-50, e1-51, e1-53..59                 |
 | One ticket/exploit + one count/run under concurrency and lost ack                  | WP2.10                     | handoff "Concurrent delivery"                    |
 | Scheduled/manual workflow, DST, operator coverage, timeout budget                  | WP3.1                      | I-08                                             |
 | Final-revision re-run + operational qualification                                  | WP3.2                      | E1-16 + all integration criteria                 |

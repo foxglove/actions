@@ -69,6 +69,7 @@
       "interrupted": []
     },
     "unresolved": ["obs-A", "obs-B", "obs-C"],
+    "ignoredLegacyIssues": [],
     "notObserved": [],
     "edgeAccess": {
       "classification": "none"

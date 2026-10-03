@@ -61,7 +61,8 @@ function validateInput(input) {
           `existing issue ${iss.issueId} needs targetEnvironment`,
         );
       // A legacy issue (its chain does not normalize) is NOT a batch error: one legacy
-      // ticket must not throw away every valid finding. plan() ignores it below.
+      // ticket must not throw away every valid finding. plan() matches it only through
+      // an alias and reports it in runSummary.ignoredLegacyIssues when nothing uses it.
       // Only reject a fixClaim whose `claimed` is present but not a boolean. An
       // absent/empty fixClaim (undefined, null, {}) simply means "no claim" and must
       // not throw away the whole batch.
@@ -527,6 +528,20 @@ export function plan(input) {
   const unresolved = decisions
     .filter((d) => d.outcome === "unresolved")
     .map((d) => d.observationId);
+  // Same-environment legacy tickets whose issueId no decision targets and no
+  // non-observation references: the accepted duplicate-ticket risk applies to them.
+  const referencedIssues = new Set([
+    ...decisions.map((d) => d.target?.issueId),
+    ...notObserved.map((n) => n.issueId),
+  ]);
+  const ignoredLegacyIssues = existingIssues
+    .filter(
+      (iss) =>
+        normEnv(iss.targetEnvironment) === normEnv(runEnv) &&
+        normalizeChain(iss.normalizedChain) === null &&
+        !referencedIssues.has(iss.issueId),
+    )
+    .map((iss) => iss.issueId);
   const completion = run.completion?.status ?? "unknown";
   const runSummary = {
     batchStatus:
@@ -535,6 +550,7 @@ export function plan(input) {
     sessionStatus: run.session?.status ?? "unknown",
     coverage: run.coverage ?? { tested: [], untested: [], interrupted: [] },
     unresolved,
+    ignoredLegacyIssues,
     notObserved,
     edgeAccess: run.edgeAccess ?? { classification: "none" },
   };

@@ -1,17 +1,17 @@
 {
-  "runId": "run-e35",
+  "runId": "run-e58",
   "decisions": [
     {
       "observationId": "obs-1",
       "outcome": "rediscovered-open",
       "reason": "authored-intent",
       "exploitIdentity": {
-        "exploitId": "exp-SEC-101",
+        "exploitId": "exp-SEC-ALIAS",
         "matchReason": "authored-intent"
       },
       "target": {
         "type": "existing-issue",
-        "issueId": "SEC-101"
+        "issueId": "SEC-ALIAS"
       },
       "proposedActions": [
         {
@@ -34,8 +34,25 @@
       "evidenceReferences": ["req-redacted"],
       "notificationEligible": false,
       "neededEvidence": [],
-      "fixClaimRef": "app#x",
-      "idempotencyKey": "run-e35:exp-SEC-101"
+      "fixClaimRef": null,
+      "idempotencyKey": "run-e58:exp-SEC-ALIAS"
+    },
+    {
+      "observationId": "obs-2",
+      "outcome": "not-observed",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": "exp-SEC-RETEST",
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "none",
+        "issueId": null
+      },
+      "proposedActions": [],
+      "evidenceReferences": [],
+      "notificationEligible": false,
+      "neededEvidence": []
     }
   ],
   "runSummary": {
@@ -48,8 +65,19 @@
       "interrupted": []
     },
     "unresolved": [],
-    "ignoredLegacyIssues": [],
-    "notObserved": [],
+    "ignoredLegacyIssues": ["SEC-IDLE"],
+    "notObserved": [
+      {
+        "observationId": "obs-2",
+        "exploitId": "exp-SEC-RETEST",
+        "issueId": "SEC-RETEST",
+        "executionStatus": "completed",
+        "reason": "targeted re-test completed without reproducing",
+        "attemptedCoverage": ["exports.download"],
+        "edgeClassification": "none",
+        "evidenceReferences": []
+      }
+    ],
     "edgeAccess": {
       "classification": "none"
     }

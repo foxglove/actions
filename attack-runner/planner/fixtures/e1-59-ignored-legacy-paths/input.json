@@ -1,0 +1,414 @@
+{
+  "run": {
+    "runId": "run-e59",
+    "targetEnvironment": "party",
+    "evidenceLocation": "gs://aegis-evidence/run-e59",
+    "completion": {
+      "status": "completed"
+    },
+    "session": {
+      "status": "ok",
+      "maintenanceVerified": true
+    },
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "edgeAccess": {
+      "classification": "none"
+    }
+  },
+  "observations": [
+    {
+      "observationId": "obs-1",
+      "kind": "confirmed-positive",
+      "validity": "valid",
+      "eventId": "ev-obs-1",
+      "execution": {
+        "status": "completed"
+      },
+      "exploit": {
+        "chain": [
+          {
+            "actorCapability": "member of tenant A",
+            "targetAndOperation": "demonstrated transition",
+            "expectedBoundary": "boundary should prevent this",
+            "observedTransition": "boundary crossed",
+            "evidence": ["req-redacted"],
+            "semantics": {
+              "actorRole": "tenant-member",
+              "resourceRelation": "cross-tenant",
+              "surface": "surface-claim",
+              "operation": "download",
+              "boundaryType": "ownership-check",
+              "violation": "unauthorized-read"
+            }
+          }
+        ],
+        "severity": "high",
+        "productionImpact": {
+          "value": "unknown",
+          "rationale": "party only"
+        },
+        "affectedSurfaces": ["surface-claim"],
+        "remediation": [
+          {
+            "component": "api",
+            "change": "enforce the boundary"
+          }
+        ],
+        "retestExpectations": "re-test the end-to-end chain after the fix"
+      },
+      "evidence": {
+        "references": ["req-redacted"]
+      }
+    },
+    {
+      "observationId": "obs-2",
+      "kind": "confirmed-positive",
+      "validity": "valid",
+      "eventId": "ev-obs-2",
+      "execution": {
+        "status": "completed"
+      },
+      "exploit": {
+        "chain": [
+          {
+            "actorCapability": "member of tenant A",
+            "targetAndOperation": "demonstrated transition",
+            "expectedBoundary": "boundary should prevent this",
+            "observedTransition": "boundary crossed",
+            "evidence": ["req-redacted"],
+            "semantics": {
+              "actorRole": "tenant-member",
+              "resourceRelation": "cross-tenant",
+              "surface": "surface-replay",
+              "operation": "download",
+              "boundaryType": "ownership-check",
+              "violation": "unauthorized-read"
+            }
+          }
+        ],
+        "severity": "high",
+        "productionImpact": {
+          "value": "unknown",
+          "rationale": "party only"
+        },
+        "affectedSurfaces": ["surface-replay"],
+        "remediation": [
+          {
+            "component": "api",
+            "change": "enforce the boundary"
+          }
+        ],
+        "retestExpectations": "re-test the end-to-end chain after the fix"
+      },
+      "evidence": {
+        "references": ["req-redacted"]
+      }
+    },
+    {
+      "observationId": "obs-3",
+      "kind": "confirmed-positive",
+      "validity": "valid",
+      "eventId": "ev-obs-3",
+      "execution": {
+        "status": "completed"
+      },
+      "exploit": {
+        "chain": [
+          {
+            "actorCapability": "member of tenant A",
+            "targetAndOperation": "demonstrated transition",
+            "expectedBoundary": "boundary should prevent this",
+            "observedTransition": "boundary crossed",
+            "evidence": ["req-redacted"],
+            "semantics": {
+              "actorRole": "tenant-member",
+              "resourceRelation": "cross-tenant",
+              "surface": "surface-ambiguous",
+              "operation": "download",
+              "boundaryType": "ownership-check",
+              "violation": "unauthorized-read"
+            }
+          }
+        ],
+        "severity": "high",
+        "productionImpact": {
+          "value": "unknown",
+          "rationale": "party only"
+        },
+        "affectedSurfaces": ["surface-ambiguous"],
+        "remediation": [
+          {
+            "component": "api",
+            "change": "enforce the boundary"
+          }
+        ],
+        "retestExpectations": "re-test the end-to-end chain after the fix"
+      },
+      "evidence": {
+        "references": ["req-redacted"]
+      }
+    },
+    {
+      "observationId": "obs-4",
+      "kind": "non-observation",
+      "validity": "valid",
+      "eventId": "ev-obs-4",
+      "execution": {
+        "status": "completed",
+        "stopReason": "targeted re-test completed without reproducing"
+      },
+      "retestTarget": {
+        "exploitId": "exp-SEC-EXONLY"
+      }
+    },
+    {
+      "observationId": "obs-5",
+      "kind": "confirmed-positive",
+      "validity": "valid",
+      "eventId": "ev-obs-5",
+      "execution": {
+        "status": "completed"
+      },
+      "exploit": {
+        "chain": [
+          {
+            "actorCapability": "member of tenant A",
+            "targetAndOperation": "demonstrated transition",
+            "expectedBoundary": "boundary should prevent this",
+            "observedTransition": "boundary crossed",
+            "evidence": ["req-redacted"],
+            "semantics": {
+              "actorRole": "tenant-member",
+              "resourceRelation": "cross-tenant",
+              "surface": "surface-unknown",
+              "operation": "download",
+              "boundaryType": "ownership-check",
+              "violation": "unauthorized-read"
+            }
+          }
+        ],
+        "severity": "high",
+        "productionImpact": {
+          "value": "unknown",
+          "rationale": "party only"
+        },
+        "affectedSurfaces": ["surface-unknown"],
+        "remediation": [
+          {
+            "component": "api",
+            "change": "enforce the boundary"
+          }
+        ],
+        "retestExpectations": "re-test the end-to-end chain after the fix"
+      },
+      "evidence": {
+        "references": ["req-redacted"]
+      }
+    }
+  ],
+  "existingIssues": [
+    {
+      "issueId": "SEC-ZIDLE",
+      "exploitId": "exp-SEC-ZIDLE",
+      "state": "open",
+      "targetEnvironment": "party",
+      "fixClaim": {
+        "claimed": false,
+        "reference": null
+      },
+      "normalizedChain": [
+        {
+          "actorCapability": "a",
+          "targetAndOperation": "b",
+          "expectedBoundary": "c",
+          "observedTransition": "d"
+        }
+      ],
+      "confirmedRunCount": 1
+    },
+    {
+      "issueId": "SEC-CLAIM",
+      "exploitId": "exp-SEC-CLAIM",
+      "state": "resolved",
+      "targetEnvironment": "party",
+      "fixClaim": {
+        "claimed": true,
+        "reference": "fix-claim-1"
+      },
+      "normalizedChain": [
+        {
+          "actorCapability": "a",
+          "targetAndOperation": "b",
+          "expectedBoundary": "c",
+          "observedTransition": "d"
+        }
+      ],
+      "fingerprintAliases": [
+        "v1:{\"env\":\"party\",\"chain\":[{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"surface-claim\",\"operation\":\"download\",\"boundaryType\":\"ownership-check\",\"violation\":\"unauthorized-read\"}]}"
+      ],
+      "confirmedRunCount": 1
+    },
+    {
+      "issueId": "SEC-REPLAY",
+      "exploitId": "exp-SEC-REPLAY",
+      "state": "open",
+      "targetEnvironment": "party",
+      "fixClaim": {
+        "claimed": false,
+        "reference": null
+      },
+      "normalizedChain": [
+        {
+          "actorCapability": "a",
+          "targetAndOperation": "b",
+          "expectedBoundary": "c",
+          "observedTransition": "d"
+        }
+      ],
+      "fingerprintAliases": [
+        "v1:{\"env\":\"party\",\"chain\":[{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"surface-replay\",\"operation\":\"download\",\"boundaryType\":\"ownership-check\",\"violation\":\"unauthorized-read\"}]}"
+      ],
+      "confirmedRunCount": 1
+    },
+    {
+      "issueId": "SEC-AMB1",
+      "exploitId": "exp-SEC-AMB1",
+      "state": "open",
+      "targetEnvironment": "party",
+      "fixClaim": {
+        "claimed": false,
+        "reference": null
+      },
+      "normalizedChain": [
+        {
+          "actorCapability": "a",
+          "targetAndOperation": "b",
+          "expectedBoundary": "c",
+          "observedTransition": "d"
+        }
+      ],
+      "fingerprintAliases": [
+        "v1:{\"env\":\"party\",\"chain\":[{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"surface-ambiguous\",\"operation\":\"download\",\"boundaryType\":\"ownership-check\",\"violation\":\"unauthorized-read\"}]}"
+      ],
+      "confirmedRunCount": 1
+    },
+    {
+      "issueId": "SEC-AMB2",
+      "exploitId": "exp-SEC-AMB2",
+      "state": "open",
+      "targetEnvironment": "party",
+      "fixClaim": {
+        "claimed": false,
+        "reference": null
+      },
+      "normalizedChain": [
+        {
+          "actorCapability": "a",
+          "targetAndOperation": "b",
+          "expectedBoundary": "c",
+          "observedTransition": "d"
+        }
+      ],
+      "fingerprintAliases": [
+        "v1:{\"env\":\"party\",\"chain\":[{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"surface-ambiguous\",\"operation\":\"download\",\"boundaryType\":\"ownership-check\",\"violation\":\"unauthorized-read\"}]}"
+      ],
+      "confirmedRunCount": 1
+    },
+    {
+      "issueId": "SEC-UNKNOWN",
+      "exploitId": "exp-SEC-UNKNOWN",
+      "state": "unknown",
+      "targetEnvironment": "party",
+      "fixClaim": {
+        "claimed": false,
+        "reference": null
+      },
+      "normalizedChain": [
+        {
+          "actorCapability": "a",
+          "targetAndOperation": "b",
+          "expectedBoundary": "c",
+          "observedTransition": "d"
+        }
+      ],
+      "fingerprintAliases": [
+        "v1:{\"env\":\"party\",\"chain\":[{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"surface-unknown\",\"operation\":\"download\",\"boundaryType\":\"ownership-check\",\"violation\":\"unauthorized-read\"}]}"
+      ],
+      "confirmedRunCount": 1
+    },
+    {
+      "issueId": "SEC-EXONLY",
+      "exploitId": "exp-SEC-EXONLY",
+      "state": "open",
+      "targetEnvironment": "party",
+      "fixClaim": {
+        "claimed": false,
+        "reference": null
+      },
+      "normalizedChain": [
+        {
+          "actorCapability": "a",
+          "targetAndOperation": "b",
+          "expectedBoundary": "c",
+          "observedTransition": "d"
+        }
+      ],
+      "confirmedRunCount": 1
+    },
+    {
+      "issueId": "SEC-PARTIAL",
+      "exploitId": "exp-SEC-PARTIAL",
+      "state": "open",
+      "targetEnvironment": "party",
+      "fixClaim": {
+        "claimed": false,
+        "reference": null
+      },
+      "normalizedChain": [
+        {
+          "actorCapability": "member of tenant A",
+          "targetAndOperation": "demonstrated transition",
+          "expectedBoundary": "boundary should prevent this",
+          "observedTransition": "boundary crossed",
+          "evidence": ["req-redacted"],
+          "semantics": {
+            "actorRole": "tenant-member",
+            "resourceRelation": "cross-tenant",
+            "surface": "export-download-api",
+            "operation": "download",
+            "boundaryType": "ownership-check"
+          }
+        }
+      ],
+      "confirmedRunCount": 1
+    },
+    {
+      "issueId": "SEC-AIDLE",
+      "exploitId": "exp-SEC-AIDLE",
+      "state": "open",
+      "targetEnvironment": " Party ",
+      "fixClaim": {
+        "claimed": false,
+        "reference": null
+      },
+      "normalizedChain": [
+        {
+          "actorCapability": "a",
+          "targetAndOperation": "b",
+          "expectedBoundary": "c",
+          "observedTransition": "d"
+        }
+      ],
+      "confirmedRunCount": 1
+    }
+  ],
+  "processedEvents": [
+    {
+      "eventId": "ev-obs-2"
+    }
+  ]
+}

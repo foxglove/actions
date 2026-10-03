@@ -29,6 +29,7 @@
       "interrupted": ["exports.download"]
     },
     "unresolved": [],
+    "ignoredLegacyIssues": [],
     "notObserved": [
       {
         "observationId": "obs-1",

@@ -1,0 +1,154 @@
+{
+  "runId": "run-e59",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "claimed-fixed-reproduces",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": "exp-SEC-CLAIM",
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "existing-issue",
+        "issueId": "SEC-CLAIM"
+      },
+      "proposedActions": [
+        {
+          "type": "append-evidence"
+        },
+        {
+          "type": "reopen-ticket"
+        },
+        {
+          "type": "append-remediation",
+          "remediation": [
+            {
+              "component": "api",
+              "change": "enforce the boundary"
+            }
+          ]
+        },
+        {
+          "type": "increment-confirmed-count",
+          "amount": 1
+        }
+      ],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": true,
+      "neededEvidence": [],
+      "fixClaimRef": "fix-claim-1",
+      "idempotencyKey": "run-e59:exp-SEC-CLAIM"
+    },
+    {
+      "observationId": "obs-2",
+      "outcome": "rediscovered-open",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": "exp-SEC-REPLAY",
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "existing-issue",
+        "issueId": "SEC-REPLAY"
+      },
+      "proposedActions": [
+        {
+          "type": "none"
+        }
+      ],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": false,
+      "neededEvidence": [],
+      "fixClaimRef": null,
+      "idempotencyKey": "run-e59:exp-SEC-REPLAY"
+    },
+    {
+      "observationId": "obs-3",
+      "outcome": "unresolved",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": null,
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "none",
+        "issueId": null
+      },
+      "proposedActions": [],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": false,
+      "neededEvidence": [
+        "disambiguating evidence to select a single existing ticket"
+      ]
+    },
+    {
+      "observationId": "obs-4",
+      "outcome": "not-observed",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": "exp-SEC-EXONLY",
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "none",
+        "issueId": null
+      },
+      "proposedActions": [],
+      "evidenceReferences": [],
+      "notificationEligible": false,
+      "neededEvidence": []
+    },
+    {
+      "observationId": "obs-5",
+      "outcome": "unresolved",
+      "reason": "authored-intent",
+      "exploitIdentity": {
+        "exploitId": "exp-SEC-UNKNOWN",
+        "matchReason": "authored-intent"
+      },
+      "target": {
+        "type": "existing-issue",
+        "issueId": "SEC-UNKNOWN"
+      },
+      "proposedActions": [],
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": false,
+      "neededEvidence": ["current state of SEC-UNKNOWN"]
+    }
+  ],
+  "runSummary": {
+    "batchStatus": "partial",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "unresolved": ["obs-3", "obs-5"],
+    "ignoredLegacyIssues": [
+      "SEC-ZIDLE",
+      "SEC-AMB1",
+      "SEC-AMB2",
+      "SEC-EXONLY",
+      "SEC-PARTIAL",
+      "SEC-AIDLE"
+    ],
+    "notObserved": [
+      {
+        "observationId": "obs-4",
+        "exploitId": "exp-SEC-EXONLY",
+        "issueId": null,
+        "executionStatus": "completed",
+        "reason": "targeted re-test completed without reproducing",
+        "attemptedCoverage": ["exports.download"],
+        "edgeClassification": "none",
+        "evidenceReferences": []
+      }
+    ],
+    "edgeAccess": {
+      "classification": "none"
+    }
+  }
+}

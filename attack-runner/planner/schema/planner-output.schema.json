@@ -27,7 +27,8 @@
         "coverage",
         "notObserved",
         "edgeAccess",
-        "unresolved"
+        "unresolved",
+        "ignoredLegacyIssues"
       ],
       "properties": {
         "coverage": {
@@ -142,6 +143,13 @@
             "type": ["string", "null"]
           },
           "description": "observationIds routed to triage."
+        },
+        "ignoredLegacyIssues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "issueIds, in input order, of existing tickets in the run's environment whose chain does not normalize and whose issueId no decision targets and no notObserved entry references. Such a legacy ticket is ignored for overlap triage and can match only through an alias; legacy tickets in an ambiguous alias match are listed. issueIds are assumed unique. This list makes the accepted duplicate-ticket risk visible to triage."
         },
         "runCompletion": {
           "type": "string",

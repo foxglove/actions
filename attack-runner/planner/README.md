@@ -65,11 +65,13 @@ never become a silent identity — they route to `unresolved`.
 
 Triage rules worth knowing:
 
-- **Legacy tickets are ignored.** A legacy ticket is one whose chain has no structured
-  semantics. It matches an observation only through a fingerprint alias. It takes no part
+- **Legacy tickets are ignored.** A legacy ticket is one whose chain does not normalize
+  (for example, a transition has no structured semantics or misses a tuple key). It matches an observation only through a fingerprint alias. It takes no part
   in overlap triage, and it never blocks a `new` ticket, whatever its state. Accepted risk: a
   finding tracked only on such a ticket gets a duplicate ticket. Backfill a normalized
-  chain or an alias on a legacy ticket to make it match.
+  chain or an alias on a legacy ticket to make it match. `runSummary.ignoredLegacyIssues`
+  lists, in input order, every same-environment legacy ticket whose `issueId` no decision
+  targets and no non-observation references, so triage can link or backfill it.
 - **Partial overlap is a sparse, state-independent subsequence check.** A chain that is
   an in-order subsequence of (or contains) another same-environment chain, whether on an
   existing ticket with a normalized chain (any state) or another positive in the same run, is ambiguous and goes

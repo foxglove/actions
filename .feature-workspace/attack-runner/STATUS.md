@@ -14,9 +14,9 @@ rounds plus a committed mutation-testing gate (0 unexpected survivors).
   non-observation zero-writes; strict input validation; complete-ticket-material gate;
   append-remediation; run status in summary; non-production runs cannot assert prod impact.
 - **Verification** — `run-fixtures.mjs` (deep-equal authored expected + invariants on actual
-  - round-trip + mutation self-test + structural-reject), 61 fixtures, **62 passed / 0 failed**
+  - round-trip + mutation self-test + structural-reject), 63 fixtures, **64 passed / 0 failed**
     - 15 structural-reject; `check-fixtures.mjs` PASS; `mutation-test.mjs` (committed convergence
-      gate) **125 mutants, 122 killed, 0 unexpected survivors** (3 documented equivalents);
+      gate) **135 mutants, 132 killed, 0 unexpected survivors** (3 documented equivalents);
       inputs/expected/actual schema-valid via ajv (negative-input fixtures marked
       `INPUT_SCHEMA_INVALID`).
 - **Reviews** — rounds 1, 2, 3 + a PR #55 review round and an isolated self-review complete;
@@ -46,6 +46,27 @@ was observed before the code change. The triage branch is removed; the mutant
 `legacy-ticket-triages` pins the rule; fixture e1-57 and the mutant
 `legacy-ticket-state-blocks` pin it for resolved and unknown tickets. The five mutants of the removed branch are retired.
 The structural case `blank-runid` now pins whitespace rejection (it kills `nonempty-no-trim`).
+
+## Decision — report ignored legacy tickets (2026-10-03)
+
+**Question (external review of 7426b97):** the output gives no signal when a legacy ticket is
+ignored, so triage cannot see when the accepted duplicate-ticket risk applies.
+**Answer (the user, 2026-10-03):** add it. **Rule:** `runSummary.ignoredLegacyIssues` is
+always present. It lists, in input order, the `issueId` of every existing ticket that is in
+the run's environment, whose chain does not normalize, and whose `issueId` no decision
+targets and no `notObserved` entry references. Decisions are unchanged.
+**Implemented (session 2):** schema field (required); every expected.json gained the
+field from an independent oracle script; new fixture e1-58 (alias-matched, retest-referenced
+and idle legacy tickets; only the idle one is listed). The failure was observed first
+(62 of 63 failed). Mutants: `ignored-legacy-env-off`, `ignored-legacy-includes-comparable`,
+`ignored-legacy-decision-ref-off`, `ignored-legacy-notobserved-ref-off`,
+`ignored-legacy-ref-check-off`. The `validateInput` comment is fixed. After self-review
+round 9: fixture e1-59 (claimed-fixed and replayed alias matches, ambiguous alias match,
+exploitId-only retest, incomplete tuple, environment variant, input order) and mutants
+`ignored-legacy-sorted`, `ignored-legacy-raw-env`, `ignored-legacy-written-decisions-only`,
+`ignored-legacy-rediscovered-only`. After round 10: e1-59 adds an alias-matched
+unknown-state legacy ticket (an `unresolved` decision targets it; not listed) and the mutant
+`ignored-legacy-skips-unresolved`.
 
 ## Coverage note
 
@@ -104,17 +125,19 @@ Append-only detail per item in `retro-log.json`.
 **Where things are:** Offline planner (WP1/E1) is built, converged, and under review as
 draft PR **foxglove/actions#55** (branch `claude/exciting-cerf-vkmwu5` → `main`). Three
 Claude-review batches + three isolated self-reviews done in session 1 (verdict **SHIP** on
-c6872b4). Session 2 (this session owns the PR, per the user) ran self-review rounds 3–8 on the
+c6872b4). Session 2 (this session owns the PR, per the user) ran self-review rounds 3–11 on the
 commits after c6872b4; see `EVIDENCE.md` for verdicts. PM gate is CLEARED (table above).
 
 **Gates (all green) — run these to confirm on resume:**
 
-- `node attack-runner/planner/run-fixtures.mjs` → 62 passed, 0 failed + 15 structural-reject
+- `node attack-runner/planner/run-fixtures.mjs` → 64 passed, 0 failed + 15 structural-reject
 - `node attack-runner/planner/check-fixtures.mjs` → PASS
-- `node attack-runner/planner/mutation-test.mjs` → 125 mutants, 122 killed, 3 equivalent, 0 noapply
+- `node attack-runner/planner/mutation-test.mjs` → 135 mutants, 132 killed, 3 equivalent, 0 noapply
 - ajv: inputs (only the 5 `INPUT_SCHEMA_INVALID`-marked fail, by design), expected, actual all valid.
-- Fixtures e1-01..52 came from a session-local generator that no longer exists; e1-53..56
-  were authored by a small script deriving from e1-01/e1-50. New fixtures: author them the
+- Fixtures e1-01..52 came from a session-local generator that no longer exists; e1-53..59
+  were authored by small scripts that derive them from existing fixtures (e1-01, e1-03,
+  e1-04, e1-08, e1-22, e1-50, e1-51, e1-55). The `runSummary.ignoredLegacyIssues` values in
+  every expected.json came from an independent oracle script. New fixtures: author them the
   same way (derive from an existing fixture, deep-equal the authored expected), then prettier.
 
 **Remaining work, in priority order** (session 2 progress inline):
@@ -139,4 +162,4 @@ commits after c6872b4; see `EVIDENCE.md` for verdicts. PM gate is CLEARED (table
 
 **Review logs:** `review-wp1.md`, `review-wp1-round2.md`, `review-wp1-round3.md`,
 `self-review-pr55.md`, `self-review-pr55-r2.md`, `self-review-pr55-r3.md`,
-`self-review-pr55-r4.md`, `self-review-pr55-r5.md`, `self-review-pr55-r6.md`, `self-review-pr55-r7.md`, `self-review-pr55-r8.md`. **PR:** `pr.json`.
+`self-review-pr55-r4.md`, `self-review-pr55-r5.md`, `self-review-pr55-r6.md`, `self-review-pr55-r7.md`, `self-review-pr55-r8.md`, `self-review-pr55-r9.md`, `self-review-pr55-r10.md`, `self-review-pr55-r11.md`. **PR:** `pr.json`.

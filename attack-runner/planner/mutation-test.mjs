@@ -372,8 +372,8 @@ const mutants = [
   [
     "summary-unresolved-dropped",
     "src/plan.mjs",
-    "    unresolved,\n    notObserved,",
-    "    unresolved: [],\n    notObserved,",
+    "    unresolved,\n    ignoredLegacyIssues,",
+    "    unresolved: [],\n    ignoredLegacyIssues,",
   ],
   [
     "summary-coverage-empty",
@@ -694,6 +694,66 @@ const mutants = [
     "src/plan.mjs",
     "if (issNorm === null) return false;",
     'if (issNorm === null) return iss.state !== "open";',
+  ],
+  [
+    "ignored-legacy-env-off",
+    "src/plan.mjs",
+    "normEnv(iss.targetEnvironment) === normEnv(runEnv) &&\n        normalizeChain(iss.normalizedChain) === null &&\n        !referencedIssues",
+    "normalizeChain(iss.normalizedChain) === null &&\n        !referencedIssues",
+  ],
+  [
+    "ignored-legacy-includes-comparable",
+    "src/plan.mjs",
+    "normalizeChain(iss.normalizedChain) === null &&\n        !referencedIssues",
+    "!referencedIssues",
+  ],
+  [
+    "ignored-legacy-decision-ref-off",
+    "src/plan.mjs",
+    "...decisions.map((d) => d.target?.issueId),",
+    "",
+  ],
+  [
+    "ignored-legacy-notobserved-ref-off",
+    "src/plan.mjs",
+    "...notObserved.map((n) => n.issueId),",
+    "",
+  ],
+  [
+    "ignored-legacy-ref-check-off",
+    "src/plan.mjs",
+    "!referencedIssues.has(iss.issueId),",
+    "true,",
+  ],
+  [
+    "ignored-legacy-sorted",
+    "src/plan.mjs",
+    "    .map((iss) => iss.issueId);\n  const completion",
+    "    .map((iss) => iss.issueId)\n    .sort();\n  const completion",
+  ],
+  [
+    "ignored-legacy-raw-env",
+    "src/plan.mjs",
+    "normEnv(iss.targetEnvironment) === normEnv(runEnv) &&\n        normalizeChain(iss.normalizedChain) === null &&\n        !referencedIssues",
+    "iss.targetEnvironment === runEnv &&\n        normalizeChain(iss.normalizedChain) === null &&\n        !referencedIssues",
+  ],
+  [
+    "ignored-legacy-written-decisions-only",
+    "src/plan.mjs",
+    "...decisions.map((d) => d.target?.issueId),",
+    '...decisions\n      .filter((d) => d.proposedActions.some((a) => a.type !== "none"))\n      .map((d) => d.target?.issueId),',
+  ],
+  [
+    "ignored-legacy-rediscovered-only",
+    "src/plan.mjs",
+    "...decisions.map((d) => d.target?.issueId),",
+    '...decisions\n      .filter((d) => d.outcome === "rediscovered-open")\n      .map((d) => d.target?.issueId),',
+  ],
+  [
+    "ignored-legacy-skips-unresolved",
+    "src/plan.mjs",
+    "...decisions.map((d) => d.target?.issueId),",
+    '...decisions\n      .filter((d) => d.outcome !== "unresolved")\n      .map((d) => d.target?.issueId),',
   ],
   [
     "related-state-skip-restored",

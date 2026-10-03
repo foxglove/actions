@@ -132,3 +132,35 @@
   retro-log still used the retired term "comparable identity"); repaired to "legacy ticket".
 - Self-review round 8 record: `self-review-pr55-r8.md` (added verbatim after a pass).
 - cost: unavailable (cloud transcript not local).
+
+## 2026-10-03 — Report ignored legacy tickets (session 2)
+
+- External Claude review of 7426b97: (1) the `validateInput` comment said `plan()` ignores a
+  legacy ticket, but it still matches through an alias; (2) the output gives no signal when a
+  legacy ticket is ignored. Human oracle: the user approved adding the signal.
+- Stage 3, test first: schema field added; every expected.json updated by an independent
+  oracle script; fixture e1-58 added. run-fixtures then reported 62 of 63 failed. After the
+  implementation: 63 passed, 0 failed.
+- Gates: run-fixtures 63/0 + 15 structural-reject; check-fixtures PASS; mutation-test
+  130 mutants, 127 killed, 3 equivalent, 0 noapply; ajv: all 62 expected and 62 actual
+  outputs valid; e1-58 input valid.
+- Self-review round 9 (`self-review-pr55-r9.md`): verdict fail, 1 Medium and 7 Low. F1 the
+  schema title's em dash was re-serialized; F2 decision references were pinned only for
+  `rediscovered-open`; F3 input order unpinned; F4 environment normalization unpinned; F5
+  "references" did not say "by issueId"; F6 ambiguous alias match and duplicate issueIds
+  undefined; F7 the legacy definition was narrower than `normalizeChain`; F8 TRACEABILITY
+  omitted the negative fixtures. All repaired: fixture e1-59, four mutants, wording in the
+  schema, README, STATUS and code, a stricter oracle (it agrees on all 63 fixtures).
+- Gates after the repair: run-fixtures 64/0 + 15 structural-reject; check-fixtures PASS;
+  mutation-test 134 mutants, 131 killed, 3 equivalent, 0 noapply; ajv 126 of 126 expected
+  and actual outputs valid.
+- Self-review round 10 (`self-review-pr55-r10.md`): verdict fail on two Low findings. N1: an
+  `unresolved` decision that targets a legacy ticket was not pinned as a reference. N2: this
+  entry omitted the ajv result, and the STATUS fixture-provenance line named only e1-53..56.
+  Both repaired: e1-59 gains an alias-matched unknown-state legacy ticket; new mutant
+  `ignored-legacy-skips-unresolved`.
+- Gates after the repair: run-fixtures 64/0 + 15 structural-reject; check-fixtures PASS;
+  mutation-test 135 mutants, 132 killed, 3 equivalent, 0 noapply; ajv 126 of 126 expected
+  and actual outputs valid; the independent oracle agrees on all 63 fixtures.
+- Self-review round 11 record: `self-review-pr55-r11.md` (added verbatim after a pass).
+- cost: unavailable (cloud transcript not local).

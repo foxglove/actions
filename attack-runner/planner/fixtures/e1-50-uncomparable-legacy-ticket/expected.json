@@ -112,6 +112,7 @@
       "interrupted": []
     },
     "unresolved": [],
+    "ignoredLegacyIssues": ["SEC-LEGACY"],
     "notObserved": [],
     "edgeAccess": {
       "classification": "none"

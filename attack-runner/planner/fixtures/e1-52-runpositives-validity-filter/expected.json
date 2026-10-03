@@ -113,6 +113,7 @@
       "interrupted": []
     },
     "unresolved": ["obs-invalid"],
+    "ignoredLegacyIssues": [],
     "notObserved": [],
     "edgeAccess": {
       "classification": "none"

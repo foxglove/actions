@@ -95,6 +95,7 @@
       "interrupted": []
     },
     "unresolved": ["obs-amb"],
+    "ignoredLegacyIssues": [],
     "notObserved": [],
     "edgeAccess": {
       "classification": "none"

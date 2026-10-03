@@ -93,6 +93,7 @@
       "interrupted": []
     },
     "unresolved": [],
+    "ignoredLegacyIssues": [],
     "notObserved": [
       {
         "observationId": "obs-non",
