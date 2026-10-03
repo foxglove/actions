@@ -1,0 +1,56 @@
+{
+  "run": {
+    "runId": "run-2026-11-09",
+    "targetEnvironment": "party",
+    "evidenceLocation": "gs://aegis-evidence/run-2026-11-09",
+    "completion": { "status": "completed" },
+    "session": { "status": "ok", "maintenanceVerified": true },
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "edgeAccess": { "classification": "none" }
+  },
+  "observations": [
+    {
+      "observationId": "obs-1",
+      "kind": "confirmed-positive",
+      "validity": "valid",
+      "eventId": "ev-900",
+      "execution": { "status": "completed" },
+      "exploit": {
+        "chain": [
+          {
+            "actorCapability": "a regular user belonging to org Foo",
+            "targetAndOperation": "downloading export id EXP-55123 via the export download endpoint, owned by org Bar",
+            "expectedBoundary": "export owner-org check",
+            "observedTransition": "fetched another organization's export payload without authorization",
+            "evidence": ["req-redacted-71"]
+          }
+        ],
+        "severity": "high",
+        "productionImpact": { "value": "unknown", "rationale": "party only" }
+      },
+      "evidence": { "references": ["req-redacted-71"] }
+    }
+  ],
+  "existingIssues": [
+    {
+      "issueId": "SEC-101",
+      "exploitId": "exp-crossorg-export-dl",
+      "state": "open",
+      "fixClaim": { "claimed": false, "reference": null },
+      "normalizedChain": [
+        {
+          "actorCapability": "member of another tenant",
+          "targetAndOperation": "export download API for another tenant's export",
+          "expectedBoundary": "ownership check must reject cross-tenant read",
+          "observedTransition": "unauthorized read of another tenant's export"
+        }
+      ],
+      "confirmedRunCount": 5
+    }
+  ],
+  "processedEvents": []
+}

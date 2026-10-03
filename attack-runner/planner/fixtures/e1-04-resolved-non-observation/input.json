@@ -1,0 +1,41 @@
+{
+  "run": {
+    "runId": "run-2026-10-26",
+    "targetEnvironment": "party",
+    "evidenceLocation": "gs://aegis-evidence/run-2026-10-26",
+    "completion": { "status": "completed" },
+    "session": { "status": "ok", "maintenanceVerified": true },
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "edgeAccess": { "classification": "none" }
+  },
+  "observations": [
+    {
+      "observationId": "obs-1",
+      "kind": "non-observation",
+      "validity": "valid",
+      "eventId": "ev-300",
+      "execution": {
+        "status": "completed",
+        "stopReason": "targeted re-test completed without reproducing"
+      },
+      "retestTarget": {
+        "exploitId": "exp-crossorg-export-dl",
+        "issueId": "SEC-101"
+      }
+    }
+  ],
+  "existingIssues": [
+    {
+      "issueId": "SEC-101",
+      "exploitId": "exp-crossorg-export-dl",
+      "state": "resolved",
+      "fixClaim": { "claimed": true, "reference": "app#4821" },
+      "confirmedRunCount": 4
+    }
+  ],
+  "processedEvents": []
+}

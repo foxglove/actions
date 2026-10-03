@@ -1,0 +1,17 @@
+{
+  "feature": "attack-runner",
+  "entries": [
+    {
+      "ts": "2026-10-03",
+      "type": "decision",
+      "stage": "2",
+      "note": "Engineering lead approved the Stage 2 work-packet breakdown and the 11-item PM clarification gate."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "decision",
+      "stage": "3",
+      "note": "Begin WP0.1 (offline planner contract + fixtures); it is not blocked by the open PM items."
+    }
+  ]
+}

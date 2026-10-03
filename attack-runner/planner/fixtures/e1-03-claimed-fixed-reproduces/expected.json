@@ -1,0 +1,32 @@
+{
+  "runId": "run-2026-10-19",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "claimed-fixed-reproduces",
+      "reason": "Valid confirmed positive contradicts an explicit fix claim on a closed ticket; reopen the same ticket, never a duplicate.",
+      "exploitIdentity": {
+        "exploitId": "exp-crossorg-export-dl",
+        "matchReason": "same normalized causal chain as SEC-101"
+      },
+      "target": { "type": "existing-issue", "issueId": "SEC-101" },
+      "proposedActions": [
+        { "type": "append-evidence" },
+        { "type": "reopen-ticket" },
+        { "type": "increment-confirmed-count", "amount": 1 }
+      ],
+      "evidenceReferences": ["req-redacted-33"],
+      "notificationEligible": true,
+      "neededEvidence": []
+    }
+  ],
+  "runSummary": {
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "notObserved": [],
+    "edgeAccess": { "classification": "none" }
+  }
+}

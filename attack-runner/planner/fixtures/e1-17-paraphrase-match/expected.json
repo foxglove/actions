@@ -1,0 +1,31 @@
+{
+  "runId": "run-2026-11-09",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "rediscovered-open",
+      "reason": "Different wording, resource IDs, and recon detail describe the same causal chain as SEC-101; normalized-chain match, one ticket.",
+      "exploitIdentity": {
+        "exploitId": "exp-crossorg-export-dl",
+        "matchReason": "same actor/resource relationship, download surface, missing owner-org check, and unauthorized read; export IDs and prose differ and do not change identity"
+      },
+      "target": { "type": "existing-issue", "issueId": "SEC-101" },
+      "proposedActions": [
+        { "type": "append-evidence" },
+        { "type": "increment-confirmed-count", "amount": 1 }
+      ],
+      "evidenceReferences": ["req-redacted-71"],
+      "notificationEligible": false,
+      "neededEvidence": []
+    }
+  ],
+  "runSummary": {
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "notObserved": [],
+    "edgeAccess": { "classification": "none" }
+  }
+}

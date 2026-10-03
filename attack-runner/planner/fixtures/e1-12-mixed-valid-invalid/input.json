@@ -1,0 +1,60 @@
+{
+  "run": {
+    "runId": "run-2026-11-02",
+    "targetEnvironment": "party",
+    "evidenceLocation": "gs://aegis-evidence/run-2026-11-02",
+    "completion": { "status": "completed" },
+    "session": { "status": "ok", "maintenanceVerified": true },
+    "coverage": {
+      "tested": ["exports.download", "shares.token"],
+      "untested": [],
+      "interrupted": []
+    },
+    "edgeAccess": { "classification": "none" }
+  },
+  "observations": [
+    {
+      "observationId": "obs-valid",
+      "kind": "confirmed-positive",
+      "validity": "valid",
+      "eventId": "ev-a",
+      "execution": { "status": "completed" },
+      "exploit": {
+        "chain": [
+          {
+            "actorCapability": "member of tenant A",
+            "targetAndOperation": "export download API for an export owned by tenant B",
+            "expectedBoundary": "ownership check must reject cross-tenant read",
+            "observedTransition": "unauthorized read of tenant B export",
+            "evidence": ["req-redacted-50"]
+          }
+        ],
+        "severity": "high",
+        "productionImpact": { "value": "unknown", "rationale": "party only" }
+      },
+      "evidence": { "references": ["req-redacted-50"] }
+    },
+    {
+      "observationId": "obs-invalid",
+      "kind": "confirmed-positive",
+      "validity": "invalid-evidence",
+      "eventId": "ev-b",
+      "execution": { "status": "completed" },
+      "exploit": {
+        "chain": [
+          {
+            "actorCapability": "member of tenant A",
+            "targetAndOperation": "share-token validation on exports",
+            "expectedBoundary": "token must be bound to the issuing org",
+            "observedTransition": "claimed cross-org access but evidence missing request/result"
+          }
+        ],
+        "severity": "medium",
+        "productionImpact": { "value": "unknown", "rationale": "party only" }
+      },
+      "evidence": { "references": [] }
+    }
+  ],
+  "existingIssues": [],
+  "processedEvents": []
+}

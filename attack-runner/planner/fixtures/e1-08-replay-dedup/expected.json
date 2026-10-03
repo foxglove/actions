@@ -1,0 +1,28 @@
+{
+  "runId": "run-2026-10-12",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "rediscovered-open",
+      "reason": "Event ev-77 was already fully applied (present in processedEvents); replay produces no duplicate counter or evidence mutation.",
+      "exploitIdentity": {
+        "exploitId": "exp-crossorg-export-dl",
+        "matchReason": "same normalized chain as SEC-101"
+      },
+      "target": { "type": "existing-issue", "issueId": "SEC-101" },
+      "proposedActions": [{ "type": "none" }],
+      "evidenceReferences": ["req-redacted-9"],
+      "notificationEligible": false,
+      "neededEvidence": []
+    }
+  ],
+  "runSummary": {
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "notObserved": [],
+    "edgeAccess": { "classification": "none" }
+  }
+}

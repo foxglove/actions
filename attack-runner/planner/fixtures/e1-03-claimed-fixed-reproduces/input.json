@@ -1,0 +1,60 @@
+{
+  "run": {
+    "runId": "run-2026-10-19",
+    "targetEnvironment": "party",
+    "evidenceLocation": "gs://aegis-evidence/run-2026-10-19",
+    "completion": { "status": "completed" },
+    "session": { "status": "ok", "maintenanceVerified": true },
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "edgeAccess": { "classification": "none" }
+  },
+  "observations": [
+    {
+      "observationId": "obs-1",
+      "kind": "confirmed-positive",
+      "validity": "valid",
+      "eventId": "ev-200",
+      "execution": { "status": "completed" },
+      "retestTarget": {
+        "exploitId": "exp-crossorg-export-dl",
+        "issueId": "SEC-101"
+      },
+      "exploit": {
+        "chain": [
+          {
+            "actorCapability": "member of tenant A",
+            "targetAndOperation": "export download API for an export owned by tenant B",
+            "expectedBoundary": "ownership check must reject cross-tenant read",
+            "observedTransition": "unauthorized read of tenant B export still succeeds",
+            "evidence": ["req-redacted-33"]
+          }
+        ],
+        "severity": "high",
+        "productionImpact": { "value": "unknown", "rationale": "party only" }
+      },
+      "evidence": { "references": ["req-redacted-33"] }
+    }
+  ],
+  "existingIssues": [
+    {
+      "issueId": "SEC-101",
+      "exploitId": "exp-crossorg-export-dl",
+      "state": "resolved",
+      "fixClaim": { "claimed": true, "reference": "app#4821" },
+      "normalizedChain": [
+        {
+          "actorCapability": "member of another tenant",
+          "targetAndOperation": "export download API for another tenant's export",
+          "expectedBoundary": "ownership check must reject cross-tenant read",
+          "observedTransition": "unauthorized read of another tenant's export"
+        }
+      ],
+      "confirmedRunCount": 3
+    }
+  ],
+  "processedEvents": []
+}

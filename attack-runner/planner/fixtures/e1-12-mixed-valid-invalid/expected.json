@@ -1,0 +1,47 @@
+{
+  "runId": "run-2026-11-02",
+  "decisions": [
+    {
+      "observationId": "obs-valid",
+      "outcome": "new",
+      "reason": "Independently valid confirmed positive; retained regardless of the invalid peer finding.",
+      "exploitIdentity": {
+        "exploitId": null,
+        "matchReason": "no existing match"
+      },
+      "target": { "type": "new-issue", "issueId": null },
+      "proposedActions": [
+        { "type": "create-ticket" },
+        { "type": "increment-confirmed-count", "amount": 1 }
+      ],
+      "evidenceReferences": ["req-redacted-50"],
+      "notificationEligible": true,
+      "neededEvidence": []
+    },
+    {
+      "observationId": "obs-invalid",
+      "outcome": "unresolved",
+      "reason": "Required evidence is invalid; no speculative creation, merge, or lifecycle action.",
+      "exploitIdentity": {
+        "exploitId": null,
+        "matchReason": "identity not established without evidence"
+      },
+      "target": { "type": "none", "issueId": null },
+      "proposedActions": [],
+      "evidenceReferences": [],
+      "notificationEligible": false,
+      "neededEvidence": [
+        "request and observed result for the share-token transition"
+      ]
+    }
+  ],
+  "runSummary": {
+    "coverage": {
+      "tested": ["exports.download", "shares.token"],
+      "untested": [],
+      "interrupted": []
+    },
+    "notObserved": [],
+    "edgeAccess": { "classification": "none" }
+  }
+}

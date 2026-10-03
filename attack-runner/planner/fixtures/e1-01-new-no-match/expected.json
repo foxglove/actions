@@ -1,0 +1,31 @@
+{
+  "runId": "run-2026-10-05",
+  "decisions": [
+    {
+      "observationId": "obs-1",
+      "outcome": "new",
+      "reason": "Valid confirmed positive; identity established; no existing match.",
+      "exploitIdentity": {
+        "exploitId": null,
+        "matchReason": "no candidate existing ticket"
+      },
+      "target": { "type": "new-issue", "issueId": null },
+      "proposedActions": [
+        { "type": "create-ticket" },
+        { "type": "increment-confirmed-count", "amount": 1 }
+      ],
+      "evidenceReferences": ["req-redacted-1"],
+      "notificationEligible": true,
+      "neededEvidence": []
+    }
+  ],
+  "runSummary": {
+    "coverage": {
+      "tested": ["exports.download"],
+      "untested": [],
+      "interrupted": []
+    },
+    "notObserved": [],
+    "edgeAccess": { "classification": "none" }
+  }
+}
