@@ -71,7 +71,10 @@ Triage rules worth knowing:
   finding tracked only on such a ticket gets a duplicate ticket. Backfill a normalized
   chain or an alias on a legacy ticket to make it match. `runSummary.ignoredLegacyIssues`
   lists, in input order, every same-environment legacy ticket whose `issueId` no decision
-  targets and no non-observation references, so triage can link or backfill it.
+  targets and no non-observation references. It is a standing backfill reminder: it does
+  not depend on whether the run creates a ticket. A ticket is listed on each run until its
+  chain normalizes, except on a run where a decision targets it or a non-observation
+  references it. An alias alone does not end the reminder.
 - **Partial overlap is a sparse, state-independent subsequence check.** A chain that is
   an in-order subsequence of (or contains) another same-environment chain, whether on an
   existing ticket with a normalized chain (any state) or another positive in the same run, is ambiguous and goes

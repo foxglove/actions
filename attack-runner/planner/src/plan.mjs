@@ -529,7 +529,10 @@ export function plan(input) {
     .filter((d) => d.outcome === "unresolved")
     .map((d) => d.observationId);
   // Same-environment legacy tickets whose issueId no decision targets and no
-  // non-observation references: the accepted duplicate-ticket risk applies to them.
+  // non-observation references. This is a standing backfill reminder: it does not
+  // depend on whether the run creates a ticket. A ticket is listed on each run until
+  // its chain normalizes, except on a run where a decision targets it or a
+  // non-observation references it. An alias alone does not end the reminder.
   const referencedIssues = new Set([
     ...decisions.map((d) => d.target?.issueId),
     ...notObserved.map((n) => n.issueId),

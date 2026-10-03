@@ -164,3 +164,25 @@
   and actual outputs valid; the independent oracle agrees on all 63 fixtures.
 - Self-review round 11 record: `self-review-pr55-r11.md` (added verbatim after a pass).
 - cost: unavailable (cloud transcript not local).
+
+## 2026-10-03 — Backfill-reminder wording and the PM decision index (session 2)
+
+- External review of aaaf8b0 asked whether `ignoredLegacyIssues` should list tickets on runs
+  that create no ticket. Human oracle: the user decided it is a standing backfill reminder that
+  does not depend on whether the run creates a ticket. Only wording changed: the code comment, schema description, README and STATUS.
+  Fixtures e1-58 and e1-59 already pin runs with no `create-ticket` and a non-empty list.
+- The user decided that the PM gate answers belong in the product and Aegis docs (convention:
+  foxglove/app#19116). foxglove/actions#57 records them after five isolated review rounds;
+  `pm-clarifications.md` is now the index from each question to its record.
+- Gates: run-fixtures 64/0 + 15 structural-reject; prettier clean. No planner logic changed.
+- Self-review round 12 (`self-review-pr55-r12.md`): verdict fail on seven wording findings. F1:
+  the schema said an alias removes a ticket from the list, but only a normalized chain does.
+  F2: "listed on every run" omitted the exclusions. F3: the PM table rows 1 and 7 were not
+  marked superseded. F4: the operator change was not recorded. F5: "table above". F6: the
+  `pm-clarifications.md` intro still called the items open. F7: two index answers were
+  incomplete. All repaired.
+- Self-review round 13 (`self-review-pr55-r13.md`): verdict fail on two Low findings. F8:
+  "stays eligible" reused the notification term and hid the alias-match exclusion; F9: two
+  "see below" pointers. Both repaired with the reviewer's wording.
+- Self-review round 14 record: `self-review-pr55-r14.md` (added verbatim after a pass).
+- cost: unavailable (cloud transcript not local).

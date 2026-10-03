@@ -149,7 +149,7 @@
           "items": {
             "type": "string"
           },
-          "description": "issueIds, in input order, of existing tickets in the run's environment whose chain does not normalize and whose issueId no decision targets and no notObserved entry references. Such a legacy ticket is ignored for overlap triage and can match only through an alias; legacy tickets in an ambiguous alias match are listed. issueIds are assumed unique. This list makes the accepted duplicate-ticket risk visible to triage."
+          "description": "issueIds, in input order, of existing tickets in the run's environment whose chain does not normalize and whose issueId no decision targets and no notObserved entry references. Such a legacy ticket is ignored for overlap triage and can match only through an alias; legacy tickets in an ambiguous alias match are listed. issueIds are assumed unique. The list is a standing backfill reminder: it does not depend on whether the run creates a ticket. A ticket is listed on each run until its chain normalizes, except on a run where a decision targets it or a non-observation references it. An alias alone does not end the reminder. A run that creates a ticket can duplicate a finding tracked only on a listed ticket."
         },
         "runCompletion": {
           "type": "string",
