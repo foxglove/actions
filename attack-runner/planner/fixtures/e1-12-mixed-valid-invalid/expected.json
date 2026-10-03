@@ -1,13 +1,13 @@
 {
-  "runId": "run-2026-11-02",
+  "runId": "run-e112",
   "decisions": [
     {
       "observationId": "obs-valid",
       "outcome": "new",
-      "reason": "Independently valid confirmed positive; retained regardless of the invalid peer finding.",
+      "reason": "authored-intent",
       "exploitIdentity": {
         "exploitId": null,
-        "matchReason": "no existing match"
+        "matchReason": "authored-intent"
       },
       "target": {
         "type": "new-issue",
@@ -15,24 +15,63 @@
       },
       "proposedActions": [
         {
-          "type": "create-ticket"
+          "type": "create-ticket",
+          "ticketMaterial": {
+            "exploitId": null,
+            "fingerprint": "v1:{\"env\":\"party\",\"chain\":[{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"export-download-api\",\"operation\":\"download\",\"boundaryType\":\"ownership-check\",\"violation\":\"unauthorized-read\"}]}",
+            "fingerprintVersion": "v1",
+            "chain": [
+              {
+                "actorCapability": "member of tenant A",
+                "targetAndOperation": "demonstrated transition",
+                "expectedBoundary": "boundary should prevent this",
+                "observedTransition": "boundary crossed",
+                "evidence": ["req-redacted"],
+                "semantics": {
+                  "actorRole": "tenant-member",
+                  "resourceRelation": "cross-tenant",
+                  "surface": "export-download-api",
+                  "operation": "download",
+                  "boundaryType": "ownership-check",
+                  "violation": "unauthorized-read"
+                }
+              }
+            ],
+            "labels": ["Bug", "pentesting", "harness"],
+            "severity": "high",
+            "productionImpact": {
+              "value": "unknown",
+              "rationale": "party only"
+            },
+            "affectedSurfaces": ["export-download-api"],
+            "ownership": "unknown",
+            "remediation": [
+              {
+                "component": "api",
+                "change": "enforce the boundary"
+              }
+            ],
+            "retestExpectations": "re-test the end-to-end chain after the fix",
+            "evidenceReferences": ["req-redacted"]
+          }
         },
         {
           "type": "increment-confirmed-count",
           "amount": 1
         }
       ],
-      "evidenceReferences": ["req-redacted-50"],
+      "evidenceReferences": ["req-redacted"],
       "notificationEligible": true,
-      "neededEvidence": []
+      "neededEvidence": [],
+      "idempotencyKey": "run-e112:v1:{\"env\":\"party\",\"chain\":[{\"actorRole\":\"tenant-member\",\"resourceRelation\":\"cross-tenant\",\"surface\":\"export-download-api\",\"operation\":\"download\",\"boundaryType\":\"ownership-check\",\"violation\":\"unauthorized-read\"}]}"
     },
     {
       "observationId": "obs-invalid",
       "outcome": "unresolved",
-      "reason": "Required evidence is invalid; no speculative creation, merge, or lifecycle action.",
+      "reason": "authored-intent",
       "exploitIdentity": {
         "exploitId": null,
-        "matchReason": "identity not established without evidence"
+        "matchReason": "authored-intent"
       },
       "target": {
         "type": "none",
@@ -42,14 +81,16 @@
       "evidenceReferences": [],
       "notificationEligible": false,
       "neededEvidence": [
-        "request and observed result for the share-token transition"
+        "request and observed result for the unproven transition"
       ]
     }
   ],
   "runSummary": {
     "batchStatus": "partial",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
     "coverage": {
-      "tested": ["exports.download", "shares.token"],
+      "tested": ["exports.download"],
       "untested": [],
       "interrupted": []
     },

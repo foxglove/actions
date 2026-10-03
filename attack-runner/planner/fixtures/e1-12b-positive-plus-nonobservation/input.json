@@ -1,8 +1,8 @@
 {
   "run": {
-    "runId": "run-e102",
+    "runId": "run-e112b",
     "targetEnvironment": "party",
-    "evidenceLocation": "gs://aegis-evidence/run-e102",
+    "evidenceLocation": "gs://aegis-evidence/run-e112b",
     "completion": {
       "status": "completed"
     },
@@ -21,10 +21,10 @@
   },
   "observations": [
     {
-      "observationId": "obs-1",
+      "observationId": "obs-pos",
       "kind": "confirmed-positive",
       "validity": "valid",
-      "eventId": "ev-obs-1",
+      "eventId": "ev-obs-pos",
       "execution": {
         "status": "completed"
       },
@@ -63,17 +63,31 @@
       "evidence": {
         "references": ["req-redacted"]
       }
+    },
+    {
+      "observationId": "obs-non",
+      "kind": "non-observation",
+      "validity": "valid",
+      "eventId": "ev-obs-non",
+      "execution": {
+        "status": "completed",
+        "stopReason": "retest of a different exploit did not reproduce"
+      },
+      "retestTarget": {
+        "exploitId": "exp-SEC-101",
+        "issueId": "SEC-101"
+      }
     }
   ],
   "existingIssues": [
     {
       "issueId": "SEC-101",
       "exploitId": "exp-SEC-101",
-      "state": "open",
+      "state": "resolved",
       "targetEnvironment": "party",
       "fixClaim": {
-        "claimed": false,
-        "reference": null
+        "claimed": true,
+        "reference": "app#9"
       },
       "normalizedChain": [
         {
@@ -85,10 +99,10 @@
           "semantics": {
             "actorRole": "tenant-member",
             "resourceRelation": "cross-tenant",
-            "surface": "export-download-api",
-            "operation": "download",
-            "boundaryType": "ownership-check",
-            "violation": "unauthorized-read"
+            "surface": "admin-settings-api",
+            "operation": "write",
+            "boundaryType": "role-check",
+            "violation": "privilege-escalation"
           }
         }
       ],

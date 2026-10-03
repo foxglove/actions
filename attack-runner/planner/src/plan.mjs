@@ -7,6 +7,8 @@
 import {
   fingerprint,
   normalizeChain,
+  isSubsequence,
+  normEnv,
   FINGERPRINT_VERSION,
 } from "./normalize.mjs";
 
@@ -18,10 +20,61 @@ export class PlannerInputError extends Error {
 }
 
 const TICKET_LABELS = ["Bug", "pentesting", "harness"];
+const nonEmptyString = (v) => typeof v === "string" && v.trim() !== "";
+
+function validateInput(input) {
+  if (input === null || typeof input !== "object" || Array.isArray(input))
+    throw new PlannerInputError("input must be an object");
+  const run = input.run;
+  if (run === null || typeof run !== "object" || Array.isArray(run))
+    throw new PlannerInputError("input.run is required");
+  if (!nonEmptyString(run.runId))
+    throw new PlannerInputError("run.runId is required");
+  if (!nonEmptyString(run.targetEnvironment))
+    throw new PlannerInputError("run.targetEnvironment is required");
+  if (!Array.isArray(input.observations))
+    throw new PlannerInputError("input.observations must be an array");
+  for (const o of input.observations) {
+    if (o === null || typeof o !== "object" || !nonEmptyString(o.observationId))
+      throw new PlannerInputError(
+        "each observation needs a string observationId",
+      );
+  }
+  if (input.existingIssues !== undefined) {
+    if (!Array.isArray(input.existingIssues))
+      throw new PlannerInputError("input.existingIssues must be an array");
+    for (const iss of input.existingIssues) {
+      if (
+        iss === null ||
+        typeof iss !== "object" ||
+        !nonEmptyString(iss.issueId)
+      )
+        throw new PlannerInputError(
+          "each existing issue needs a string issueId",
+        );
+      if (!nonEmptyString(iss.targetEnvironment))
+        throw new PlannerInputError(
+          `existing issue ${iss.issueId} needs targetEnvironment`,
+        );
+      if (
+        !Array.isArray(iss.normalizedChain) &&
+        !Array.isArray(iss.fingerprintAliases)
+      )
+        throw new PlannerInputError(
+          `existing issue ${iss.issueId} needs normalizedChain or fingerprintAliases`,
+        );
+    }
+  }
+  if (
+    input.processedEvents !== undefined &&
+    !Array.isArray(input.processedEvents)
+  )
+    throw new PlannerInputError("input.processedEvents must be an array");
+}
 
 function decision(fields) {
   const d = {
-    observationId: fields.observationId ?? null,
+    observationId: fields.observationId,
     outcome: fields.outcome,
     reason: fields.reason ?? "",
     exploitIdentity: {
@@ -35,48 +88,49 @@ function decision(fields) {
     neededEvidence: [...(fields.neededEvidence ?? [])],
   };
   if (fields.fixClaimRef !== undefined) d.fixClaimRef = fields.fixClaimRef;
+  if (fields.idempotencyKey !== undefined)
+    d.idempotencyKey = fields.idempotencyKey;
   return d;
 }
 
+// Required fields for a complete, non-hollow ticket (E1-01). Returns missing list.
+function incompleteTicketFields(e) {
+  const missing = [];
+  if (!e || typeof e !== "object") return ["exploit"];
+  if (!nonEmptyString(e.severity)) missing.push("severity");
+  if (!["yes", "no", "unknown"].includes(e.productionImpact?.value))
+    missing.push("productionImpact.value");
+  if (!nonEmptyString(e.productionImpact?.rationale))
+    missing.push("productionImpact.rationale");
+  if (!Array.isArray(e.remediation) || e.remediation.length === 0)
+    missing.push("remediation");
+  if (!nonEmptyString(e.retestExpectations)) missing.push("retestExpectations");
+  if (!Array.isArray(e.chain) || e.chain.length === 0) missing.push("chain");
+  return missing;
+}
+
 function ticketMaterial(obs, fp, exploitId) {
-  const e = obs.exploit ?? {};
+  const e = obs.exploit;
   const repos = e.affectedRepositories ?? [];
   return {
     exploitId: exploitId ?? null,
+    fingerprint: fp,
     fingerprintVersion: FINGERPRINT_VERSION,
-    normalizedChain: normalizeChain(e.chain) ?? [],
+    // Full structured chain, round-trippable as existingIssues[].normalizedChain (R2-B1).
+    chain: JSON.parse(JSON.stringify(e.chain)),
     labels: [...TICKET_LABELS],
-    severity: e.severity ?? null,
-    productionImpact: e.productionImpact ?? {
-      value: "unknown",
-      rationale: "not established",
-    },
+    severity: e.severity,
+    productionImpact: { ...e.productionImpact },
     affectedSurfaces: [...(e.affectedSurfaces ?? [])],
     ownership: repos.length ? [...repos] : "unknown",
-    remediation: [...(e.remediation ?? [])],
-    retestExpectations: e.retestExpectations ?? null,
+    remediation: JSON.parse(JSON.stringify(e.remediation)),
+    retestExpectations: e.retestExpectations,
+    evidenceReferences: [...(obs.evidence?.references ?? [])],
   };
 }
 
 export function plan(input) {
-  // Structurally unreadable input fails explicitly (acceptance.md:33) — never a
-  // silent empty success.
-  if (input === null || typeof input !== "object" || Array.isArray(input)) {
-    throw new PlannerInputError("input must be an object");
-  }
-  if (typeof input.run !== "object" || input.run === null) {
-    throw new PlannerInputError("input.run is required");
-  }
-  if (!Array.isArray(input.observations)) {
-    throw new PlannerInputError("input.observations must be an array");
-  }
-  if (
-    input.existingIssues !== undefined &&
-    !Array.isArray(input.existingIssues)
-  ) {
-    throw new PlannerInputError("input.existingIssues must be an array");
-  }
-
+  validateInput(input);
   const run = input.run;
   const runEnv = run.targetEnvironment;
   const processedIds = new Set(
@@ -86,15 +140,14 @@ export function plan(input) {
     (input.processedEvents ?? []).map((e) => e.key).filter(Boolean),
   );
   const existingIssues = input.existingIssues ?? [];
-  const seenThisRun = new Set();
+  const countedThisRun = new Set(); // keyed by matched identity (issueId/exploitId/fp)
   const decisions = [];
   const notObserved = [];
 
   for (const obs of input.observations) {
-    const observationId = obs?.observationId ?? null;
+    const observationId = obs.observationId;
 
-    // --- non-observation: summary-only, zero ticket writes ---
-    if (obs?.kind === "non-observation") {
+    if (obs.kind === "non-observation") {
       const exploitId = obs.retestTarget?.exploitId ?? null;
       const issueId = obs.retestTarget?.issueId ?? null;
       const status = obs.execution?.status ?? "not-attempted";
@@ -114,8 +167,6 @@ export function plan(input) {
         issueId,
         executionStatus: status,
         reason: obs.execution?.stopReason ?? "not observed in this run",
-        // Only a completed re-test actually attempted the tested surfaces; an
-        // interrupted/not-attempted re-test must not claim that coverage (M7).
         attemptedCoverage:
           status === "completed" ? [...(run.coverage?.tested ?? [])] : [],
         edgeClassification: run.edgeAccess?.classification ?? "none",
@@ -124,13 +175,12 @@ export function plan(input) {
       continue;
     }
 
-    // --- unknown / missing kind: not a positive; route to triage ---
-    if (obs?.kind !== "confirmed-positive") {
+    if (obs.kind !== "confirmed-positive") {
       decisions.push(
         decision({
           observationId,
           outcome: "unresolved",
-          reason: `Unknown observation kind '${obs?.kind ?? "(missing)"}'; not treated as a positive.`,
+          reason: `Unknown observation kind '${obs.kind ?? "(missing)"}'; not treated as a positive.`,
           matchReason: "unknown kind",
           neededEvidence: ["a recognized observation kind"],
         }),
@@ -138,7 +188,22 @@ export function plan(input) {
       continue;
     }
 
-    // --- invalid / ambiguous required state: unresolved, no action ---
+    if (
+      !["valid", "invalid-evidence", "ambiguous-identity"].includes(
+        obs.validity,
+      )
+    ) {
+      decisions.push(
+        decision({
+          observationId,
+          outcome: "unresolved",
+          reason: `Unrecognized validity '${obs.validity ?? "(missing)"}'.`,
+          matchReason: "unrecognized validity",
+          neededEvidence: ["a recognized validity value"],
+        }),
+      );
+      continue;
+    }
     if (obs.validity !== "valid") {
       const invalid = obs.validity === "invalid-evidence";
       decisions.push(
@@ -159,9 +224,10 @@ export function plan(input) {
       continue;
     }
 
-    // --- valid confirmed positive ---
     const fp = fingerprint(obs.exploit?.chain, runEnv);
-    const evidenceReferences = obs.evidence?.references ?? [];
+    const evidenceReferences = obs.exploit
+      ? (obs.evidence?.references ?? [])
+      : [];
     if (fp === null) {
       decisions.push(
         decision({
@@ -179,14 +245,14 @@ export function plan(input) {
       continue;
     }
 
-    // Match on the re-computed fingerprint of the stored structured chain, or on a
-    // recorded alias. Re-fingerprinting both sides with the current normalizer keeps
-    // identity stable across a fingerprint-version change; aliases cover a ticket that
-    // only stored a prior-version fingerprint string (E1-20).
+    const obsNorm = normalizeChain(obs.exploit.chain);
     const matches = existingIssues.filter((iss) => {
       const issFp = fingerprint(iss.normalizedChain, iss.targetEnvironment);
       if (issFp !== null && issFp === fp) return true;
-      return Array.isArray(iss.fingerprintAliases) && iss.fingerprintAliases.includes(fp);
+      return (
+        Array.isArray(iss.fingerprintAliases) &&
+        iss.fingerprintAliases.includes(fp)
+      );
     });
 
     if (matches.length > 1) {
@@ -206,24 +272,58 @@ export function plan(input) {
       continue;
     }
 
-    // Idempotency key per (run, exploit) so a retry with a regenerated/absent
-    // eventId within scope is still recognized (M3). Cross-run durable dedup is
-    // Engineering 2's responsibility (handoff).
-    const derivedKey = `${run.runId}:${fp}`;
-    const replayed =
-      (obs.eventId && processedIds.has(obs.eventId)) ||
-      processedKeys.has(derivedKey);
-    const duplicateInRun = seenThisRun.has(fp);
+    // No exact match: a related-but-not-equal chain (partial/superset) in the same
+    // environment is ambiguous, not a new exploit (E1-18).
+    if (matches.length === 0) {
+      const related = existingIssues.some((iss) => {
+        if (normEnv(iss.targetEnvironment) !== normEnv(runEnv)) return false;
+        const issNorm = normalizeChain(iss.normalizedChain);
+        if (issNorm === null) return false;
+        if (fingerprint(iss.normalizedChain, iss.targetEnvironment) === fp)
+          return false;
+        return (
+          isSubsequence(obsNorm, issNorm) || isSubsequence(issNorm, obsNorm)
+        );
+      });
+      if (related) {
+        decisions.push(
+          decision({
+            observationId,
+            outcome: "unresolved",
+            reason:
+              "Partial or overlapping chain relative to an existing ticket; routed to triage.",
+            matchReason: "ambiguous partial chain",
+            evidenceReferences,
+            neededEvidence: [
+              "a complete chain to confirm the same or a distinct exploit",
+            ],
+          }),
+        );
+        continue;
+      }
+    }
 
-    let outcome;
-    let target;
+    let outcome, target, matchReason, baseActions, fixClaimRef;
     let exploitId = null;
-    let matchReason;
     let eligible = false;
-    let baseActions;
-    let fixClaimRef;
+    let identityKey = fp; // dedup/idempotency scope
 
     if (matches.length === 0) {
+      const missing = incompleteTicketFields(obs.exploit);
+      if (missing.length) {
+        decisions.push(
+          decision({
+            observationId,
+            outcome: "unresolved",
+            reason:
+              "Confirmed positive with incomplete ticket material; cannot create a compliant ticket.",
+            matchReason: "incomplete ticket material",
+            evidenceReferences,
+            neededEvidence: missing.map((m) => `ticket material: ${m}`),
+          }),
+        );
+        continue;
+      }
       outcome = "new";
       matchReason = "no candidate existing ticket";
       target = { type: "new-issue", issueId: null };
@@ -237,13 +337,28 @@ export function plan(input) {
     } else {
       const iss = matches[0];
       exploitId = iss.exploitId ?? null;
+      identityKey = iss.issueId;
       target = { type: "existing-issue", issueId: iss.issueId };
       const state = iss.state;
       const claimed = iss.fixClaim?.claimed === true;
       fixClaimRef = iss.fixClaim?.reference ?? null;
 
-      if (state === "unknown" || state === undefined || state === null) {
-        // Unknown required state for a write -> unresolved (handoff decision table).
+      if (!["open", "resolved", "unknown"].includes(state)) {
+        decisions.push(
+          decision({
+            observationId,
+            outcome: "unresolved",
+            reason: `Existing ticket state '${state ?? "(missing)"}' is unrecognized; no write without a known state.`,
+            exploitId,
+            matchReason: "unrecognized ticket state",
+            target,
+            evidenceReferences,
+            neededEvidence: [`current state of ${iss.issueId}`],
+          }),
+        );
+        continue;
+      }
+      if (state === "unknown") {
         decisions.push(
           decision({
             observationId,
@@ -259,54 +374,70 @@ export function plan(input) {
         );
         continue;
       }
+      if (state === "resolved" && !claimed) {
+        decisions.push(
+          decision({
+            observationId,
+            outcome: "unresolved",
+            reason:
+              "Resolved ticket carries no explicit fix claim to contradict; triage rather than speculative reopen.",
+            exploitId,
+            matchReason: "resolved without fix claim",
+            target,
+            evidenceReferences,
+            fixClaimRef,
+            neededEvidence: [`explicit fix-claim reference for ${iss.issueId}`],
+          }),
+        );
+        continue;
+      }
 
+      const rem =
+        Array.isArray(obs.exploit?.remediation) &&
+        obs.exploit.remediation.length
+          ? [
+              {
+                type: "append-remediation",
+                remediation: JSON.parse(
+                  JSON.stringify(obs.exploit.remediation),
+                ),
+              },
+            ]
+          : [];
       if (state === "resolved") {
-        if (!claimed) {
-          // Resolved with no explicit fix claim: do not infer a contradiction.
-          decisions.push(
-            decision({
-              observationId,
-              outcome: "unresolved",
-              reason:
-                "Resolved ticket carries no explicit fix claim to contradict; routed to triage rather than a speculative reopen.",
-              exploitId,
-              matchReason: "resolved without fix claim",
-              target,
-              evidenceReferences,
-              fixClaimRef,
-              neededEvidence: [
-                `explicit fix-claim reference for ${iss.issueId}`,
-              ],
-            }),
-          );
-          continue;
-        }
         outcome = "claimed-fixed-reproduces";
         matchReason =
           "same normalized causal chain as the closed ticket with a fix claim";
         eligible = true;
-        baseActions = [{ type: "append-evidence" }, { type: "reopen-ticket" }];
+        baseActions = [
+          { type: "append-evidence" },
+          { type: "reopen-ticket" },
+          ...rem,
+        ];
       } else if (claimed) {
-        // Open ticket that still carries a fix claim: contradiction, stays open.
         outcome = "claimed-fixed-reproduces";
         matchReason =
           "same normalized causal chain as the open ticket with a fix claim";
         eligible = true;
-        baseActions = [{ type: "append-evidence" }];
+        baseActions = [{ type: "append-evidence" }, ...rem];
       } else {
         outcome = "rediscovered-open";
         matchReason = "same normalized causal chain as the open ticket";
         eligible = false;
-        baseActions = [{ type: "append-evidence" }];
+        baseActions = [{ type: "append-evidence" }, ...rem];
       }
     }
 
-    // Count once per exploit per run; replay or in-run duplicate => no mutation.
+    const derivedKey = `${run.runId}:${exploitId ?? fp}`;
+    const replayed =
+      (obs.eventId && processedIds.has(obs.eventId)) ||
+      processedKeys.has(derivedKey);
+    const duplicateInRun = countedThisRun.has(identityKey);
+
     let actions;
     if (replayed || duplicateInRun) {
       actions = [{ type: "none" }];
       eligible = false;
-      // A second sighting in the same run is a rediscovery, not a new ticket.
       if (duplicateInRun && outcome === "new") {
         outcome = "rediscovered-open";
         matchReason = "duplicate of an exploit already identified in this run";
@@ -317,7 +448,7 @@ export function plan(input) {
         { type: "increment-confirmed-count", amount: 1 },
       ];
     }
-    seenThisRun.add(fp); // mark seen even on replay so a later same-run dup cannot re-count
+    countedThisRun.add(identityKey);
 
     decisions.push(
       decision({
@@ -330,6 +461,7 @@ export function plan(input) {
         proposedActions: actions,
         evidenceReferences,
         notificationEligible: eligible,
+        idempotencyKey: derivedKey,
         ...(fixClaimRef !== undefined ? { fixClaimRef } : {}),
       }),
     );
@@ -338,8 +470,12 @@ export function plan(input) {
   const unresolved = decisions
     .filter((d) => d.outcome === "unresolved")
     .map((d) => d.observationId);
+  const completion = run.completion?.status ?? "unknown";
   const runSummary = {
-    batchStatus: unresolved.length ? "partial" : "complete",
+    batchStatus:
+      unresolved.length || completion !== "completed" ? "partial" : "complete",
+    runCompletion: completion,
+    sessionStatus: run.session?.status ?? "unknown",
     coverage: run.coverage ?? { tested: [], untested: [], interrupted: [] },
     unresolved,
     notObserved,
@@ -348,7 +484,7 @@ export function plan(input) {
   if (run.completion?.stopReason)
     runSummary.stopReason = run.completion.stopReason;
 
-  return { runId: run.runId ?? null, decisions, runSummary };
+  return { runId: run.runId, decisions, runSummary };
 }
 
 function reasonFor(outcome) {

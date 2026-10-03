@@ -51,6 +51,7 @@
           "value": "unknown",
           "rationale": "party only"
         },
+        "affectedSurfaces": ["export-download-api"],
         "remediation": [
           {
             "component": "api",
@@ -94,6 +95,7 @@
           "value": "unknown",
           "rationale": "party only"
         },
+        "affectedSurfaces": ["share-token-validation"],
         "remediation": [
           {
             "component": "api",
@@ -137,6 +139,7 @@
           "value": "unknown",
           "rationale": "party only"
         },
+        "affectedSurfaces": ["admin-settings-api"],
         "remediation": [
           {
             "component": "api",

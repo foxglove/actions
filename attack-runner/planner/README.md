@@ -68,19 +68,18 @@ edge block into an absence/fixed claim.
 ## Verification
 
 ```
-node attack-runner/planner/run-fixtures.mjs     # oracle: semantics + invariants + determinism + permutation + immutability + structural-reject
+node attack-runner/planner/run-fixtures.mjs     # deep-equal vs authored expected + invariants + round-trip + mutation self-test + structural-reject
 node attack-runner/planner/check-fixtures.mjs   # dependency-free branch-coverage + invariant guard
 ```
 
-The oracle also writes each actual output to a temp directory for JSON Schema validation:
+The oracle writes each actual output to a temp dir for JSON Schema validation (ajv draft2020):
 
 ```
-npx ajv-cli@5 validate --spec=draft2020 \
-  -s attack-runner/planner/schema/planner-input.schema.json -d "attack-runner/planner/fixtures/*/input.json"
-npx ajv-cli@5 validate --spec=draft2020 \
-  -s attack-runner/planner/schema/planner-output.schema.json -d "/tmp/aegis-planner-out/*.json"
+npx ajv-cli@5 validate --spec=draft2020 -s attack-runner/planner/schema/planner-input.schema.json  -d "attack-runner/planner/fixtures/*/input.json"
+npx ajv-cli@5 validate --spec=draft2020 -s attack-runner/planner/schema/planner-output.schema.json -d "attack-runner/planner/fixtures/*/expected.json"
+npx ajv-cli@5 validate --spec=draft2020 -s attack-runner/planner/schema/planner-output.schema.json -d "/tmp/aegis-planner-out/*.json"
 ```
 
-`expected.json` is a **semantic target** (bare action types for readability); the oracle
-asserts full ticket material and the schema invariants on the **actual** output, not on
-`expected.json`.
+Each `expected.json` is the full authored output (its `reason`/`matchReason` are placeholders the
+oracle ignores). The oracle deep-compares everything else, so a wrong engine cannot hide a
+mis-set field; the built-in mutation self-test proves the comparison is tight.

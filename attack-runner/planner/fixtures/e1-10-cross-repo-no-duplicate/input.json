@@ -51,14 +51,15 @@
           "value": "unknown",
           "rationale": "party only"
         },
+        "affectedSurfaces": ["export-download-api"],
+        "affectedRepositories": ["app", "api"],
         "remediation": [
           {
             "component": "api",
             "change": "enforce the boundary"
           }
         ],
-        "retestExpectations": "re-test the end-to-end chain after the fix",
-        "affectedRepositories": ["app", "api"]
+        "retestExpectations": "re-test the end-to-end chain after the fix"
       },
       "evidence": {
         "references": ["req-redacted"]

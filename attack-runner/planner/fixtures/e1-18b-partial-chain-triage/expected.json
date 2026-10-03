@@ -1,32 +1,28 @@
 {
-  "runId": "run-e108",
+  "runId": "run-e118b",
   "decisions": [
     {
       "observationId": "obs-1",
-      "outcome": "rediscovered-open",
+      "outcome": "unresolved",
       "reason": "authored-intent",
       "exploitIdentity": {
-        "exploitId": "exp-SEC-101",
+        "exploitId": null,
         "matchReason": "authored-intent"
       },
       "target": {
-        "type": "existing-issue",
-        "issueId": "SEC-101"
+        "type": "none",
+        "issueId": null
       },
-      "proposedActions": [
-        {
-          "type": "none"
-        }
-      ],
+      "proposedActions": [],
       "evidenceReferences": ["req-redacted"],
       "notificationEligible": false,
-      "neededEvidence": [],
-      "fixClaimRef": null,
-      "idempotencyKey": "run-e108:exp-SEC-101"
+      "neededEvidence": [
+        "a complete chain to confirm the same or a distinct exploit"
+      ]
     }
   ],
   "runSummary": {
-    "batchStatus": "complete",
+    "batchStatus": "partial",
     "runCompletion": "completed",
     "sessionStatus": "ok",
     "coverage": {
@@ -34,7 +30,7 @@
       "untested": [],
       "interrupted": []
     },
-    "unresolved": [],
+    "unresolved": ["obs-1"],
     "notObserved": [],
     "edgeAccess": {
       "classification": "none"

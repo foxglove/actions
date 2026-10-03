@@ -30,6 +30,12 @@
       "type": "progress",
       "stage": "3",
       "note": "E1 offline planner complete: 19 fixtures covering E1-01..E1-15,E1-17..E1-20; oracle green. Next: round-2 review then Stage 4."
+    },
+    {
+      "ts": "2026-10-03",
+      "type": "review",
+      "stage": "3",
+      "note": "Round-2 review: 1 blocker/9 major/9 minor; old oracle too weak (39/60 wrong engines passed). Reworked engine + rebuilt oracle (deep-equal + round-trip + mutation self-test). 21/21 green."
     }
   ]
 }

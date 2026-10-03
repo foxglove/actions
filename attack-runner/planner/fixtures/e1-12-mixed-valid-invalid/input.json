@@ -1,8 +1,8 @@
 {
   "run": {
-    "runId": "run-2026-11-02",
+    "runId": "run-e112",
     "targetEnvironment": "party",
-    "evidenceLocation": "gs://aegis-evidence/run-2026-11-02",
+    "evidenceLocation": "gs://aegis-evidence/run-e112",
     "completion": {
       "status": "completed"
     },
@@ -11,7 +11,7 @@
       "maintenanceVerified": true
     },
     "coverage": {
-      "tested": ["exports.download", "shares.token"],
+      "tested": ["exports.download"],
       "untested": [],
       "interrupted": []
     },
@@ -24,7 +24,7 @@
       "observationId": "obs-valid",
       "kind": "confirmed-positive",
       "validity": "valid",
-      "eventId": "ev-a",
+      "eventId": "ev-obs-valid",
       "execution": {
         "status": "completed"
       },
@@ -32,10 +32,10 @@
         "chain": [
           {
             "actorCapability": "member of tenant A",
-            "targetAndOperation": "export download API for an export owned by tenant B",
-            "expectedBoundary": "ownership check must reject cross-tenant read",
-            "observedTransition": "unauthorized read of tenant B export",
-            "evidence": ["req-redacted-50"],
+            "targetAndOperation": "demonstrated transition",
+            "expectedBoundary": "boundary should prevent this",
+            "observedTransition": "boundary crossed",
+            "evidence": ["req-redacted"],
             "semantics": {
               "actorRole": "tenant-member",
               "resourceRelation": "cross-tenant",
@@ -50,17 +50,25 @@
         "productionImpact": {
           "value": "unknown",
           "rationale": "party only"
-        }
+        },
+        "affectedSurfaces": ["export-download-api"],
+        "remediation": [
+          {
+            "component": "api",
+            "change": "enforce the boundary"
+          }
+        ],
+        "retestExpectations": "re-test the end-to-end chain after the fix"
       },
       "evidence": {
-        "references": ["req-redacted-50"]
+        "references": ["req-redacted"]
       }
     },
     {
       "observationId": "obs-invalid",
       "kind": "confirmed-positive",
       "validity": "invalid-evidence",
-      "eventId": "ev-b",
+      "eventId": "ev-x",
       "execution": {
         "status": "completed"
       },
@@ -68,24 +76,33 @@
         "chain": [
           {
             "actorCapability": "member of tenant A",
-            "targetAndOperation": "share-token validation on exports",
-            "expectedBoundary": "token must be bound to the issuing org",
-            "observedTransition": "claimed cross-org access but evidence missing request/result",
+            "targetAndOperation": "demonstrated transition",
+            "expectedBoundary": "boundary should prevent this",
+            "observedTransition": "boundary crossed",
+            "evidence": ["req-redacted"],
             "semantics": {
               "actorRole": "tenant-member",
               "resourceRelation": "cross-tenant",
               "surface": "share-token-validation",
               "operation": "read",
               "boundaryType": "token-org-binding",
-              "violation": "missing-evidence"
+              "violation": "unauthorized-read"
             }
           }
         ],
-        "severity": "medium",
+        "severity": "high",
         "productionImpact": {
           "value": "unknown",
           "rationale": "party only"
-        }
+        },
+        "affectedSurfaces": ["share-token-validation"],
+        "remediation": [
+          {
+            "component": "api",
+            "change": "enforce the boundary"
+          }
+        ],
+        "retestExpectations": "re-test the end-to-end chain after the fix"
       },
       "evidence": {
         "references": []

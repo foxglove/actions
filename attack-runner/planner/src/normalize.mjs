@@ -1,11 +1,10 @@
 // WP1.1 — chain identity & normalization.
 //
 // Identity is built only from the structured, controlled-vocabulary `semantics`
-// tuple on each transition, plus the target environment. Prose fields, titles,
-// resource IDs, repository names, harness/model, path revision, and transitions
-// flagged `incidental` (reconnaissance) are excluded from matching
-// (exploit-findings.md: "do not invent an identity from a title or prose hash";
-// the matching core "excludes ... incidental reconnaissance").
+// tuple on each transition, plus the target environment. Prose, titles, resource
+// IDs, repository names, harness/model, path revision, and transitions flagged
+// `semantics.incidental` are excluded. Consecutive duplicate tuples collapse so a
+// repeated step does not change identity.
 
 export const FINGERPRINT_VERSION = "v1";
 
@@ -18,8 +17,6 @@ const TUPLE_KEYS = [
   "violation",
 ];
 
-// Returns { ok:false } on absent/invalid semantics, { ok:true, skip:true } for an
-// incidental (recon) transition to drop, or { ok:true, tuple } otherwise.
 export function normalizeTransition(transition) {
   const s = transition && transition.semantics;
   if (!s || typeof s !== "object" || Array.isArray(s)) return { ok: false };
@@ -33,16 +30,23 @@ export function normalizeTransition(transition) {
   return { ok: true, tuple };
 }
 
-// Normalize an ordered chain to its causally-relevant tuples (order preserved),
-// or null when identity cannot be established (missing semantics, or only
-// incidental transitions).
+const tupleKey = (t) => TUPLE_KEYS.map((k) => t[k]).join("\u0001");
+
+// Returns the normalized tuple list (order preserved, consecutive duplicates
+// collapsed), or null when identity cannot be established.
 export function normalizeChain(chain) {
   if (!Array.isArray(chain) || chain.length === 0) return null;
   const tuples = [];
   for (const transition of chain) {
     const r = normalizeTransition(transition);
     if (!r.ok) return null;
-    if (!r.skip) tuples.push(r.tuple);
+    if (r.skip) continue;
+    if (
+      tuples.length &&
+      tupleKey(tuples[tuples.length - 1]) === tupleKey(r.tuple)
+    )
+      continue;
+    tuples.push(r.tuple);
   }
   return tuples.length === 0 ? null : tuples;
 }
@@ -52,13 +56,11 @@ const normEnv = (env) =>
     .trim()
     .toLowerCase();
 
-// Versioned fingerprint over { env, normalized chain }. A lookup aid, not proof of
-// equivalence. null when identity cannot be established. Environment is part of
-// identity so a production observation never merges into a party ticket.
 export function fingerprint(chain, environment) {
   const normalized = normalizeChain(chain);
-  if (normalized === null) return null;
-  return `${FINGERPRINT_VERSION}:${JSON.stringify({ env: normEnv(environment), chain: normalized })}`;
+  const env = normEnv(environment);
+  if (normalized === null || env === "") return null;
+  return `${FINGERPRINT_VERSION}:${JSON.stringify({ env, chain: normalized })}`;
 }
 
 export function sameIdentity(chainA, envA, chainB, envB) {
@@ -66,3 +68,19 @@ export function sameIdentity(chainA, envA, chainB, envB) {
   const b = fingerprint(chainB, envB);
   return a !== null && a === b;
 }
+
+// True when `short` is a (contiguous or sparse) subsequence of `long`, order kept.
+// Used to detect a partial/overlapping chain that is related but not identical,
+// which routes to triage rather than a speculative new ticket (E1-18).
+export function isSubsequence(short, long) {
+  if (!Array.isArray(short) || !Array.isArray(long) || short.length === 0)
+    return false;
+  let i = 0;
+  for (const t of long) {
+    if (tupleKey(t) === tupleKey(short[i])) i++;
+    if (i === short.length) return true;
+  }
+  return i === short.length;
+}
+
+export { normEnv };

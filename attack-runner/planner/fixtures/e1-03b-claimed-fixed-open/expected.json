@@ -1,13 +1,13 @@
 {
-  "runId": "run-2026-11-09",
+  "runId": "run-e103b",
   "decisions": [
     {
       "observationId": "obs-1",
-      "outcome": "rediscovered-open",
-      "reason": "Different wording, resource IDs, and recon detail describe the same causal chain as SEC-101; normalized-chain match, one ticket.",
+      "outcome": "claimed-fixed-reproduces",
+      "reason": "authored-intent",
       "exploitIdentity": {
-        "exploitId": "exp-crossorg-export-dl",
-        "matchReason": "same actor/resource relationship, download surface, missing owner-org check, and unauthorized read; export IDs and prose differ and do not change identity"
+        "exploitId": "exp-SEC-101",
+        "matchReason": "authored-intent"
       },
       "target": {
         "type": "existing-issue",
@@ -18,17 +18,30 @@
           "type": "append-evidence"
         },
         {
+          "type": "append-remediation",
+          "remediation": [
+            {
+              "component": "api",
+              "change": "enforce the boundary"
+            }
+          ]
+        },
+        {
           "type": "increment-confirmed-count",
           "amount": 1
         }
       ],
-      "evidenceReferences": ["req-redacted-71"],
-      "notificationEligible": false,
-      "neededEvidence": []
+      "evidenceReferences": ["req-redacted"],
+      "notificationEligible": true,
+      "neededEvidence": [],
+      "fixClaimRef": "app#4821",
+      "idempotencyKey": "run-e103b:exp-SEC-101"
     }
   ],
   "runSummary": {
     "batchStatus": "complete",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
     "coverage": {
       "tested": ["exports.download"],
       "untested": [],

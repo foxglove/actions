@@ -52,6 +52,7 @@
           "value": "unknown",
           "rationale": "party only"
         },
+        "affectedSurfaces": ["export-download-api"],
         "remediation": [
           {
             "component": "api",
@@ -68,7 +69,7 @@
       "observationId": "obs-int",
       "kind": "non-observation",
       "validity": "valid",
-      "eventId": "ev-int",
+      "eventId": "ev-obs-int",
       "execution": {
         "status": "interrupted",
         "stopReason": "session lost"

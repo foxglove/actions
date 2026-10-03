@@ -51,6 +51,7 @@
           "value": "unknown",
           "rationale": "party only"
         },
+        "affectedSurfaces": ["export-download-api"],
         "remediation": [
           {
             "component": "api",

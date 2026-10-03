@@ -1,32 +1,41 @@
 {
   "run": {
-    "runId": "run-2026-11-23",
+    "runId": "run-e108b",
     "targetEnvironment": "party",
-    "evidenceLocation": "gs://aegis-evidence/run-2026-11-23",
-    "completion": { "status": "completed" },
-    "session": { "status": "ok", "maintenanceVerified": true },
+    "evidenceLocation": "gs://aegis-evidence/run-e108b",
+    "completion": {
+      "status": "completed"
+    },
+    "session": {
+      "status": "ok",
+      "maintenanceVerified": true
+    },
     "coverage": {
       "tested": ["exports.download"],
       "untested": [],
       "interrupted": []
     },
-    "edgeAccess": { "classification": "none" }
+    "edgeAccess": {
+      "classification": "none"
+    }
   },
   "observations": [
     {
       "observationId": "obs-1",
       "kind": "confirmed-positive",
       "validity": "valid",
-      "eventId": "ev-a",
-      "execution": { "status": "completed" },
+      "eventId": "ev-obs-1",
+      "execution": {
+        "status": "completed"
+      },
       "exploit": {
         "chain": [
           {
             "actorCapability": "member of tenant A",
-            "targetAndOperation": "export download API for an export owned by tenant B",
-            "expectedBoundary": "ownership check must reject cross-tenant read",
-            "observedTransition": "unauthorized read of tenant B export",
-            "evidence": ["req-redacted-a"],
+            "targetAndOperation": "demonstrated transition",
+            "expectedBoundary": "boundary should prevent this",
+            "observedTransition": "boundary crossed",
+            "evidence": ["req-redacted"],
             "semantics": {
               "actorRole": "tenant-member",
               "resourceRelation": "cross-tenant",
@@ -38,24 +47,39 @@
           }
         ],
         "severity": "high",
-        "productionImpact": { "value": "unknown", "rationale": "party only" }
+        "productionImpact": {
+          "value": "unknown",
+          "rationale": "party only"
+        },
+        "affectedSurfaces": ["export-download-api"],
+        "remediation": [
+          {
+            "component": "api",
+            "change": "enforce the boundary"
+          }
+        ],
+        "retestExpectations": "re-test the end-to-end chain after the fix"
       },
-      "evidence": { "references": ["req-redacted-a"] }
+      "evidence": {
+        "references": ["req-redacted"]
+      }
     },
     {
       "observationId": "obs-2",
       "kind": "confirmed-positive",
       "validity": "valid",
-      "eventId": "ev-b",
-      "execution": { "status": "completed" },
+      "eventId": "ev-obs-2",
+      "execution": {
+        "status": "completed"
+      },
       "exploit": {
         "chain": [
           {
             "actorCapability": "member of tenant A",
-            "targetAndOperation": "same cross-tenant export download, observed again later in the run",
-            "expectedBoundary": "ownership check must reject cross-tenant read",
-            "observedTransition": "unauthorized read of tenant B export",
-            "evidence": ["req-redacted-b"],
+            "targetAndOperation": "demonstrated transition",
+            "expectedBoundary": "boundary should prevent this",
+            "observedTransition": "boundary crossed",
+            "evidence": ["req-redacted"],
             "semantics": {
               "actorRole": "tenant-member",
               "resourceRelation": "cross-tenant",
@@ -67,9 +91,22 @@
           }
         ],
         "severity": "high",
-        "productionImpact": { "value": "unknown", "rationale": "party only" }
+        "productionImpact": {
+          "value": "unknown",
+          "rationale": "party only"
+        },
+        "affectedSurfaces": ["export-download-api"],
+        "remediation": [
+          {
+            "component": "api",
+            "change": "enforce the boundary"
+          }
+        ],
+        "retestExpectations": "re-test the end-to-end chain after the fix"
       },
-      "evidence": { "references": ["req-redacted-b"] }
+      "evidence": {
+        "references": ["req-redacted"]
+      }
     }
   ],
   "existingIssues": [],

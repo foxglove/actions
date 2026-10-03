@@ -1,8 +1,8 @@
 {
   "run": {
-    "runId": "run-2026-10-12",
+    "runId": "run-e108",
     "targetEnvironment": "party",
-    "evidenceLocation": "gs://aegis-evidence/run-2026-10-12",
+    "evidenceLocation": "gs://aegis-evidence/run-e108",
     "completion": {
       "status": "completed"
     },
@@ -32,10 +32,10 @@
         "chain": [
           {
             "actorCapability": "member of tenant A",
-            "targetAndOperation": "export download API for an export owned by tenant B",
-            "expectedBoundary": "ownership check must reject cross-tenant read",
-            "observedTransition": "unauthorized read of tenant B export",
-            "evidence": ["req-redacted-9"],
+            "targetAndOperation": "demonstrated transition",
+            "expectedBoundary": "boundary should prevent this",
+            "observedTransition": "boundary crossed",
+            "evidence": ["req-redacted"],
             "semantics": {
               "actorRole": "tenant-member",
               "resourceRelation": "cross-tenant",
@@ -50,28 +50,38 @@
         "productionImpact": {
           "value": "unknown",
           "rationale": "party only"
-        }
+        },
+        "affectedSurfaces": ["export-download-api"],
+        "remediation": [
+          {
+            "component": "api",
+            "change": "enforce the boundary"
+          }
+        ],
+        "retestExpectations": "re-test the end-to-end chain after the fix"
       },
       "evidence": {
-        "references": ["req-redacted-9"]
+        "references": ["req-redacted"]
       }
     }
   ],
   "existingIssues": [
     {
       "issueId": "SEC-101",
-      "exploitId": "exp-crossorg-export-dl",
+      "exploitId": "exp-SEC-101",
       "state": "open",
+      "targetEnvironment": "party",
       "fixClaim": {
         "claimed": false,
         "reference": null
       },
       "normalizedChain": [
         {
-          "actorCapability": "member of another tenant",
-          "targetAndOperation": "export download API for another tenant's export",
-          "expectedBoundary": "ownership check must reject cross-tenant read",
-          "observedTransition": "unauthorized read of another tenant's export",
+          "actorCapability": "member of tenant A",
+          "targetAndOperation": "demonstrated transition",
+          "expectedBoundary": "boundary should prevent this",
+          "observedTransition": "boundary crossed",
+          "evidence": ["req-redacted"],
           "semantics": {
             "actorRole": "tenant-member",
             "resourceRelation": "cross-tenant",
@@ -82,8 +92,7 @@
           }
         }
       ],
-      "confirmedRunCount": 3,
-      "targetEnvironment": "party"
+      "confirmedRunCount": 3
     }
   ],
   "processedEvents": [

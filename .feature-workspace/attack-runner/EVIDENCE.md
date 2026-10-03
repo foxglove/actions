@@ -45,3 +45,16 @@
 - Oracle: **19 passed, 0 failed** + 3 structural-reject. Guard PASS. Inputs and all actual
   outputs validate against the schemas (ajv draft2020).
 - cost: unavailable (cloud transcript not local).
+
+## 2026-10-03 — WP1 round-2 review + repair
+
+- Round-2 isolated review: 1 blocker, 9 major, 9 minor; 39/60 wrong engines had passed the
+  old oracle (`review-wp1-round2.md`).
+- Reworked the representation and oracle: round-trippable structured ticket material;
+  strict input validation; state/validity validation; count-by-matched-identity; partial-
+  chain triage + duplicate-step collapse; append-remediation; run status in the summary.
+- Oracle rebuilt to deep-equal authored full expected (minus prose) + invariants on actual
+  - round-trip + mutation self-test + schema validation. Result: **21 passed, 0 failed** +
+    5 structural-reject; inputs, expected, and all actual outputs valid (ajv draft2020);
+    guard PASS.
+- cost: unavailable (cloud transcript not local).

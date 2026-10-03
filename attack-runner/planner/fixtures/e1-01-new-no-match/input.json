@@ -1,8 +1,8 @@
 {
   "run": {
-    "runId": "run-2026-10-05",
+    "runId": "run-e101",
     "targetEnvironment": "party",
-    "evidenceLocation": "gs://aegis-evidence/run-2026-10-05",
+    "evidenceLocation": "gs://aegis-evidence/run-e101",
     "completion": {
       "status": "completed"
     },
@@ -24,7 +24,7 @@
       "observationId": "obs-1",
       "kind": "confirmed-positive",
       "validity": "valid",
-      "eventId": "ev-1",
+      "eventId": "ev-obs-1",
       "execution": {
         "status": "completed"
       },
@@ -32,11 +32,10 @@
         "chain": [
           {
             "actorCapability": "member of tenant A",
-            "targetAndOperation": "export download API for an export owned by tenant B",
-            "expectedBoundary": "ownership check must reject cross-tenant read",
-            "observedTransition": "unauthorized read of tenant B export",
-            "prerequisites": [],
-            "evidence": ["req-redacted-1"],
+            "targetAndOperation": "demonstrated transition",
+            "expectedBoundary": "boundary should prevent this",
+            "observedTransition": "boundary crossed",
+            "evidence": ["req-redacted"],
             "semantics": {
               "actorRole": "tenant-member",
               "resourceRelation": "cross-tenant",
@@ -50,20 +49,19 @@
         "severity": "high",
         "productionImpact": {
           "value": "unknown",
-          "rationale": "demonstrated on party only"
+          "rationale": "party only"
         },
-        "affectedSurfaces": ["exports.download"],
-        "affectedRepositories": [],
+        "affectedSurfaces": ["export-download-api"],
         "remediation": [
           {
             "component": "api",
-            "change": "enforce export ownership check on download"
+            "change": "enforce the boundary"
           }
         ],
-        "retestExpectations": "member of A cannot download B export after fix"
+        "retestExpectations": "re-test the end-to-end chain after the fix"
       },
       "evidence": {
-        "references": ["req-redacted-1"]
+        "references": ["req-redacted"]
       }
     }
   ],

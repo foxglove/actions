@@ -4,10 +4,10 @@
     {
       "observationId": "obs-1",
       "outcome": "not-observed",
-      "reason": "",
+      "reason": "authored-intent",
       "exploitIdentity": {
         "exploitId": "exp-SEC-101",
-        "matchReason": ""
+        "matchReason": "authored-intent"
       },
       "target": {
         "type": "none",
@@ -21,6 +21,8 @@
   ],
   "runSummary": {
     "batchStatus": "complete",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
     "coverage": {
       "tested": ["exports.download"],
       "untested": [],

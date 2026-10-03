@@ -3,6 +3,8 @@
   "decisions": [],
   "runSummary": {
     "batchStatus": "complete",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
     "coverage": {
       "tested": ["exports.download"],
       "untested": [],

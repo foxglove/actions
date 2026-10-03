@@ -24,7 +24,7 @@
       "observationId": "obs-1",
       "kind": "non-observation",
       "validity": "valid",
-      "eventId": "ev-1",
+      "eventId": "ev-obs-1",
       "execution": {
         "status": "session-lost",
         "stopReason": "session lost mid re-test"

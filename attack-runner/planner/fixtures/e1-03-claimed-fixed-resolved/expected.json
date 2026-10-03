@@ -1,13 +1,13 @@
 {
-  "runId": "run-2026-11-16",
+  "runId": "run-e103",
   "decisions": [
     {
       "observationId": "obs-1",
       "outcome": "claimed-fixed-reproduces",
-      "reason": "Open ticket carries a fix claim that this run contradicts; stays open, evidence appended, claim identified; no reopen, no duplicate.",
+      "reason": "authored-intent",
       "exploitIdentity": {
-        "exploitId": "exp-crossorg-export-dl",
-        "matchReason": "same normalized causal chain as the open ticket with a fix claim"
+        "exploitId": "exp-SEC-101",
+        "matchReason": "authored-intent"
       },
       "target": {
         "type": "existing-issue",
@@ -18,18 +18,33 @@
           "type": "append-evidence"
         },
         {
+          "type": "reopen-ticket"
+        },
+        {
+          "type": "append-remediation",
+          "remediation": [
+            {
+              "component": "api",
+              "change": "enforce the boundary"
+            }
+          ]
+        },
+        {
           "type": "increment-confirmed-count",
           "amount": 1
         }
       ],
-      "evidenceReferences": ["req-redacted-88"],
+      "evidenceReferences": ["req-redacted"],
       "notificationEligible": true,
       "neededEvidence": [],
-      "fixClaimRef": "app#4821"
+      "fixClaimRef": "app#4821",
+      "idempotencyKey": "run-e103:exp-SEC-101"
     }
   ],
   "runSummary": {
     "batchStatus": "complete",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
     "coverage": {
       "tested": ["exports.download"],
       "untested": [],

@@ -1,13 +1,13 @@
 {
-  "runId": "run-2026-10-26",
+  "runId": "run-e104",
   "decisions": [
     {
       "observationId": "obs-1",
       "outcome": "not-observed",
-      "reason": "Run did not observe the tracked exploit. A completed re-test is not proof of a fix. Resolved ticket receives no write.",
+      "reason": "authored-intent",
       "exploitIdentity": {
-        "exploitId": "exp-crossorg-export-dl",
-        "matchReason": "re-test target"
+        "exploitId": "exp-SEC-101",
+        "matchReason": "authored-intent"
       },
       "target": {
         "type": "none",
@@ -21,6 +21,8 @@
   ],
   "runSummary": {
     "batchStatus": "complete",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
     "coverage": {
       "tested": ["exports.download"],
       "untested": [],
@@ -30,11 +32,12 @@
     "notObserved": [
       {
         "observationId": "obs-1",
-        "exploitId": "exp-crossorg-export-dl",
+        "exploitId": "exp-SEC-101",
         "issueId": "SEC-101",
         "executionStatus": "completed",
-        "reason": "targeted re-test completed without reproducing; not an absence or fixed claim",
+        "reason": "targeted re-test completed without reproducing",
         "attemptedCoverage": ["exports.download"],
+        "edgeClassification": "none",
         "evidenceReferences": []
       }
     ],

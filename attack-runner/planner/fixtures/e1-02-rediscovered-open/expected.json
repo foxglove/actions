@@ -1,13 +1,13 @@
 {
-  "runId": "run-2026-10-12",
+  "runId": "run-e102",
   "decisions": [
     {
       "observationId": "obs-1",
       "outcome": "rediscovered-open",
-      "reason": "Valid confirmed positive; exactly one open match on the normalized causal chain.",
+      "reason": "authored-intent",
       "exploitIdentity": {
-        "exploitId": "exp-crossorg-export-dl",
-        "matchReason": "same actor/resource relationship, download surface, ownership-check failure; wording and export IDs differ"
+        "exploitId": "exp-SEC-101",
+        "matchReason": "authored-intent"
       },
       "target": {
         "type": "existing-issue",
@@ -18,17 +18,30 @@
           "type": "append-evidence"
         },
         {
+          "type": "append-remediation",
+          "remediation": [
+            {
+              "component": "api",
+              "change": "enforce the boundary"
+            }
+          ]
+        },
+        {
           "type": "increment-confirmed-count",
           "amount": 1
         }
       ],
-      "evidenceReferences": ["req-redacted-9"],
+      "evidenceReferences": ["req-redacted"],
       "notificationEligible": false,
-      "neededEvidence": []
+      "neededEvidence": [],
+      "fixClaimRef": null,
+      "idempotencyKey": "run-e102:exp-SEC-101"
     }
   ],
   "runSummary": {
     "batchStatus": "complete",
+    "runCompletion": "completed",
+    "sessionStatus": "ok",
     "coverage": {
       "tested": ["exports.download"],
       "untested": [],

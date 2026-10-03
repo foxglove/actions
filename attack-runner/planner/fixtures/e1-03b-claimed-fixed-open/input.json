@@ -1,8 +1,8 @@
 {
   "run": {
-    "runId": "run-e102",
+    "runId": "run-e103b",
     "targetEnvironment": "party",
-    "evidenceLocation": "gs://aegis-evidence/run-e102",
+    "evidenceLocation": "gs://aegis-evidence/run-e103b",
     "completion": {
       "status": "completed"
     },
@@ -72,8 +72,8 @@
       "state": "open",
       "targetEnvironment": "party",
       "fixClaim": {
-        "claimed": false,
-        "reference": null
+        "claimed": true,
+        "reference": "app#4821"
       },
       "normalizedChain": [
         {

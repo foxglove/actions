@@ -1,8 +1,8 @@
 {
   "run": {
-    "runId": "run-2026-11-09",
+    "runId": "run-e118b",
     "targetEnvironment": "party",
-    "evidenceLocation": "gs://aegis-evidence/run-2026-11-09",
+    "evidenceLocation": "gs://aegis-evidence/run-e118b",
     "completion": {
       "status": "completed"
     },
@@ -24,27 +24,18 @@
       "observationId": "obs-1",
       "kind": "confirmed-positive",
       "validity": "valid",
-      "eventId": "ev-900",
+      "eventId": "ev-obs-1",
       "execution": {
         "status": "completed"
       },
       "exploit": {
         "chain": [
           {
-            "actorCapability": "regular user of org Foo",
-            "targetAndOperation": "listing own organization's exports (reconnaissance)",
-            "expectedBoundary": "none; own-org listing is allowed",
-            "observedTransition": "enumerated own exports to find a target id",
-            "semantics": {
-              "incidental": true
-            }
-          },
-          {
-            "actorCapability": "a regular user belonging to org Foo",
-            "targetAndOperation": "downloading export id EXP-55123 via the export download endpoint, owned by org Bar",
-            "expectedBoundary": "export owner-org check",
-            "observedTransition": "fetched another organization's export payload without authorization",
-            "evidence": ["req-redacted-71"],
+            "actorCapability": "member of tenant A",
+            "targetAndOperation": "demonstrated transition",
+            "expectedBoundary": "boundary should prevent this",
+            "observedTransition": "boundary crossed",
+            "evidence": ["req-redacted"],
             "semantics": {
               "actorRole": "tenant-member",
               "resourceRelation": "cross-tenant",
@@ -59,28 +50,38 @@
         "productionImpact": {
           "value": "unknown",
           "rationale": "party only"
-        }
+        },
+        "affectedSurfaces": ["export-download-api"],
+        "remediation": [
+          {
+            "component": "api",
+            "change": "enforce the boundary"
+          }
+        ],
+        "retestExpectations": "re-test the end-to-end chain after the fix"
       },
       "evidence": {
-        "references": ["req-redacted-71"]
+        "references": ["req-redacted"]
       }
     }
   ],
   "existingIssues": [
     {
       "issueId": "SEC-101",
-      "exploitId": "exp-crossorg-export-dl",
+      "exploitId": "exp-SEC-101",
       "state": "open",
+      "targetEnvironment": "party",
       "fixClaim": {
         "claimed": false,
         "reference": null
       },
       "normalizedChain": [
         {
-          "actorCapability": "member of another tenant",
-          "targetAndOperation": "export download API for another tenant's export",
-          "expectedBoundary": "ownership check must reject cross-tenant read",
-          "observedTransition": "unauthorized read of another tenant's export",
+          "actorCapability": "member of tenant A",
+          "targetAndOperation": "demonstrated transition",
+          "expectedBoundary": "boundary should prevent this",
+          "observedTransition": "boundary crossed",
+          "evidence": ["req-redacted"],
           "semantics": {
             "actorRole": "tenant-member",
             "resourceRelation": "cross-tenant",
@@ -89,10 +90,24 @@
             "boundaryType": "ownership-check",
             "violation": "unauthorized-read"
           }
+        },
+        {
+          "actorCapability": "member of tenant A",
+          "targetAndOperation": "demonstrated transition",
+          "expectedBoundary": "boundary should prevent this",
+          "observedTransition": "boundary crossed",
+          "evidence": ["req-redacted"],
+          "semantics": {
+            "actorRole": "tenant-member",
+            "resourceRelation": "cross-tenant",
+            "surface": "share-token-validation",
+            "operation": "read",
+            "boundaryType": "token-org-binding",
+            "violation": "unauthorized-read"
+          }
         }
       ],
-      "confirmedRunCount": 5,
-      "targetEnvironment": "party"
+      "confirmedRunCount": 3
     }
   ],
   "processedEvents": []
