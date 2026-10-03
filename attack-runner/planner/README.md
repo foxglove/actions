@@ -62,6 +62,22 @@ never become a silent identity — they route to `unresolved`.
 | `not-observed`             | run ends without observing a tracked exploit                                                                                   | **zero writes**; summary-only with coverage + stop reason                                                              |
 | `unresolved`               | invalid evidence / ambiguous or partial identity / unknown or uncomparable ticket state / resolved without a claim             | none; record the missing evidence                                                                                      |
 
+Triage rules worth knowing:
+
+- **Uncomparable tickets block creation in their environment.** A same-environment ticket
+  whose chain has no structured semantics and that has no non-blank fingerprint alias
+  sends every would-be-`new` observation in that environment to `unresolved`, naming the
+  ticket(s) in `neededEvidence`. Backfill a normalized chain or an alias on legacy
+  tickets, or new findings in that environment stay in triage.
+- **Partial overlap is a sparse, state-independent subsequence check.** A chain that is
+  an in-order subsequence of (or contains) another same-environment chain, whether on an
+  existing ticket of any state or another positive in the same run, is ambiguous and goes
+  to triage rather than a speculative ticket (E1-18). This is deliberately conservative.
+- **Triage wins over replay.** A replayed observation (already-processed `eventId` or
+  key) that lands in one of the triage branches above reports `unresolved` rather than
+  `[none]`. Both propose no write, so idempotency holds; the retry only shows as a
+  `partial` batch.
+
 The output is an **action proposal, not proof of delivery.** It never reports a resolved
 ticket as written, never claims a reopen succeeded, and never turns a non-observation or an
 edge block into an absence/fixed claim.

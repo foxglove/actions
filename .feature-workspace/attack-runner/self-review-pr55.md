@@ -68,6 +68,6 @@ STATUS.md:17-19 and TRACEABILITY.md:3 state 47 fixtures, 48 passed, 112 mutants 
 ### F8 [workflow-failure] minor: attribution rewrite introduced nonsense and misquotes
 
 - Item 10 reads "Foundations team for now, transitioning to the Foundations team" and "Owner now: Foundations team; future owner: Foundations team" (retro-log.json:118,126; STATUS.md:68). The global replace erased the transition.
-- STATUS.md:60 quotes `attack-sessions.md:150` as "interim Foundations team"; that line says "interim Kumar Pasumarthy".
+- STATUS.md:60 quotes `attack-sessions.md:150` as "interim Foundations team"; that line names an individual.
 - GOAL.md:56 says release authority is "Foundations team (per attack-sessions.md)"; attack-sessions.md:22 names an individual, with ownership moving to a team later. The retro-log "oracle" and "Sign-off" fields now attribute those decisions to a team the cited doc does not name.
 - Both JSON files parse. product-docs/attack-sessions.md still contains the personal name (source doc, outside the changed set; confirm that is intended).
