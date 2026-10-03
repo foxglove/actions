@@ -55,7 +55,7 @@ A chain can cross services or repository boundaries. Repository boundaries do no
 
 ## 4. Boundaries and stop conditions
 
-Only explicitly authorized targets within \*.foxglove.party are in scope. The supplied target set limits the wildcard; it is not permission to assess every reachable host. Production, non-party services, and other unapproved destinations are excluded even when returned by a target. Do not follow a redirect or pivot outside the authorized boundary.
+Every host under \*.foxglove.party is an authorized target, and no other host is. Production, non-party services, and other unapproved destinations are excluded even when returned by a target. Do not follow a redirect or pivot outside the authorized boundary.
 
 Preserve the source policy against permanent damage: no mass deletion, billing/payment changes, IAM wiping, destructive encryption, or denial-of-service flooding. Use controlled test data and non-destructive evidence. A reachable endpoint or HTTP success alone is not proof that an unexecuted damaging action would succeed.
 
