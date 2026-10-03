@@ -5,6 +5,7 @@ Uses FOX_FINE_GRAINED_TOKEN only. Never logs the token or Authorization header.
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import time
@@ -101,6 +102,10 @@ class GitHub:
                 raise last_err from exc
             except urllib.error.URLError as exc:
                 last_err = exc
+                time.sleep(min(30, 2 ** attempt))
+            except (http.client.IncompleteRead, TimeoutError, ConnectionError) as exc:
+                last_err = exc
+                print(f"transient read error; retrying ({attempt + 1}/{retries})", flush=True)
                 time.sleep(min(30, 2 ** attempt))
         raise GitHubError(f"request failed after retries: {last_err}")
 
