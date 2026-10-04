@@ -490,7 +490,13 @@ def main() -> None:
         ]
     )
     regressions = {}
-    if len(reg_df) >= 30 and reg_df["bot_sufficient"].nunique() > 1:
+    if len(reg_df) < 30:
+        skip_reason = f"n={len(reg_df)}"
+    elif reg_df["bot_sufficient"].nunique() < 2:
+        skip_reason = f"n={len(reg_df)}; every headline pull request has the same outcome"
+    else:
+        skip_reason = None
+    if skip_reason is None:
         regressions["uncontrolled"] = fit_logit(reg_df, "bot_sufficient ~ month_index")
         regressions["controlled"] = fit_logit(
             reg_df,
@@ -501,7 +507,7 @@ def main() -> None:
             "bot_sufficient ~ month_index + C(size_bucket, Treatment(reference='S')) + C(tenure_bucket, Treatment(reference='2y+')) + substantive_comments_after",
         )
     else:
-        skipped = {"ok": False, "error": f"n={len(reg_df)}"}
+        skipped = {"ok": False, "error": skip_reason}
         regressions["uncontrolled"] = skipped
         regressions["controlled"] = dict(skipped)
         regressions["engagement"] = dict(skipped)

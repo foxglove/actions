@@ -691,6 +691,12 @@ def main() -> None:
         }
     )
     no_appr = int(((merged_lgtm["human_approval_count"] == 0) & (merged_lgtm["review_dismissals"].fillna(0) == 0)).sum()) if len(merged_lgtm) else 0
+    rebased_after = 0
+    if "code_change_confidence" in findings.columns and "timing" in findings.columns:
+        after_mask = findings["timing"].eq("after")
+        if "in_cohort" in findings.columns:
+            after_mask = after_mask & findings["in_cohort"].eq(True)
+        rebased_after = int((after_mask & findings["code_change_confidence"].eq("rebased_unknown")).sum())
     if "mergeable_at_lgtm" in merged_lgtm.columns and "ci_known" in merged_lgtm.columns:
         known = merged_lgtm[merged_lgtm["ci_known"] == True]
         not_mergeable = int((known["mergeable_at_lgtm"] == False).sum())
@@ -755,12 +761,18 @@ def main() -> None:
             "A slope that includes zero, from a fit that did not settle, is not a trend."
         )
     else:
-        slope_html = (
-            "The month model was not fit "
-            f"({html.escape(str(unc.get('error') or 'no result'))}). "
-            "The fit needs at least 30 headline pull requests and both outcomes. "
-            "This repository cannot support that slope."
-        )
+        fit_error = str(unc.get("error") or "no result")
+        if "same outcome" in fit_error:
+            slope_html = (
+                f"The month model was not fit ({html.escape(fit_error)}). "
+                "A slope needs both sufficient and not-sufficient pull requests."
+            )
+        else:
+            slope_html = (
+                f"The month model was not fit ({html.escape(fit_error)}). "
+                "The fit needs at least 30 headline pull requests and both outcomes. "
+                "This repository cannot support that slope."
+            )
     rel_out = "out" if S.name == "app" else f"out/{S.name}"
     if "month" in merged_lgtm.columns and len(merged_lgtm):
         apr_n = int((merged_lgtm["month"] == "2026-04").sum())
@@ -893,6 +905,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <li>Same model with size and tenure: {html.escape(reg_line(reg.get('controlled') or {}))}.</li>
 <li>Merged with no human approval: {no_appr}.</li>
 <li>Not mergeable at the first bot LGTM commit: {not_mergeable} of {known_n}. Missing CI data: {sha_unknown_n} with an unknown LGTM commit after a rebase, {fetch_error_n} whose CI fetch failed before any check result, and {no_file_n} with no CI fetch result.</li>
+<li>Findings after the LGTM whose later edit could not be checked, because the pull request was rebased: {rebased_after}. Those findings stay out of bucket A unless the author acknowledged them.</li>
 </ul>
 {section_charts('suff','time','funnel')}
 <h2>2. Method</h2>
