@@ -521,7 +521,7 @@ def main() -> None:
     prs = pd.read_csv(OUT / "prs.csv")
     findings = pd.read_csv(OUT / "findings.csv")
     for frame, cols in (
-        (prs, ["in_cohort", "bot_lgtm", "merged", "in_A", "in_Aci", "in_B", "in_D", "mergeable_at_lgtm", "ci_known"]),
+        (prs, ["in_cohort", "bot_lgtm", "merged", "in_A", "in_Aci", "in_B", "in_D", "mergeable_at_lgtm", "ci_known", "sha_unknown", "fetch_error"]),
         (findings, ["in_cohort", "is_real", "code_change"]),
     ):
         for col in cols:
@@ -581,8 +581,18 @@ def main() -> None:
     if "mergeable_at_lgtm" in merged_lgtm.columns and "ci_known" in merged_lgtm.columns:
         known = merged_lgtm[merged_lgtm["ci_known"] == True]
         not_mergeable = int((known["mergeable_at_lgtm"] == False).sum())
+        known_n = int(len(known))
     else:
         not_mergeable = int(summary.get("not_mergeable") or 0)
+        known_n = int(summary.get("ci_known_headline") or 0)
+
+    def headline_flag(column: str, summary_key: str) -> int:
+        if column in merged_lgtm.columns:
+            return int(merged_lgtm[column].sum())
+        return int(summary.get(summary_key) or 0)
+
+    sha_unknown_n = headline_flag("sha_unknown", "lgtm_sha_unknown")
+    fetch_error_n = headline_flag("fetch_error", "ci_fetch_error")
     members_path = ROOT / "data/raw/app/meta/members.json"
     member_n = len(json.loads(members_path.read_text())) if members_path.exists() else None
     member_phrase = f"{member_n} members" if member_n is not None else "the org member snapshot"
@@ -627,7 +637,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <li>Bot-sufficient rate, uncontrolled logistic regression on month: {html.escape(reg_line(reg.get('uncontrolled') or {}))}.</li>
 <li>Same regression with size and tenure controls: {html.escape(reg_line(reg.get('controlled') or {}))}.</li>
 <li>PRs merged with no human approval: {no_appr}. The with-vs-without approval escape comparison is reported below and is not a random contrast.</li>
-<li>Not mergeable at the first bot LGTM SHA, among headline PRs with CI data: {not_mergeable}.</li>
+<li>Not mergeable at the first bot LGTM SHA: {not_mergeable} of {known_n} headline PRs with CI data. No CI data: {sha_unknown_n} PRs with an unknown LGTM SHA after a rebase, and {fetch_error_n} PRs with a fetch error.</li>
 </ul>
 {section_charts('suff','time','funnel')}
 <h2>2. Method</h2>
@@ -701,7 +711,9 @@ td, th {{ border-bottom: 1px solid #ddd; padding: 3px 6px; text-align: left; }}
 </body></html>
 """
     (OUT / "per-developer.html").write_text(dev_html)
-    (OUT / "report.md").write_text(markdown_summary(summary, len(merged_lgtm), no_appr, not_mergeable, reg_line))
+    (OUT / "report.md").write_text(
+        markdown_summary(summary, len(merged_lgtm), no_appr, not_mergeable, known_n, sha_unknown_n, fetch_error_n, reg_line)
+    )
     print("wrote report", flush=True)
 
 
@@ -728,7 +740,7 @@ def dev_table(dev: pd.DataFrame) -> str:
     return show.to_html(index=False, float_format=lambda v: f"{v:.2f}")
 
 
-def markdown_summary(summary, n, no_appr, not_mergeable, reg_line) -> str:
+def markdown_summary(summary, n, no_appr, not_mergeable, known_n, sha_unknown_n, fetch_error_n, reg_line) -> str:
     reg = summary.get("regressions", {})
     return f"""# App pilot: human review after the bot's first LGTM
 
@@ -738,7 +750,7 @@ Scope is defect-catching only. Bot-sufficient means no observed bucket A or buck
 - Uncontrolled month coefficient: {reg_line(reg.get('uncontrolled') or {})}
 - With size and tenure controls: {reg_line(reg.get('controlled') or {})}
 - Merged with no human approval: {no_appr}
-- Not mergeable at the first LGTM SHA: {not_mergeable}
+- Not mergeable at the first bot LGTM SHA: {not_mergeable} of {known_n} headline PRs with CI data. No CI data: {sha_unknown_n} PRs with an unknown LGTM SHA after a rebase, and {fetch_error_n} PRs with a fetch error.
 
 Charts and the full method are in `out/report.html`. Per-developer stats are in `out/per-developer.html`. Hand labels go in `out/labeling_sample.csv`.
 

@@ -340,7 +340,8 @@ def main() -> None:
         "bot_rereview_after_lgtm", "human_review_before_lgtm", "first_human_approval_at",
         "first_human_approver", "human_approval_count", "review_dismissals", "open_to_lgtm_h",
         "open_to_approval_h", "lgtm_to_approval_h", "lgtm_to_merge_h", "approval_to_merge_h",
-        "approval_before_lgtm", "mergeable_at_lgtm", "counterfactual_sha", "ci_known", "in_A", "in_Aci", "in_B",
+        "approval_before_lgtm", "mergeable_at_lgtm", "counterfactual_sha", "ci_known",
+        "sha_unknown", "fetch_error", "in_A", "in_Aci", "in_B",
         "in_D", "in_C", "bot_sufficient", "substantive_comments_after", "closed_by",
     ]
     pd.DataFrame([{k: pr.get(k) for k in flat_keys} for pr in pr_rows]).to_csv(OUT / "prs.csv", index=False)
