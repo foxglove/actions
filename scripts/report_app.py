@@ -1,4 +1,8 @@
-"""Draft report for the foxglove/app pilot. Chart titles are computed from the data."""
+"""Draft report for one study repository. Chart titles are computed from the data.
+
+STUDY_REPO selects the repository. app keeps writing out/. Other repositories
+write out/<repo>/ so the app report stays in place.
+"""
 
 from __future__ import annotations
 
@@ -13,8 +17,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "out"
+from common import current_study
+
+S = current_study()
+ROOT = S.root
+OUT = S.out
 CHARTS = OUT / "charts"
 APP = "#0072B2"
 GRAY = "#B0B0B0"
@@ -620,10 +627,20 @@ def main() -> None:
     dev = pd.read_csv(OUT / "per_developer.csv")
     summary = json.loads((OUT / "summary.json").read_text())
     escapes = pd.read_csv(OUT / "escapes.csv") if (OUT / "escapes.csv").exists() else pd.DataFrame()
-    history_path = ROOT / "data/raw/app/meta/bot_history.json"
+    history_path = S.meta / "bot_history.json"
+    if not history_path.exists():
+        history_path = ROOT / "data" / "raw" / "app" / "meta" / "bot_history.json"
     history = json.loads(history_path.read_text()) if history_path.exists() else {}
-    rules = json.loads((ROOT / "data/raw/app/meta/rulesets.json").read_text())
-    main_rules = next(r for r in rules if r.get("name") == "main branch protections")
+    rules_path = S.meta / "rulesets.json"
+    rules = json.loads(rules_path.read_text()) if rules_path.exists() else []
+    main_rules = next((r for r in rules if r.get("name") == "main branch protections"), None)
+    if main_rules is None:
+        active = [
+            r
+            for r in rules
+            if r.get("enforcement") == "active" and r.get("target") == "branch"
+        ]
+        main_rules = active[0] if active else {}
 
     svgs = {
         "suff": chart_sufficiency(monthly),
@@ -690,20 +707,21 @@ def main() -> None:
         sha_unknown_n = headline_flag("sha_unknown", "lgtm_sha_unknown")
         fetch_error_n = headline_flag("fetch_error", "ci_fetch_error")
         no_file_n = int(len(merged_lgtm) - known_n - sha_unknown_n - fetch_error_n)
-    members_path = ROOT / "data/raw/app/meta/members.json"
+    members_path = S.meta / "members.json"
     member_n = len(json.loads(members_path.read_text())) if members_path.exists() else None
     member_phrase = f"{member_n} members" if member_n is not None else "the org member snapshot"
-    examples_path = ROOT / "data/interim/lgtm_examples.json"
+    examples_path = S.interim / "lgtm_examples.json"
     lgtm_examples = []
     if examples_path.exists():
         lgtm_examples = [row for row in json.loads(examples_path.read_text()) if (row.get("body") or "").strip() == "LGTM"][:3]
     if lgtm_examples:
         example_html = "".join(
-            f'<li><a href="{html.escape(row["url"])}">app#{row["number"]}</a> {html.escape(row.get("kind") or "review")} body <code>LGTM</code></li>'
+            f'<li><a href="{html.escape(row["url"])}">{html.escape(S.name)}#{row["number"]}</a> {html.escape(row.get("kind") or "review")} body <code>LGTM</code></li>'
             for row in lgtm_examples
         )
     else:
-        example_html = "<li>Exact LGTM examples are written to <code>data/interim/lgtm_examples.json</code> by <code>parse_prs.py</code>.</li>"
+        rel_examples = html.escape(str((S.interim / "lgtm_examples.json").relative_to(ROOT)))
+        example_html = f"<li>Exact LGTM examples are written to <code>{rel_examples}</code> by <code>parse_prs.py</code>.</li>"
     bypass = main_rules.get("bypass_actors") or []
     if bypass:
         bypass_txt = ", ".join(
@@ -722,9 +740,93 @@ def main() -> None:
     venn_aci_svg = venn_aci(regions)
     suff_n = regions["sufficient"]
     suff_pct = (100.0 * suff_n / regions["n"]) if regions["n"] else 0.0
+    rel_out = "out" if S.name == "app" else f"out/{S.name}"
+    if "month" in merged_lgtm.columns and len(merged_lgtm):
+        apr_n = int((merged_lgtm["month"] == "2026-04").sum())
+        may_n = int((merged_lgtm["month"] == "2026-05").sum())
+    else:
+        apr_n = 0
+        may_n = 0
+    recall = summary.get("recall") or {}
+    if recall.get("available") and recall.get("tickets_with_app_fix_pr"):
+        recall_hit = int(recall.get("fix_prs_selected_by_heuristic") or 0)
+        recall_base = int(recall.get("tickets_with_app_fix_pr") or 0)
+        recall_sentence = f"The Linear sample matched {recall_hit} of {recall_base} bug-ticket fix pull requests."
+        recall_step = f"The current Linear sample found the fix pull request for {recall_hit} of {recall_base} tickets."
+    else:
+        recall_sentence = "No Linear bug sample is loaded for this repository, so escape recall is not estimated."
+        recall_step = "No Linear sample is loaded for this repository."
+    if S.name == "app":
+        scope_html = "Pilot for <code>foxglove/app</code> only. Pull requests opened 1 Apr 2026 through 30 Sep 2026. The other six repositories are not in this draft."
+        draft_note = "app stops reviewing drafts unless opted in"
+        ci_caveat = "The Checks API returns 403 for this token. Job conclusions are fetched for every selected workflow run. A skipped required job counts as a pass, because GitHub reports it as Success and does not block merge. A 30-SHA comparison of a workflow-level proxy agreed on 23 SHAs and is not used. <code>Storybook / app screenshots</code> is read from commit statuses."
+        person_caveat = "Monthly per-person cells are often n&lt;10. Rates sit next to the person's repo (app only, in this pilot) and size mix."
+        next_keep = "<li>Keep this pilot on <code>app</code> until the label check and the escape recall check are in. The other six repositories wait on that review.</li>"
+        bot_first = "First appearance in app: 15 Feb 2026, before the window (<code>#12483</code>)."
+        protection_html = (
+            "Classic branch protection is unset. Active ruleset "
+            f"\"{html.escape(str(main_rules.get('name') or ''))}\" targets the default branch, "
+            "requires 1 approving review, does not dismiss stale reviews on push, requires linear history, "
+            f"and requires the status checks listed in the method. Bypass actors: {bypass_txt}. "
+            "A disabled ruleset named \"no merges - active incident\" also exists."
+        )
+        dev_intro = "The pilot is one repo, so the repo mix column is app."
+        page_title = "App pilot: bot LGTM and human review"
+        dev_title = "Per-developer stats, app pilot"
+    else:
+        scope_html = (
+            f"Repository <code>foxglove/{html.escape(S.name)}</code>. "
+            "Pull requests opened 1 Apr 2026 through 30 Sep 2026. "
+            "The definitions match the app pilot."
+        )
+        draft_note = "the shared review workflow stops reviewing drafts unless opted in"
+        req_path = S.meta / "required_checks.json"
+        req_contexts: list[str] = []
+        if req_path.exists():
+            req_contexts = list(json.loads(req_path.read_text()).get("contexts") or [])
+        if req_contexts:
+            req_phrase = ", ".join(html.escape(c) for c in req_contexts)
+            ci_caveat = (
+                "The Checks API returns 403 for this token. Job conclusions come from Actions workflow runs. "
+                "A skipped required job counts as a pass, because GitHub reports it as Success and does not block merge. "
+                "A required name that is not a job name is read from commit statuses. "
+                f"Required checks: {req_phrase}."
+            )
+        else:
+            ci_caveat = (
+                "This repository has no required status checks on main. "
+                "The mergeable flag is true whenever the LGTM commit is known. "
+                "The Checks API returns 403 for this token."
+            )
+        person_caveat = f"Monthly per-person cells are often n&lt;10. This page is <code>{html.escape(S.name)}</code> only."
+        next_keep = (
+            f"<li>This page is <code>{html.escape(S.name)}</code> alone. "
+            "A model that pools the repositories is a later step. It is not in this report.</li>"
+        )
+        bot_first = "The reviewer is the shared <code>foxglove/actions</code> workflow. This page does not date its first comment in this repository."
+        review_n = None
+        for rule in main_rules.get("rules") or []:
+            if rule.get("type") == "pull_request":
+                review_n = (rule.get("parameters") or {}).get("required_approving_review_count")
+        if review_n is None and not main_rules:
+            protection_html = "No active branch ruleset was saved for this repository."
+        else:
+            review_phrase = (
+                f"requires {int(review_n)} approving review"
+                if review_n is not None
+                else "does not record a required approving review count in the saved ruleset"
+            )
+            protection_html = (
+                f"Active ruleset \"{html.escape(str(main_rules.get('name') or ''))}\" "
+                f"targets the default branch and {review_phrase}. "
+                f"Bypass actors: {bypass_txt}. Required check names are in the caveats."
+            )
+        dev_intro = f"This page is one repository, {html.escape(S.name)}."
+        page_title = f"{S.name}: bot LGTM and human review"
+        dev_title = f"Per-developer stats, {S.name}"
 
     body = f"""<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>App pilot: bot LGTM and human review</title>
+<html lang="en"><head><meta charset="utf-8"><title>{html.escape(page_title)}</title>
 <style>
 body {{ font-family: Helvetica, Arial, sans-serif; max-width: 980px; margin: 32px auto; color: #222; line-height: 1.5; }}
 h1,h2,h3 {{ line-height: 1.25; }}
@@ -736,17 +838,17 @@ td, th {{ border-bottom: 1px solid #ddd; padding: 4px 8px; text-align: left; }}
 code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 </style></head><body>
 <h1>Is the first bot LGTM becoming sufficient?</h1>
-<p>Pilot for <code>foxglove/app</code> only. Pull requests opened 1 Apr 2026 through 30 Sep 2026. The other six repositories are not in this draft.</p>
+<p>{scope_html}</p>
 <section class="assessment">
 <h2>Assessment</h2>
 <p><strong>This study does not answer whether the first LGTM is becoming sufficient month over month.</strong></p>
 <p>The level, on the definition below, is {suff_n} of {regions["n"]} merged human pull requests ({suff_pct:.0f}%). Each of those pull requests has a bot LGTM and shows neither bucket A nor bucket B. The month slope is about {reg.get('uncontrolled', {}).get('month_coef', float('nan')):.2f} with no controls and about {reg.get('controlled', {}).get('month_coef', float('nan')):.2f} with size and tenure. Both 95% intervals include zero. The fit also warned that it did not fully converge. A slope that includes zero, from a fit that did not settle, is not a trend.</p>
 <p>Four facts keep the month question open:</p>
 <ul>
-<li>April has 3 headline pull requests and May has 5. The exact comment <code>LGTM</code> starts on 18 Jun 2026, so the early months are a different signal.</li>
+<li>April has {apr_n} headline pull requests and May has {may_n}. The exact comment <code>LGTM</code> starts on 18 Jun 2026, so the early months are a different signal.</li>
 <li>The bot's model and prompt changed on 18 Jun, from 26 Jul to 28 Jul, and on 22 Sep. One slope across those changes mixes a definition change with a catch-rate change.</li>
 <li>September's 30-day follow-up was still open on 3 Oct 2026. Later fixes for September are still missing.</li>
-<li>Bucket B only counts a fix when the title looks like a fix and git blame can name the source pull request. Missed fixes would lower the sufficient share. The Linear sample matched 5 of 25 bug-ticket fix pull requests. Sentry is not connected.</li>
+<li>Bucket B only counts a fix when the title looks like a fix and git blame can name the source pull request. Missed fixes would lower the sufficient share. {html.escape(recall_sentence)} Sentry is not connected.</li>
 </ul>
 <p>{not_mergeable} of {known_n} headline pull requests were not mergeable at the first LGTM commit. {no_appr} merged with no human approval. Those two facts are about process. They do not identify a month trend.</p>
 </section>
@@ -783,7 +885,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <p>These charts describe the same pull requests. They do not turn the month coefficient into a trend. Gray points have fewer than 10 pull requests. The shaded month is September, whose follow-up window was still open.</p>
 {section_charts('suff','buckets','cats','cov')}
 <p>Uncontrolled: {html.escape(reg_line(reg.get('uncontrolled') or {}))}. With size and tenure: {html.escape(reg_line(reg.get('controlled') or {}))}. With engagement added: {html.escape(reg_line(reg.get('engagement') or {}))}.</p>
-<p>Bot config changes worth lining up with the chart: 18 Jun 2026 (the word LGTM, and app stops reviewing drafts unless opted in), 26 Jul to 28 Jul (Opus 5, then a return to Opus 4.8), 22 Sep (Opus 5.5 and inline-only findings). If the rate moves at those dates, the pool of LGTM'd pull requests changed definition, along with the bot's catch rate.</p>
+<p>Bot config changes worth lining up with the chart: 18 Jun 2026 (the word LGTM, and {html.escape(draft_note)}), 26 Jul to 28 Jul (Opus 5, then a return to Opus 4.8), 22 Sep (Opus 5.5 and inline-only findings). If the rate moves at those dates, the pool of LGTM'd pull requests changed definition, along with the bot's catch rate.</p>
 <h2>4. Time, catch value, counterfactual</h2>
 {section_charts('time','size','ecdf','funnel','stack','appr')}
 <p>Times are calendar hours between recorded timestamps. They include nights, weekends, and time waiting on the author or CI. They are total delay, not reviewer effort. A negative LGTM-to-approval time means the human approved before the bot's first LGTM; those PRs stay in the distribution.</p>
@@ -793,32 +895,32 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <li>Defect-catching only. Bot-sufficient does not mean human review has no other value.</li>
 <li>Reviewers see the LGTM and may comment less as trust grows. The engagement sensitivity check is there for that reason. The check is partly downstream of the same behavior that creates bucket A.</li>
 <li>Bucket A depends on the classifier. Bucket B depends on a fix-title and blame heuristic. Recall of that heuristic is estimated from Linear bug tickets when the escape step has run; Sentry is not connected, so recall is incomplete and B is a lower bound.</li>
-<li>The Checks API returns 403 for this token. Job conclusions are fetched for every selected workflow run. A skipped required job counts as a pass, because GitHub reports it as Success and does not block merge. A 30-SHA comparison of a workflow-level proxy agreed on 23 SHAs and is not used. <code>Storybook / app screenshots</code> is read from commit statuses.</li>
+<li>{ci_caveat}</li>
 <li>The ruleset audit log is 403. The required-check list and the one-approval rule are the ruleset as of its <code>updated_at</code> ({html.escape(str(main_rules.get('updated_at')))}), applied across the whole window.</li>
 <li>Current org membership is a snapshot of {member_phrase}. The audit log cannot separate people who left from external collaborators. The member list is not committed.</li>
 <li>Squash merges collapse the PR into one commit. B versus D uses the file text at the LGTM SHA and at the final head. Non-unique lines are low confidence and are not counted in the headline B or D rates.</li>
 <li>A-ci requires the review comment to mention CI, tests, or lint, because check logs are not readable. That under-counts A-ci.</li>
 <li>September's follow-up window runs only through 3 Oct 2026.</li>
 <li>The classifier is Grok, reading findings about a Claude review bot. Agreement with a hand-labeled sample is not computed until <code>labeling_sample.csv</code> is filled in.</li>
-<li>Monthly per-person cells are often n&lt;10. Rates sit next to the person's repo (app only, in this pilot) and size mix.</li>
+<li>{person_caveat}</li>
 </ul>
 <h2>6. Next steps</h2>
 <ol>
-<li>Hand-label <code>out/labeling_sample.csv</code> (100 findings). Compare those labels with the classifier before treating bucket A as settled. Cohen's kappa uses the empty columns <code>your_category</code> and <code>your_severity</code>.</li>
+<li>Hand-label <code>{html.escape(rel_out)}/labeling_sample.csv</code> (100 findings). Compare those labels with the classifier before treating bucket A as settled. Cohen's kappa uses the empty columns <code>your_category</code> and <code>your_severity</code>.</li>
 <li>Leave the month question open until two conditions hold. The LGTM definition stays stable for several months, and September's 30-day window has closed. Recompute September after 31 Oct 2026. Fit separate periods at 18 Jun, from 26 Jul to 28 Jul, and at 22 Sep, instead of one slope from April to September.</li>
-<li>Raise the recall of bucket B before reading 85% as a ceiling. Connect Sentry, or search for fixes beyond the title words, and rerun <code>scripts/escapes.py</code>. The current Linear sample found the fix pull request for 5 of 25 tickets.</li>
-<li>Keep this pilot on <code>app</code> until the label check and the escape recall check are in. The other six repositories wait on that review.</li>
+<li>Raise the recall of bucket B before reading the sufficient share as a ceiling. Connect Sentry, or search for fixes beyond the title words, and rerun <code>scripts/escapes.py</code>. {html.escape(recall_step)}</li>
+{next_keep}
 <li>Treat A-ci as incomplete until check logs are readable. The comment has to name CI, a test, or lint today.</li>
 </ol>
 <h2>7. Appendix</h2>
 <h3>Bot</h3>
-<p>Login: <code>claude[bot]</code> on REST, <code>claude</code> on GraphQL. The bot submits <code>COMMENT</code> reviews, never <code>APPROVE</code>. First appearance in app: 15 Feb 2026, before the window (<code>#12483</code>).</p>
+<p>Login: <code>claude[bot]</code> on REST, <code>claude</code> on GraphQL. The bot submits <code>COMMENT</code> reviews, never <code>APPROVE</code>. {bot_first}</p>
 <h3>Three LGTM examples</h3>
 <ul>
 {example_html}
 </ul>
 <h3>Branch protection</h3>
-<p>Classic branch protection is unset. Active ruleset "{html.escape(main_rules.get('name',''))}" targets the default branch, requires 1 approving review, does not dismiss stale reviews on push, requires linear history, and requires the status checks listed in the method. Bypass actors: {bypass_txt}. A disabled ruleset named "no merges - active incident" also exists.</p>
+<p>{protection_html}</p>
 <h3>Config changes in foxglove/actions during the window</h3>
 <ul>
 {''.join(f'<li>{html.escape(r["date"])} {html.escape(r["summary"])}</li>' for r in history.get('actions', []))}
@@ -827,27 +929,27 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 {examples(findings, prs)}
 <h3>Bucket examples</h3>
 {bucket_examples(prs, findings, escapes)}
-<p>Hand-label file: <code>out/labeling_sample.csv</code>. Classifier labels are not in that file. Cohen's kappa waits on the filled columns <code>your_category</code> and <code>your_severity</code>.</p>
+<p>Hand-label file: <code>{html.escape(rel_out)}/labeling_sample.csv</code>. Classifier labels are not in that file. Cohen's kappa waits on the filled columns <code>your_category</code> and <code>your_severity</code>.</p>
 </body></html>
 """
     (OUT / "report.html").write_text(body)
 
     # per-developer page keeps names; it is the only place they appear in a rendered report
     dev_html = f"""<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>Per-developer stats, app pilot</title>
+<html lang="en"><head><meta charset="utf-8"><title>{html.escape(dev_title)}</title>
 <style>
 body {{ font-family: Helvetica, Arial, sans-serif; max-width: 1100px; margin: 24px auto; color: #222; }}
 table {{ border-collapse: collapse; font-size: 12px; }}
 td, th {{ border-bottom: 1px solid #ddd; padding: 3px 6px; text-align: left; }}
 .chart svg {{ max-width: 100%; height: auto; }}
 </style></head><body>
-<h1>Per-developer stats for foxglove/app</h1>
-<p>Rates are shown for every person, including months with n&lt;10, and those cells are marked low-sample in the table. This is not a ranking. People who work on lower-risk code will show lower catch and escape rates. The pilot is one repo, so the repo mix column is app.</p>
+<h1>Per-developer stats for foxglove/{html.escape(S.name)}</h1>
+<p>Rates are shown for every person, including months with n&lt;10, and those cells are marked low-sample in the table. This is not a ranking. People who work on lower-risk code will show lower catch and escape rates. {dev_intro}</p>
 <div class="chart">{dev_svgs['heat']}</div>
 <div class="chart">{dev_svgs['scatter']}</div>
 <div class="chart">{dev_svgs['load']}</div>
 <h2>Author and reviewer table</h2>
-<p>One row per person per month, plus a six-month total (<code>month=all</code>). Sortable by opening the CSV <code>out/per_developer.csv</code>.</p>
+<p>One row per person per month, plus a six-month total (<code>month=all</code>). Sortable by opening the CSV <code>{html.escape(rel_out)}/per_developer.csv</code>.</p>
 {dev_table(dev)}
 </body></html>
 """
@@ -895,7 +997,7 @@ Bot-sufficient means no bucket A and no bucket B on a merged human pull request 
 - Merged with no human approval: {no_appr}
 - Not mergeable at the first bot LGTM commit: {not_mergeable} of {known_n} headline PRs with CI data. No CI data: {sha_unknown_n} PRs with an unknown LGTM commit after a rebase, {fetch_error_n} PRs whose CI fetch failed before any check result, and {no_file_n} PRs with no CI fetch result.
 
-The full reading, the Venn diagrams, and the next steps are in `out/report.html`. Per-developer stats are in `out/per-developer.html`.
+The full reading, the Venn diagrams, and the next steps are in `{rel_out}/report.html`. Per-developer stats are in `{rel_out}/per-developer.html`.
 
 September has a partial follow-up window. The LGTM string itself dates from 18 Jun 2026.
 """
