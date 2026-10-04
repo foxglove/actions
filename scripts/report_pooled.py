@@ -878,6 +878,9 @@ def main() -> None:
     xl_rest_wait = _approval(xl_app[xl_app["in_A"] != True])
     l_a_wait = _approval(l_app[l_app["in_A"] == True])
     l_rest_wait = _approval(l_app[l_app["in_A"] != True])
+    small_app = app_only[app_only["size_bucket"].isin(["XS", "S"])]
+    small_n = int(len(small_app))
+    small_a = int(small_app["in_A"].sum())
     p50_approval = hour_p50(head, "lgtm_to_approval_h")
     p50_merge = hour_p50(head, "lgtm_to_merge_h")
     p50_after = hour_p50(head, "approval_to_merge_h")
@@ -911,7 +914,7 @@ def main() -> None:
     body = f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>All repositories: bot LGTM and human review</title>
+<title>Speed and quality in review</title>
 <style>
 body {{ font-family: Helvetica, Arial, sans-serif; max-width: 980px; margin: 0 auto; padding: 16px 16px 72px; color: #222; line-height: 1.5; font-size: 16px; }}
 h1 {{ font-size: 1.45rem; line-height: 1.25; }}
@@ -971,9 +974,25 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
   table.def td::before {{ content: attr(data-label); display: block; font-size: 12px; color: #555; font-weight: 700; }}
 }}
 </style></head><body>
-<h1>Conclusion: keep human review, and the months are flat</h1>
-<p>All seven repositories. Pull requests opened 1 Apr 2026 through 30 Sep 2026.</p>
-<p class="nav"><a href="#path">The wait</a><a href="#change">What to change</a><a href="#helps">Where review helps</a><a href="#buckets">Buckets</a><a href="#app">Why app is lower</a></p>
+<h1>Speed and quality come from different pull requests</h1>
+<p>All seven repositories. Pull requests opened 1 Apr 2026 through 30 Sep 2026. The question is where a faster merge keeps the bugs a person catches, and where it drops them.</p>
+<p class="nav"><a href="#both">Speed and quality</a><a href="#path">The wait</a><a href="#helps">Where review helps</a><a href="#buckets">Buckets</a><a href="#app">Why app is lower</a></p>
+<section class="assessment" id="both">
+<h2>How to get both</h2>
+<p><strong>Keep the bot's fast pass. Keep the short CI gate. Spend the human hours on large app changes. Let small changes, and the other six repositories, move after the checks are green. Split the large app diffs.</strong></p>
+<h3>Speed is already in the first hour</h3>
+<p>The bot reaches LGTM in a median of {_clock(gantt["lgtm"])}. Required tests run during that stage. Their median length is {_clock((gantt["ci_minutes"] or 0) / 60)}. The slow stage is the person: {_clock(gantt["lgtm_appr"])} from LGTM to approval, then {_clock(gantt["appr_merge"])} to merge. The median from open to merge is {_clock(gantt["merge"])}.</p>
+<p>App CI is a median of {minute_phrase(wait["by_repo"]["app"]["p50"])}. {not_mergeable} of {n} first LGTM commits were not green. That wait stops a red build. It does not find bucket A.</p>
+<h3>Quality is a person, on a large app diff</h3>
+<p>{suff_n} of {n} headline pull requests are bot-sufficient ({pct(suff_n, n)}). From June through September that share stays near 88%. The months do not show it rising. Bot-sufficient means no bucket A and no bucket B.</p>
+<p>The person adds the bugs CI would have missed. That is bucket A: {a_pr_n} pull requests, {a_app_n} of them in app. Those pull requests carry {a_finding_all} comments. {a_bug_all} are bugs. {a_change_n} were followed by a commit that changed the file. On app, L is {pct(int(app_only.loc[app_only.size_bucket=='L','in_A'].sum()), int((app_only.size_bucket=='L').sum()))} and XL is {pct(int(app_only.loc[app_only.size_bucket=='XL','in_A'].sum()), int((app_only.size_bucket=='XL').sum()))}. XS is {int(app_only.loc[app_only.size_bucket=='XS','in_A'].sum())} of {int((app_only.size_bucket=='XS').sum())}, under 1%.</p>
+<p>{top_area_n} of {a_finding_n} app findings are in {html.escape(area_named)}. {green_a_n} of {mergeable_n} pull requests were already green at the LGTM and are still in bucket A. A green build is not the bug catch.</p>
+<p>Bucket B is a bug that still shipped. The blamed line was already in the LGTM commit, and a later fix merged within 30 days. B is {b_n} pull requests. {b_xl_n} are XL app changes. A longer review did not catch those lines.</p>
+<h3>Where speed and quality travel together</h3>
+<p>App changes under 200 lines are {small_n} headline pull requests and {small_a} bucket A catches ({pct(small_a, small_n)}). The other six repositories have {a_pr_n - a_app_n} bucket A catches in {six_n} headline pull requests. A lighter review there, after the required checks pass, is the speed. Limit it to one owned area. Revert quickly if production signals fail.</p>
+<p>On L and XL app changes, keep the person. For XL the median from LGTM to approval is {xl_a_wait} when there is a bucket A catch and {xl_rest_wait} when there is not. For L the medians are {l_a_wait} and {l_rest_wait}. That extra time includes the fix.</p>
+<p>Splitting an XL app change is the move that raises quality and shortens the wait. An S app change is {pct(int(app_only.loc[app_only.size_bucket=='S','in_A'].sum()), int((app_only.size_bucket=='S').sum()))} bucket A. An XL change is {pct(int(app_only.loc[app_only.size_bucket=='XL','in_A'].sum()), int((app_only.size_bucket=='XL').sum()))}. Point the bot at packages/app, packages/api, and packages/viz, and withhold LGTM on a large diff until it has looked for a bug.</p>
+</section>
 <h2 id="path">The path from open to merge</h2>
 <p>Stage 1 is open to the first bot LGTM. Tests run during stage 1. Stage 2 is the wait for a human approval. Stage 3 is approval to merge.</p>
 <p>The bars cover the {gantt["n"]} headline pull requests where a person approved after the bot. {gantt["appr_before"]} approvals came before the bot. Those pull requests are left off the bars.</p>
@@ -1142,7 +1161,13 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
     (OUT / "report.html").write_text(body)
     (OUT / "output.html").write_text(body)
     (OUT / "report.md").write_text(
-        f"""# Conclusion: keep human review, and the months are flat
+        f"""# Speed and quality come from different pull requests
+
+Keep the bot's fast pass. The median time to the first bot LGTM is {_clock(gantt["lgtm"])}, and required tests overlap that hour at {_clock((gantt["ci_minutes"] or 0) / 60)}. Keep the CI gate. App CI is {minute_phrase(wait["by_repo"]["app"]["p50"])}, and {not_mergeable} of {n} first LGTM commits were not green. That gate stops a red build. It does not find bucket A.
+
+Spend the human hours on large app changes. Bucket A is {a_pr_n} headline pull requests, {a_app_n} of them in app. XL app is {pct(int(app_only.loc[app_only.size_bucket=='XL','in_A'].sum()), int((app_only.size_bucket=='XL').sum()))} bucket A. App changes under 200 lines are {pct(small_a, small_n)}. The other six repositories have {a_pr_n - a_app_n} bucket A catches. A lighter review there, after checks pass, is the speed. Splitting an XL app diff is how one change gets both: fewer shipped bugs, and a shorter wait.
+
+Bucket B still shipped: {b_n} pull requests, {b_xl_n} of them XL app changes. A longer review did not catch those lines.
 
 Bucket C is the ordinary case: none of A, A-ci, B, or D. C is {slices["C"]} of {n} headline pull requests. Bot-sufficient is C plus D-only and A-ci-only, {suff_n} of {n}. A or B is the other {n - suff_n}. The funnel in the HTML puts those rows in order.
 
