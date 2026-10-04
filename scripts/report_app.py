@@ -754,11 +754,23 @@ def main() -> None:
     suff_pct = (100.0 * suff_n / regions["n"]) if regions["n"] else 0.0
     unc = reg.get("uncontrolled") or {}
     ctrl = reg.get("controlled") or {}
+
+    def slope_sentence(block: dict, label: str) -> str:
+        if not block or not block.get("ok"):
+            return f"The {label} model was not fit."
+        lo, hi = block["month_ci"]
+        side = "includes zero" if lo <= 0 <= hi else "excludes zero"
+        return (
+            f"the {label} coefficient is {block['month_coef']:.2f} "
+            f"(95% CI {lo:.2f} to {hi:.2f}, {side})"
+        )
+
     if unc.get("ok") and ctrl.get("ok"):
         slope_html = (
-            f"The month slope is about {unc['month_coef']:.2f} with no controls and about {ctrl['month_coef']:.2f} with size and tenure. "
-            "Both 95% intervals include zero. The fit also warned that it did not fully converge. "
-            "A slope that includes zero, from a fit that did not settle, is not a trend."
+            f"With no controls, {slope_sentence(unc, 'month')}. "
+            f"With size and tenure, {slope_sentence(ctrl, 'month')}. "
+            "The fit also warned that it did not fully converge. "
+            "A slope from a fit that did not settle is not a month trend."
         )
     else:
         fit_error = str(unc.get("error") or "no result")
