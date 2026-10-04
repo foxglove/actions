@@ -46,6 +46,7 @@ Run each step with `STUDY_REPO` set. Example: `STUDY_REPO=infra python3 scripts/
 7. `python3 scripts/escapes.py` — fix-title blame links. `--workers` defaults to 4.
 8. `python3 scripts/metrics.py` — tables and `summary.json`.
 9. `python3 scripts/report_app.py` — `report.html` and `per-developer.html`.
+10. `python3 scripts/report_pooled.py` — the seven-repository page at `out/pooled/report.html`. It reads the per-repository CSV files. It does not call GitHub. The primary model is `bot_sufficient ~ month + C(repo) + C(size) + C(tenure)`.
 
 ## Optional local files
 
