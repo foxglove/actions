@@ -10,6 +10,7 @@ from __future__ import annotations
 import html
 import json
 import warnings
+from datetime import datetime
 from pathlib import Path
 
 import matplotlib
@@ -486,6 +487,141 @@ def examples(head: pd.DataFrame, flag: str) -> str:
     return "<ul>" + "".join(bits) + "</ul>"
 
 
+APP_CI_PATHS = {
+    ".github/workflows/ci.yml",
+    ".github/workflows/playwright.yml",
+    ".github/workflows/storybook.yml",
+}
+
+
+def _parse_ts(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def minute_phrase(value: float | None) -> str:
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return "no required checks"
+    if value < 1:
+        return f"{value:.1f} min"
+    return f"{value:.0f} min"
+
+
+def ci_wait(head: pd.DataFrame) -> dict:
+    """Wall-clock minutes of required pull_request workflows on the first LGTM commit."""
+    rows = []
+    app_parts: dict[str, list[float]] = {path: [] for path in APP_CI_PATHS}
+    for repo in REPOS:
+        ci = ROOT / "data" / "raw" / repo / "ci"
+        req_path = ROOT / "data" / "raw" / repo / "meta" / "required_checks.json"
+        contexts: set[str] = set()
+        if req_path.exists():
+            contexts = set(json.loads(req_path.read_text()).get("contexts") or [])
+        for number in head.loc[head["repo"] == repo, "number"].astype(int):
+            eval_path = ci / "eval" / f"{number}.json"
+            if not eval_path.exists():
+                continue
+            evals = json.loads(eval_path.read_text()).get("evals") or []
+            if not evals:
+                continue
+            first = evals[0]
+            runs_path = ci / "runs" / f"{first['sha']}.json"
+            if not runs_path.exists():
+                rows.append({"repo": repo, "wall": None, "first_passed": bool(first.get("passed"))})
+                continue
+            runs = json.loads(runs_path.read_text()).get("workflow_runs") or []
+            picked: dict[str, dict] = {}
+            for run in runs:
+                if run.get("event") != "pull_request":
+                    continue
+                path = run.get("path") or ""
+                if repo == "app" and path not in APP_CI_PATHS:
+                    continue
+                if repo != "app" and not contexts:
+                    continue
+                good = 1 if run.get("conclusion") in ("success", "failure") else 0
+                rank = (good, run.get("updated_at") or "")
+                prev = picked.get(path)
+                if prev is None or rank > (
+                    1 if prev.get("conclusion") in ("success", "failure") else 0,
+                    prev.get("updated_at") or "",
+                ):
+                    picked[path] = run
+            if repo != "app" and contexts:
+                kept = {}
+                for path, run in picked.items():
+                    job_path = ci / "jobs" / f"{run['id']}.json"
+                    if not job_path.exists():
+                        continue
+                    names = {job.get("name") for job in json.loads(job_path.read_text()).get("jobs") or []}
+                    wf = run.get("name") or ""
+                    if names & contexts or any(f"{wf} / {name}" in contexts for name in names):
+                        kept[path] = run
+                picked = kept
+            starts = []
+            ends = []
+            for path, run in picked.items():
+                start = _parse_ts(run.get("run_started_at") or run.get("created_at"))
+                end = _parse_ts(run.get("updated_at"))
+                if start is None or end is None or end < start:
+                    continue
+                starts.append(start)
+                ends.append(end)
+                if repo == "app":
+                    app_parts[path].append((end - start).total_seconds() / 60.0)
+            wall = (max(ends) - min(starts)).total_seconds() / 60.0 if starts else None
+            rows.append({"repo": repo, "wall": wall, "first_passed": bool(first.get("passed"))})
+    frame = pd.DataFrame(rows)
+    by_repo = {}
+    for repo in REPOS:
+        group = frame[frame["repo"] == repo] if len(frame) else frame
+        walls = group["wall"].dropna() if len(group) else pd.Series(dtype=float)
+        by_repo[repo] = {
+            "n": int(len(group)),
+            "not_green": int((group["first_passed"] == False).sum()) if len(group) else 0,
+            "p50": float(walls.median()) if len(walls) else None,
+            "p90": float(walls.quantile(0.9)) if len(walls) else None,
+        }
+
+    def part(path: str) -> float | None:
+        series = pd.Series(app_parts[path], dtype=float)
+        return float(series.median()) if len(series) else None
+
+    green = head[head["mergeable_at_lgtm"] == True]["lgtm_to_merge_h"].dropna()
+    red = head[head["mergeable_at_lgtm"] == False]["lgtm_to_merge_h"].dropna()
+    return {
+        "by_repo": by_repo,
+        "app_ci": part(".github/workflows/ci.yml"),
+        "app_playwright": part(".github/workflows/playwright.yml"),
+        "app_storybook": part(".github/workflows/storybook.yml"),
+        "green_to_merge_p50": float(green.median()) if len(green) else None,
+        "red_to_merge_p50": float(red.median()) if len(red) else None,
+    }
+
+
+def ci_table(wait: dict) -> str:
+    rows = []
+    for repo in REPOS:
+        block = wait["by_repo"][repo]
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(repo)}</td>"
+            f"<td>{block['n']}</td>"
+            f"<td>{block['not_green']}</td>"
+            f"<td>{minute_phrase(block['p50'])}</td>"
+            f"<td>{minute_phrase(block['p90'])}</td>"
+            "</tr>"
+        )
+    return (
+        "<table><thead><tr><th>Repository</th><th>Headline</th>"
+        "<th>First LGTM commit not green</th><th>CI median</th><th>CI p90</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+
+
 def main() -> None:
     prs = load_prs()
     findings = load_findings()
@@ -493,6 +629,28 @@ def main() -> None:
     six = head[head["repo"] != "app"].copy()
     regions = overlap_counts(head)
     slices = exclusive_buckets(head)
+    wait = ci_wait(head)
+    on_headline = pd.Series(
+        [(repo, int(pr)) in set(zip(head["repo"], head["number"].astype(int))) for repo, pr in zip(findings["repo"], findings["pr"])],
+        index=findings.index,
+    )
+    comments = findings.loc[on_headline]
+    after_comments = comments[comments["timing"] == "after"]
+    real_after = after_comments[after_comments["is_real"] == True]
+    defect_after = real_after[
+        real_after["category"].isin(["BUG", "SECURITY", "DATA_LOSS_OR_CORRUPTION"])
+        & real_after["severity"].isin(["medium", "high"])
+    ]
+    comment_counts = {
+        "on_headline": int(len(comments)),
+        "after": int(len(after_comments)),
+        "real_after": int(len(real_after)),
+        "nit_after": int((real_after["category"] == "NIT/STYLE").sum()),
+        "mh_defect": int(len(defect_after)),
+        "bucket_a": int((comments["bucket_a"] == True).sum()),
+        "bucket_aci": int((comments["bucket_a_ci"] == True).sum()),
+    }
+    comment_counts["entered"] = comment_counts["bucket_a"] + comment_counts["bucket_aci"]
     opened_n = int((prs["in_cohort"] == True).sum())
     human_merged_n = int(
         ((prs["in_cohort"] == True) & (prs["author_type"] == "human") & (prs["merged"] == True)).sum()
@@ -620,7 +778,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <p>{suff_n} of {n} headline pull requests are bot-sufficient ({pct(suff_n, n)}). Bot-sufficient means neither bucket A nor bucket B. Bucket C is {slices["C"]} of those {suff_n}. C is the usual case: no A, no A-ci, no B, and no D. The funnel below counts every bucket, including C. The other {n - suff_n} pull requests are in A or B.</p>
 <p>On app, {app_miss} of {app_n} headline pull requests are in A or B ({pct(app_miss, app_n)}). Keep the human approval there.</p>
 <p>On actions, mcap, foxglove-sdk, infra, infra-admin, and data-platform, {six_miss} of {six_n} are in A or B ({pct(six_miss, six_n)}). A lighter pilot fits that group. Limit it to one area with one owner. Merge only after required checks pass. Revert quickly if production signals fail. Keep it a pilot until that pilot has a result.</p>
-<p>{not_mergeable} of {len(known)} headline pull requests were not mergeable at the first LGTM commit. Required checks were still failing, or had not run. Wait for those checks. Among the {mergeable_n} pull requests that were already mergeable at that commit, {mergeable_miss} are still in A or B ({pct(mergeable_miss, mergeable_n)}). Green CI plus a bot LGTM still leaves about one in ten for a human to catch.</p>
+<p>{not_mergeable} of {len(known)} headline pull requests were not mergeable at the first LGTM commit. Required checks were still failing, or had not run. Wait for those checks. On app that wait is a median of {minute_phrase(wait["by_repo"]["app"]["p50"])}. It blocks a red build. It does not catch bucket A. Bucket A is a label on a human comment, and those comments are the bugs CI would not have caught. Among the {mergeable_n} pull requests that were already mergeable at that commit, {mergeable_miss} are still in A or B ({pct(mergeable_miss, mergeable_n)}).</p>
 <p>The wait is the human approval. Median time from LGTM to the first human approval is {hour_phrase(p50_approval)}. Median time from that approval to merge is {hour_phrase(p50_after)}. Median time from LGTM to merge is {hour_phrase(p50_merge)}. These are calendar hours. They include nights and weekends. {no_appr} headline pull requests merged with no human approval. That group is too small for a comparison.</p>
 <h2>How the months are moving</h2>
 <p><strong>From June through September the bot-sufficient share stays near 88%. This study does not show it rising or falling.</strong></p>
@@ -665,6 +823,26 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
     ("B only", slices["B_only"], PURPLE),
     ("A and B", slices["AB"], "#000000"),
 ], n)}</div>
+<h2>How long we wait for CI, and whether it is worth it</h2>
+<p>The clock below is the wall-clock time of the required pull_request workflows on the first LGTM commit. Workflows run together, so the wait is the span from the earliest start to the latest finish, not the sum of the jobs. actions has no required checks, so it has no CI gate.</p>
+{ci_table(wait)}
+<p>On app the three required workflows overlap. Storybook is the long one, at a median of {minute_phrase(wait["app_storybook"])}. The main CI workflow is {minute_phrase(wait["app_ci"])}. Playwright is {minute_phrase(wait["app_playwright"])}. Together they take a median of {minute_phrase(wait["by_repo"]["app"]["p50"])}, and the 90th percentile is {minute_phrase(wait["by_repo"]["app"]["p90"])}.</p>
+<p><strong>The CI wait is worth it as a gate on a red build. It is not worth treating as the bug catch.</strong> {not_mergeable} of {n} first LGTM commits were not green. Merging at the LGTM without that wait would merge those commits with a failing or missing required check. When the commit was already green, the median calendar time from LGTM to merge is {hour_phrase(wait["green_to_merge_p50"])}. When it was not green, that median is {hour_phrase(wait["red_to_merge_p50"])}. Those are calendar hours. They include nights, more commits, and the human approval. They are not extra hours of CI compute.</p>
+<p>The human approval is the longer wait. Its median is {hour_phrase(p50_approval)}. App CI is about {minute_phrase(wait["by_repo"]["app"]["p50"])}. The comment record agrees that CI is not where the bugs in this study are found. {comment_counts["bucket_aci"]} comments are A-ci: the comment names a check that was already failing. {comment_counts["bucket_a"]} comments are bucket A: a real medium or high bug, security issue, or data-loss comment that CI at that commit would not have caught.</p>
+<h2>How bugs were classified from comments</h2>
+<p>A bug in this study is a label on a human comment. It is not a ticket from Linear or Sentry. The comment is a review comment, a review body, or an issue comment. The author of the pull request is excluded. The bot is excluded. Each comment is marked before or after the first bot LGTM.</p>
+<p>The classifier read the comment, the diff hunk, and the replies. It assigned a category, a severity, whether the issue is real, and a one-line rationale. It was not told which side of the LGTM the comment sat on. A label is real only when the hunk or a reply shows a real issue. A medium or high bug, security issue, or data-loss label needs that support. A nit, a question, or a style note stays out of bucket A.</p>
+<p>Bucket A keeps a comment only when all of these hold. It is after the LGTM. It is real. It is a bug, a security issue, or data loss. The severity is medium or high. The author acknowledged it, or a later commit changed that file. If the comment also names CI, a test, or lint, and a required check was already failing, the comment is A-ci instead.</p>
+<p>Bucket B and bucket D do not come from this comment pass. They come from a later pull request whose title looks like a fix, then from git blame on the lines that fix changed.</p>
+<p>Read this funnel from top to bottom. Each row is inside the row above it. The last row is the comments that became bucket A or A-ci.</p>
+<div class="chart">{funnel_svg([
+    ("Human comments on headline pull requests", "Review comments, review bodies, and issue comments", comment_counts["on_headline"]),
+    ("After the first bot LGTM", "Comments before the LGTM stay out of A", comment_counts["after"]),
+    ("Marked real", "The hunk or a reply shows a real issue", comment_counts["real_after"]),
+    ("Medium or high bug, security, or data loss", "Nits and questions are out", comment_counts["mh_defect"]),
+    ("Became A or A-ci", "Author ack or a later edit of that file", comment_counts["entered"]),
+])}</div>
+<p>{comment_counts["bucket_a"]} of those last-row comments are bucket A. {comment_counts["bucket_aci"]} are A-ci. {comment_counts["nit_after"]} real comments after the LGTM are nits, and they do not enter A. The app labels and the other repositories' labels were separate passes with the same rubric. Hand labels in <code>labeling_sample.csv</code> are still empty, so a second reader has not checked the agreement.</p>
 <h2>Why app is lower, and how to shift left</h2>
 <p>App is {pct(app_n - app_miss, app_n)} bot-sufficient ({app_n - app_miss} of {app_n}). The other six repositories together are {pct(six_suff, six_n)} ({six_suff} of {six_n}). The 88% line in the month chart is all seven repositories together, and app is most of that count.</p>
 <p>App pull requests are larger. The median app headline pull request is {int(app_only['lines'].median())} lines. The median in the other six is {int(other_only['lines'].median())} lines. Size buckets are XS under 50 lines, S under 200, M under 500, L under 1,000, and XL at 1,000 or more.</p>
@@ -751,6 +929,8 @@ From June through September the bot-sufficient share stays near 88%: {jun_phrase
 Median time from LGTM to the first human approval is {hour_phrase(p50_approval)}. Median time from that approval to merge is {hour_phrase(p50_after)}.
 
 App is {pct(app_n - app_miss, app_n)} bot-sufficient. The other six are {pct(six_suff, six_n)}. App's median headline pull request is {int(app_only['lines'].median())} lines. Theirs is {int(other_only['lines'].median())} lines. L and XL app pull requests are {large_miss} of {app_miss_n} app misses. Shift left by splitting those changes, and by aiming tests and the bot at {html.escape(area_phrase)}.
+
+Required CI on the first LGTM commit takes a median of {minute_phrase(wait["by_repo"]["app"]["p50"])} on app. {not_mergeable} of {n} of those commits were not green. That wait is worth it as a gate on a red build. It does not catch bucket A. Bucket A is a label on a human comment: {comment_counts["bucket_a"]} comments passed the rubric, and {comment_counts["bucket_aci"]} named a check that was already failing.
 
 The full reading and the Venn diagrams are in `{rel}/report.html`.
 
