@@ -357,7 +357,7 @@ def main() -> None:
     if links:
         pd.DataFrame(links).drop(columns=["presence"], errors="ignore").to_csv(OUT / "escapes.csv", index=False)
     else:
-        pd.DataFrame().to_csv(OUT / "escapes.csv", index=False)
+        pd.DataFrame(columns=["fix_pr", "intro_pr"]).to_csv(OUT / "escapes.csv", index=False)
 
     cohort = [p for p in pr_rows if p.get("in_cohort")]
     human_cohort = [p for p in cohort if p.get("author_type") == "human"]

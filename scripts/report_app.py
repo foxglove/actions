@@ -626,7 +626,13 @@ def main() -> None:
     comp = pd.read_csv(OUT / "approval_comparison.csv")
     dev = pd.read_csv(OUT / "per_developer.csv")
     summary = json.loads((OUT / "summary.json").read_text())
-    escapes = pd.read_csv(OUT / "escapes.csv") if (OUT / "escapes.csv").exists() else pd.DataFrame()
+    escapes = pd.DataFrame()
+    escapes_path = OUT / "escapes.csv"
+    if escapes_path.exists() and escapes_path.stat().st_size > 0:
+        try:
+            escapes = pd.read_csv(escapes_path)
+        except pd.errors.EmptyDataError:
+            escapes = pd.DataFrame()
     history_path = S.meta / "bot_history.json"
     if not history_path.exists():
         history_path = ROOT / "data" / "raw" / "app" / "meta" / "bot_history.json"
@@ -740,6 +746,21 @@ def main() -> None:
     venn_aci_svg = venn_aci(regions)
     suff_n = regions["sufficient"]
     suff_pct = (100.0 * suff_n / regions["n"]) if regions["n"] else 0.0
+    unc = reg.get("uncontrolled") or {}
+    ctrl = reg.get("controlled") or {}
+    if unc.get("ok") and ctrl.get("ok"):
+        slope_html = (
+            f"The month slope is about {unc['month_coef']:.2f} with no controls and about {ctrl['month_coef']:.2f} with size and tenure. "
+            "Both 95% intervals include zero. The fit also warned that it did not fully converge. "
+            "A slope that includes zero, from a fit that did not settle, is not a trend."
+        )
+    else:
+        slope_html = (
+            "The month model was not fit "
+            f"({html.escape(str(unc.get('error') or 'no result'))}). "
+            "The fit needs at least 30 headline pull requests and both outcomes. "
+            "This repository cannot support that slope."
+        )
     rel_out = "out" if S.name == "app" else f"out/{S.name}"
     if "month" in merged_lgtm.columns and len(merged_lgtm):
         apr_n = int((merged_lgtm["month"] == "2026-04").sum())
@@ -842,7 +863,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <section class="assessment">
 <h2>Assessment</h2>
 <p><strong>This study does not answer whether the first LGTM is becoming sufficient month over month.</strong></p>
-<p>The level, on the definition below, is {suff_n} of {regions["n"]} merged human pull requests ({suff_pct:.0f}%). Each of those pull requests has a bot LGTM and shows neither bucket A nor bucket B. The month slope is about {reg.get('uncontrolled', {}).get('month_coef', float('nan')):.2f} with no controls and about {reg.get('controlled', {}).get('month_coef', float('nan')):.2f} with size and tenure. Both 95% intervals include zero. The fit also warned that it did not fully converge. A slope that includes zero, from a fit that did not settle, is not a trend.</p>
+<p>The level, on the definition below, is {suff_n} of {regions["n"]} merged human pull requests ({suff_pct:.0f}%). Each of those pull requests has a bot LGTM and shows neither bucket A nor bucket B. {slope_html}</p>
 <p>Four facts keep the month question open:</p>
 <ul>
 <li>April has {apr_n} headline pull requests and May has {may_n}. The exact comment <code>LGTM</code> starts on 18 Jun 2026, so the early months are a different signal.</li>
@@ -955,7 +976,7 @@ td, th {{ border-bottom: 1px solid #ddd; padding: 3px 6px; text-align: left; }}
 """
     (OUT / "per-developer.html").write_text(dev_html)
     (OUT / "report.md").write_text(
-        markdown_summary(summary, len(merged_lgtm), no_appr, not_mergeable, known_n, sha_unknown_n, fetch_error_n, no_file_n, reg_line)
+        markdown_summary(summary, len(merged_lgtm), no_appr, not_mergeable, known_n, sha_unknown_n, fetch_error_n, no_file_n, reg_line, rel_out)
     )
     print("wrote report", flush=True)
 
@@ -983,7 +1004,7 @@ def dev_table(dev: pd.DataFrame) -> str:
     return show.to_html(index=False, float_format=lambda v: f"{v:.2f}")
 
 
-def markdown_summary(summary, n, no_appr, not_mergeable, known_n, sha_unknown_n, fetch_error_n, no_file_n, reg_line) -> str:
+def markdown_summary(summary, n, no_appr, not_mergeable, known_n, sha_unknown_n, fetch_error_n, no_file_n, reg_line, rel_out) -> str:
     reg = summary.get("regressions", {})
     return f"""# Is the first bot LGTM becoming sufficient?
 
