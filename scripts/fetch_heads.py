@@ -1,7 +1,9 @@
-"""Fetch PR head commits for foxglove/app so blame and path diffs do not lazy-fetch.
+"""Fetch PR head commits so blame and path diffs do not lazy-fetch.
 
-The local clone is blob:none and only has main. Squash-merge SHAs are on main;
-the pre-merge head and its ancestors are not, until refs/pull/N/head is fetched.
+The local clone is blob:none and only has the default branch. Squash-merge SHAs
+are on that branch. The pre-merge head is not, until refs/pull/N/head is fetched.
+STUDY_REPO selects the repository and the clone. The app clone stays
+/tmp/foxglove-app unless FOXGLOVE_APP_CLONE is set.
 """
 
 from __future__ import annotations
@@ -11,12 +13,13 @@ import subprocess
 import time
 from pathlib import Path
 
-from common import fetch_prs_running, git_cred_helper, git_env, study_repo
+from common import current_study, fetch_prs_running, git_cred_helper, git_env
 
-ROOT = Path(__file__).resolve().parents[1]
-PRS = ROOT / "data" / "raw" / "app" / "prs"
-FAILED = ROOT / "data" / "raw" / "app" / "meta" / "head_fetch_failed.json"
-REPO = study_repo()
+S = current_study()
+ROOT = S.root
+PRS = S.prs
+FAILED = S.meta / "head_fetch_failed.json"
+REPO = S.clone
 BATCH = 40
 
 

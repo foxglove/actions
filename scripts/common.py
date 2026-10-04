@@ -298,8 +298,102 @@ def load_ci_index(eval_dir: Path) -> dict[int, dict]:
     return out
 
 
+ORG = "foxglove"
+# The app pilot already wrote interim tables and the report at data/interim and out/.
+# Other repositories use data/interim/<repo> and out/<repo> so they do not overwrite it.
+STUDY_REPOS = (
+    "app",
+    "data-platform",
+    "infra",
+    "infra-admin",
+    "mcap",
+    "foxglove-sdk",
+    "actions",
+)
+
+
+class Study:
+    def __init__(self, name: str, root: Path):
+        self.name = name
+        self.root = root
+        self.raw = root / "data" / "raw" / name
+        self.prs = self.raw / "prs"
+        self.ci = self.raw / "ci"
+        self.meta = self.raw / "meta"
+        if name == "app":
+            self.interim = root / "data" / "interim"
+            self.out = root / "out"
+            clone = os.environ.get("FOXGLOVE_APP_CLONE", "/tmp/foxglove-app")
+        else:
+            self.interim = root / "data" / "interim" / name
+            self.out = root / "out" / name
+            clone = os.environ.get("STUDY_CLONE", f"/tmp/foxglove-{name}")
+        self.clone = Path(clone)
+
+    @property
+    def api(self) -> str:
+        return f"/repos/{ORG}/{self.name}"
+
+    @property
+    def slug(self) -> str:
+        return f"{ORG}/{self.name}"
+
+
+def study_name() -> str:
+    name = os.environ.get("STUDY_REPO", "app").strip()
+    if name not in STUDY_REPOS:
+        raise SystemExit("STUDY_REPO must be one of: " + ", ".join(STUDY_REPOS))
+    return name
+
+
+def current_study() -> Study:
+    return Study(study_name(), Path(__file__).resolve().parents[1])
+
+
 def study_repo() -> Path:
-    return Path(os.environ.get("FOXGLOVE_APP_CLONE", "/tmp/foxglove-app"))
+    return current_study().clone
+
+
+def required_check_contexts(rulesets: list | None, protection: dict | None = None) -> list[str]:
+    """Required check names on the default branch.
+
+    An active branch ruleset that targets the default branch wins.
+    Classic branch protection is used only when no ruleset lists a check.
+    """
+    found: list[str] = []
+    seen: set[str] = set()
+
+    def add(ctx: str | None) -> None:
+        if ctx and ctx not in seen:
+            seen.add(ctx)
+            found.append(ctx)
+
+    for rs in rulesets or []:
+        if rs.get("enforcement") != "active" or rs.get("target") != "branch":
+            continue
+        include = ((rs.get("conditions") or {}).get("ref_name") or {}).get("include") or []
+        if "~DEFAULT_BRANCH" not in include and "refs/heads/main" not in include:
+            continue
+        for rule in rs.get("rules") or []:
+            if rule.get("type") != "required_status_checks":
+                continue
+            checks = (rule.get("parameters") or {}).get("required_status_checks") or []
+            for check in checks:
+                add(check.get("context") if isinstance(check, dict) else None)
+    if found:
+        return found
+    if not protection or protection.get("_status") == 404:
+        return []
+    block = protection.get("required_status_checks") or {}
+    for check in block.get("checks") or []:
+        if isinstance(check, dict):
+            add(check.get("context"))
+        elif isinstance(check, str):
+            add(check)
+    for ctx in block.get("contexts") or []:
+        if isinstance(ctx, str):
+            add(ctx)
+    return found
 
 
 def git_cred_helper() -> str:

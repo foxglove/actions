@@ -18,6 +18,7 @@ from common import (
     CI_REF_RE,
     MONTHS,
     SIZE_ORDER,
+    current_study,
     hours_between,
     load_ci_index,
     month_index,
@@ -26,9 +27,10 @@ from common import (
     wilson_interval,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
-INTERIM = ROOT / "data" / "interim"
-OUT = ROOT / "out"
+S = current_study()
+ROOT = S.root
+INTERIM = S.interim
+OUT = S.out
 DEFECTS = {"BUG", "SECURITY", "DATA_LOSS_OR_CORRUPTION"}
 WEIGHT = {"high": 3, "medium": 2, "low": 1}
 
@@ -44,7 +46,7 @@ def read_jsonl(path: Path) -> list[dict]:
 
 
 def ci_index() -> dict[int, dict]:
-    return load_ci_index(ROOT / "data" / "raw" / "app" / "ci" / "eval")
+    return load_ci_index(S.ci / "eval")
 
 
 def load_labels() -> dict[str, dict]:
@@ -81,7 +83,7 @@ def recall_estimate(links: list[dict]) -> dict:
     This is candidate-filter recall, not a full trace to the introducing commit.
     Tickets that name an introducer are checked separately. Sentry is not connected.
     """
-    path = ROOT / "data" / "raw" / "app" / "meta" / "linear_recall.json"
+    path = S.meta / "linear_recall.json"
     if not path.exists():
         return {"available": False, "reason": "no linear sample"}
     sample = json.loads(path.read_text())
@@ -355,7 +357,7 @@ def main() -> None:
     if links:
         pd.DataFrame(links).drop(columns=["presence"], errors="ignore").to_csv(OUT / "escapes.csv", index=False)
     else:
-        pd.DataFrame().to_csv(OUT / "escapes.csv", index=False)
+        pd.DataFrame(columns=["fix_pr", "intro_pr"]).to_csv(OUT / "escapes.csv", index=False)
 
     cohort = [p for p in pr_rows if p.get("in_cohort")]
     human_cohort = [p for p in cohort if p.get("author_type") == "human"]
@@ -488,7 +490,13 @@ def main() -> None:
         ]
     )
     regressions = {}
-    if len(reg_df) >= 30 and reg_df["bot_sufficient"].nunique() > 1:
+    if len(reg_df) < 30:
+        skip_reason = f"n={len(reg_df)}"
+    elif reg_df["bot_sufficient"].nunique() < 2:
+        skip_reason = f"n={len(reg_df)}; every headline pull request has the same outcome"
+    else:
+        skip_reason = None
+    if skip_reason is None:
         regressions["uncontrolled"] = fit_logit(reg_df, "bot_sufficient ~ month_index")
         regressions["controlled"] = fit_logit(
             reg_df,
@@ -499,7 +507,10 @@ def main() -> None:
             "bot_sufficient ~ month_index + C(size_bucket, Treatment(reference='S')) + C(tenure_bucket, Treatment(reference='2y+')) + substantive_comments_after",
         )
     else:
-        regressions["uncontrolled"] = {"ok": False, "error": f"n={len(reg_df)}"}
+        skipped = {"ok": False, "error": skip_reason}
+        regressions["uncontrolled"] = skipped
+        regressions["controlled"] = dict(skipped)
+        regressions["engagement"] = dict(skipped)
 
     # category mix after LGTM by month
     cat_rows = []
@@ -549,7 +560,7 @@ def main() -> None:
         for f in by_pr_findings.get(int(p["number"]), []):
             people.add(f.get("login"))
     people.discard(None)
-    members_path = ROOT / "data" / "raw" / "app" / "meta" / "members.json"
+    members_path = S.meta / "members.json"
     member_logins = set()
     if members_path.exists():
         member_logins = {row.get("login") for row in json.loads(members_path.read_text()) if row.get("login")}

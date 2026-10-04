@@ -1,4 +1,4 @@
-"""SZZ-style escape detection for foxglove/app.
+"""SZZ-style escape detection for the study repository.
 
 Candidate fixes are merged PRs whose title indicates a fix, hotfix, regression, or
 revert, or whose title/body references another pull request. For each removed line
@@ -21,11 +21,12 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
-from common import FIX_TITLE_RE, PR_REF_RE, git_cred_helper, git_env, load_ci_index, parse_ts, study_repo
+from common import FIX_TITLE_RE, PR_REF_RE, current_study, git_cred_helper, git_env, load_ci_index, parse_ts
 
-ROOT = Path(__file__).resolve().parents[1]
-INTERIM = ROOT / "data" / "interim"
-REPO = study_repo()
+S = current_study()
+ROOT = S.root
+INTERIM = S.interim
+REPO = S.clone
 OUT = INTERIM / "escapes.jsonl"
 
 PR_IN_SUBJECT = re.compile(r"\(#(\d{3,6})\)\s*$")
@@ -205,7 +206,7 @@ def line_present(text: str | None, line: str) -> str:
 
 def load_counterfactual() -> dict[int, dict]:
     """First green SHA at or after the first bot LGTM, while LGTM still stands."""
-    return load_ci_index(ROOT / "data" / "raw" / "app" / "ci" / "eval")
+    return load_ci_index(S.ci / "eval")
 
 
 def candidate(pr: dict) -> bool:

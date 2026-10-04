@@ -28,15 +28,16 @@ from common import (
     first_lgtm_sha,
     parse_ts,
     size_bucket,
-    study_repo,
     tenure_bucket,
+    current_study,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
-PRS_DIR = ROOT / "data" / "raw" / "app" / "prs"
-META = ROOT / "data" / "raw" / "app" / "meta"
-INTERIM = ROOT / "data" / "interim"
-GIT_LOG = study_repo()
+S = current_study()
+ROOT = S.root
+PRS_DIR = S.prs
+META = S.meta
+INTERIM = S.interim
+GIT_LOG = S.clone
 
 NOREPLY_RE = re.compile(r"^(?:\d+\+)?([A-Za-z0-9-]+)@users\.noreply\.github\.com$", re.I)
 SHORT_ACK_RE = re.compile(

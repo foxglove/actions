@@ -9,3 +9,4 @@ __pycache__/
 data/raw/
 data/interim/
 out/
+foxglove-pr-review-study.tar.gz

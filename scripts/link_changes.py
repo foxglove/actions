@@ -7,11 +7,12 @@ import subprocess
 from collections import defaultdict
 from pathlib import Path
 
-from common import git_cred_helper, git_env, study_repo
+from common import current_study, git_cred_helper, git_env
 
-ROOT = Path(__file__).resolve().parents[1]
-INTERIM = ROOT / "data" / "interim"
-REPO = study_repo()
+S = current_study()
+ROOT = S.root
+INTERIM = S.interim
+REPO = S.clone
 
 
 def name_only(sha_a: str, sha_b: str) -> set[str] | None:

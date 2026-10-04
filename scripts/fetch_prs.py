@@ -1,11 +1,7 @@
-"""Cache foxglove/app pull requests opened on or after 2026-04-01.
+"""Cache pull requests opened on or after 2026-04-01.
 
-Raw responses:
-  data/raw/app/pulls_pages/page_NNNN.json
-  data/raw/app/graphql/batch_NNNN.json
-  data/raw/app/prs/<number>.json
-  data/raw/app/meta/members.json
-  data/raw/app/meta/rulesets.json
+STUDY_REPO selects the repository (default app). Raw files land in data/raw/<repo>/.
+The app pilot paths stay data/raw/app/.
 """
 
 from __future__ import annotations
@@ -15,10 +11,12 @@ import sys
 import time
 from pathlib import Path
 
+from common import current_study, required_check_contexts
 from ghutil import GitHub, GitHubError
 
-ROOT = Path(__file__).resolve().parents[1]
-RAW = ROOT / "data" / "raw" / "app"
+S = current_study()
+ROOT = S.root
+RAW = S.raw
 PAGES = RAW / "pulls_pages"
 GRAPHQL_DIR = RAW / "graphql"
 PRS = RAW / "prs"
@@ -185,17 +183,18 @@ fragment PRFields on PullRequest {
 }
 """
 
-BATCH_QUERY = (
-    PR_FRAGMENT
-    + """
-query {
-  rateLimit { cost remaining resetAt }
-  repository(owner: "foxglove", name: "app") {
-    %s
-  }
-}
+def batch_query(selection: str) -> str:
+    return (
+        PR_FRAGMENT
+        + f"""
+query {{
+  rateLimit {{ cost remaining resetAt }}
+  repository(owner: "foxglove", name: "{S.name}") {{
+    {selection}
+  }}
+}}
 """
-)
+    )
 
 
 def save(path: Path, obj) -> None:
@@ -218,7 +217,7 @@ def fetch_pull_pages(gh: GitHub) -> list[int]:
         else:
             payload, _headers = gh.request(
                 "GET",
-                f"/repos/foxglove/app/pulls?state=all&sort=created&direction=desc&per_page=100&page={page}",
+                f"{S.api}/pulls?state=all&sort=created&direction=desc&per_page=100&page={page}",
             )
             save(path, payload)
             print(f"pulls page {page} fetched ({len(payload)} prs)", flush=True)
@@ -256,7 +255,7 @@ def alias_block(number: int, alias: str) -> str:
 def fetch_batch(gh: GitHub, numbers: list[int], batch_idx: int) -> dict[int, dict]:
     aliases = [f"p{i}" for i in range(len(numbers))]
     selection = "\n".join(alias_block(n, a) for n, a in zip(numbers, aliases))
-    query = BATCH_QUERY % selection
+    query = batch_query(selection)
     data = gh.graphql(query)
     raw_path = GRAPHQL_DIR / f"batch_{batch_idx:05d}.json"
     save(raw_path, data)
@@ -281,7 +280,7 @@ def paginate_connection(gh: GitHub, number: int, field: str, inner: str, cursor:
     query = f"""
     query($cursor: String!) {{
       rateLimit {{ cost remaining resetAt }}
-      repository(owner: "foxglove", name: "app") {{
+      repository(owner: "foxglove", name: "{S.name}") {{
         pullRequest(number: {number}) {{
           {field}(first: 50, after: $cursor{extra_args}) {{
             pageInfo {{ hasNextPage endCursor }}
@@ -437,13 +436,30 @@ def fetch_meta(gh: GitHub) -> None:
         print(f"org members {len(members)}", flush=True)
     rules_path = META / "rulesets.json"
     if not rules_path.exists():
-        rulesets, _ = gh.request("GET", "/repos/foxglove/app/rulesets")
+        rulesets, _ = gh.request("GET", f"{S.api}/rulesets")
         detailed = []
         for rs in rulesets:
-            full, _ = gh.request("GET", f"/repos/foxglove/app/rulesets/{rs['id']}")
+            full, _ = gh.request("GET", f"{S.api}/rulesets/{rs['id']}")
             detailed.append(full)
         save(rules_path, detailed)
         print(f"rulesets {len(detailed)}", flush=True)
+    # App CI keeps its pre-registered job list. Other repos take checks from
+    # the active ruleset, then from classic branch protection.
+    if S.name != "app":
+        prot_path = META / "protection.json"
+        if not prot_path.exists():
+            try:
+                prot, _ = gh.request("GET", f"{S.api}/branches/main/protection")
+                save(prot_path, prot)
+            except GitHubError as exc:
+                if exc.status != 404:
+                    raise
+                save(prot_path, {"_status": 404})
+        rules = load(rules_path) if rules_path.exists() else []
+        prot = load(prot_path) if prot_path.exists() else None
+        contexts = required_check_contexts(rules, prot)
+        save(META / "required_checks.json", {"repo": S.name, "contexts": contexts})
+        print(f"required checks {len(contexts)}", flush=True)
 
 
 def main() -> None:

@@ -30,17 +30,20 @@ from common import (
     STATUS_CHECKS,
     bot_lgtm_events,
     contains_lgtm,
+    current_study,
     fetch_prs_running,
     first_lgtm_sha,
     is_review_bot,
     parse_ts,
     pr_commits,
+    required_check_contexts,
 )
 from ghutil import GitHub, GitHubError
 
-ROOT = Path(__file__).resolve().parents[1]
-PRS = ROOT / "data" / "raw" / "app" / "prs"
-CI = ROOT / "data" / "raw" / "app" / "ci"
+S = current_study()
+ROOT = S.root
+PRS = S.prs
+CI = S.ci
 
 NEEDED = {
     ".github/workflows/ci.yml": [
@@ -132,8 +135,16 @@ def lgtm_sha_chain(pr: dict) -> list[str]:
     return out
 
 
-def pick_runs(runs_payload: dict) -> dict[str, dict]:
+def pick_runs(runs_payload: dict, only_paths: set[str] | None = None, *, all_paths: bool = False) -> dict[str, dict]:
+    """One run per workflow path.
+
+    The app call passes no filter and keeps NEEDED. all_paths reads every
+    pull_request workflow. A success or failure conclusion beats a later
+    cancelled run.
+    """
     chosen: dict[str, dict] = {}
+    if not all_paths and only_paths is None:
+        only_paths = set(NEEDED)
 
     def rank(run: dict) -> tuple:
         good = 1 if run.get("conclusion") in ("success", "failure") else 0
@@ -141,7 +152,9 @@ def pick_runs(runs_payload: dict) -> dict[str, dict]:
 
     for run in runs_payload.get("workflow_runs") or []:
         path = run.get("path") or ""
-        if path not in NEEDED or run.get("event") != "pull_request":
+        if run.get("event") != "pull_request":
+            continue
+        if only_paths is not None and path not in only_paths:
             continue
         prev = chosen.get(path)
         if prev is None or rank(run) > rank(prev):
@@ -151,14 +164,14 @@ def pick_runs(runs_payload: dict) -> dict[str, dict]:
 
 def job_map(gh: GitHub, run: dict) -> dict[str, str]:
     run_id = run["id"]
-    payload = get_cached(gh, CI / "jobs" / f"{run_id}.json", f"/repos/foxglove/app/actions/runs/{run_id}/jobs?per_page=100")
+    payload = get_cached(gh, CI / "jobs" / f"{run_id}.json", f"{S.api}/actions/runs/{run_id}/jobs?per_page=100")
     jobs = list(payload.get("jobs") or [])
     page = 2
     while payload.get("total_count", 0) > len(jobs) and page < 6:
         extra = get_cached(
             gh,
             CI / "jobs" / f"{run_id}_p{page}.json",
-            f"/repos/foxglove/app/actions/runs/{run_id}/jobs?per_page=100&page={page}",
+            f"{S.api}/actions/runs/{run_id}/jobs?per_page=100&page={page}",
         )
         jobs.extend(extra.get("jobs") or [])
         page += 1
@@ -179,11 +192,11 @@ def match_job(jobs: dict[str, str], required: str) -> str:
 
 
 def evaluate_sha(gh: GitHub, sha: str) -> dict:
-    status = get_cached(gh, CI / "status" / f"{sha}.json", f"/repos/foxglove/app/commits/{sha}/status")
+    status = get_cached(gh, CI / "status" / f"{sha}.json", f"{S.api}/commits/{sha}/status")
     runs = get_cached(
         gh,
         CI / "runs" / f"{sha}.json",
-        f"/repos/foxglove/app/actions/runs?head_sha={sha}&per_page=100",
+        f"{S.api}/actions/runs?head_sha={sha}&per_page=100",
     )
     by_path = pick_runs(runs if isinstance(runs, dict) else {})
     statuses = {s.get("context"): (s.get("state") or "").lower() for s in (status.get("statuses") or [])}
@@ -223,6 +236,113 @@ def evaluate_sha(gh: GitHub, sha: str) -> dict:
     }
 
 
+# Lower rank is a worse conclusion. A failing job hides a same-named success
+# in another workflow. skipped is already turned into success by the caller.
+_WORSE = {
+    "failure": 0,
+    "timed_out": 1,
+    "startup_failure": 2,
+    "cancelled": 3,
+    "action_required": 4,
+    "error": 5,
+    "neutral": 6,
+    "pending": 7,
+    "queued": 8,
+    "in_progress": 9,
+    "missing": 10,
+    "success": 11,
+}
+
+
+def _worse(a: str, b: str) -> str:
+    return a if _WORSE.get(a, 6) <= _WORSE.get(b, 6) else b
+
+
+def load_required_contexts() -> list[str]:
+    path = S.meta / "required_checks.json"
+    if path.exists():
+        data = json.loads(path.read_text())
+        return list(data.get("contexts") or [])
+    rules_path = S.meta / "rulesets.json"
+    rules = json.loads(rules_path.read_text()) if rules_path.exists() else []
+    prot_path = S.meta / "protection.json"
+    prot = json.loads(prot_path.read_text()) if prot_path.exists() else None
+    return required_check_contexts(rules, prot)
+
+
+def evaluate_sha_rules(gh: GitHub, sha: str, contexts: list[str]) -> dict:
+    """Required checks from the repo ruleset or classic branch protection.
+
+    A context matches a job name, then "workflow / job", then a commit status.
+    The app path stays in evaluate_sha and is not used here.
+    """
+    status = get_cached(gh, CI / "status" / f"{sha}.json", f"{S.api}/commits/{sha}/status")
+    runs = get_cached(
+        gh,
+        CI / "runs" / f"{sha}.json",
+        f"{S.api}/actions/runs?head_sha={sha}&per_page=100",
+    )
+    if not contexts:
+        return {
+            "sha": sha,
+            "passed": True,
+            "failed": [],
+            "missing": [],
+            "checks": {},
+            "source": {},
+            "workflow_conclusions": {},
+            "status_state": status.get("state"),
+            "no_required_checks": True,
+        }
+    by_path = pick_runs(runs if isinstance(runs, dict) else {}, all_paths=True)
+    statuses = {s.get("context"): (s.get("state") or "").lower() for s in (status.get("statuses") or [])}
+    jobs: dict[str, str] = {}
+    for path, run in by_path.items():
+        named = job_map(gh, run)
+        wf = run.get("name") or path
+        for name, conclusion in named.items():
+            raw = conclusion or "missing"
+            if raw == "skipped":
+                raw = "success"
+            jobs[name] = _worse(jobs[name], raw) if name in jobs else raw
+            qualified = f"{wf} / {name}"
+            jobs[qualified] = _worse(jobs[qualified], raw) if qualified in jobs else raw
+    checks: dict[str, str] = {}
+    source: dict[str, str] = {}
+    for name in contexts:
+        if name in jobs:
+            checks[name] = jobs[name]
+            source[name] = "job"
+            continue
+        suffix = None
+        if name.startswith("test (") and name.endswith(")"):
+            suffix = name[len("test ") :]
+        if suffix:
+            matches = [c for job_name, c in jobs.items() if " / " not in job_name and job_name.endswith(suffix)]
+            if len(set(matches)) == 1:
+                checks[name] = matches[0]
+                source[name] = "job_suffix"
+                continue
+        if name in statuses:
+            state = statuses[name]
+            checks[name] = "failure" if state == "error" else state
+            source[name] = "commit_status"
+            continue
+        checks[name] = "missing"
+        source[name] = "no_run"
+    passed = all(v == "success" for v in checks.values())
+    return {
+        "sha": sha,
+        "passed": passed,
+        "failed": [k for k, v in checks.items() if v in ("failure", "timed_out", "cancelled", "startup_failure")],
+        "missing": [k for k, v in checks.items() if v in ("missing", "skipped", "neutral", "action_required")],
+        "checks": checks,
+        "source": source,
+        "workflow_conclusions": {path: (run.get("conclusion")) for path, run in by_path.items()},
+        "status_state": status.get("state"),
+    }
+
+
 def pr_files() -> list[Path]:
     return [p for p in PRS.glob("*.json") if p.stem.isdigit()]
 
@@ -231,6 +351,14 @@ def main() -> None:
     gh = GitHub()
     idle = 0
     skipped: set[str] = set()
+    contexts: list[str] | None = None
+    if S.name != "app":
+        while not (S.meta / "required_checks.json").exists() and not (S.meta / "rulesets.json").exists():
+            if not fetch_prs_running():
+                break
+            time.sleep(5)
+        contexts = load_required_contexts()
+        print(f"required checks {len(contexts)}", flush=True)
     while True:
         wrote = 0
         for path in pr_files():
@@ -253,7 +381,10 @@ def main() -> None:
             evals = []
             try:
                 for sha in shas:
-                    ev = evaluate_sha(gh, sha)
+                    if contexts is None:
+                        ev = evaluate_sha(gh, sha)
+                    else:
+                        ev = evaluate_sha_rules(gh, sha, contexts)
                     evals.append(ev)
                     if ev["passed"]:
                         break
