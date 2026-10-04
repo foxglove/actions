@@ -202,7 +202,7 @@ def chart_time(monthly: pd.DataFrame) -> str:
         ax.fill_between(x, p50, p90, color=color, alpha=0.12)
     ax.set_yscale("log")
     ax.set_xticks(x, [MONTH_LABELS[m] for m in monthly["month"]])
-    style_ax(ax, "Calendar time after the bot LGTM, p50 line and p50–p90 band", "PR open month", "Hours (log scale)")
+    style_ax(ax, "Calendar time after the bot LGTM, p50 line and p50 to p90 band", "PR open month", "Hours (log scale)")
     ax.legend(frameon=False, fontsize=8)
     return save_fig(fig, "time_after_lgtm")
 
@@ -435,6 +435,92 @@ def dev_load(dev: pd.DataFrame) -> str:
     return save_fig(fig, "review_load")
 
 
+def _flag(df: pd.DataFrame, col: str) -> pd.Series:
+    if col not in df.columns:
+        return pd.Series(False, index=df.index)
+    return df[col].fillna(False).astype(bool)
+
+
+def overlap_counts(df: pd.DataFrame) -> dict[str, int]:
+    """Exclusive regions for the headline pull requests."""
+    a = _flag(df, "in_A")
+    ac = _flag(df, "in_Aci")
+    b = _flag(df, "in_B")
+    d = _flag(df, "in_D")
+    return {
+        "n": int(len(df)),
+        "A": int(a.sum()),
+        "Aci": int(ac.sum()),
+        "B": int(b.sum()),
+        "D": int(d.sum()),
+        "A_only": int((a & ~b).sum()),
+        "B_only": int((~a & b).sum()),
+        "AB": int((a & b).sum()),
+        "sufficient": int((~a & ~b).sum()),
+        "abd_A": int((a & ~b & ~d).sum()),
+        "abd_B": int((~a & b & ~d).sum()),
+        "abd_D": int((~a & ~b & d).sum()),
+        "abd_AB": int((a & b & ~d).sum()),
+        "abd_AD": int((a & ~b & d).sum()),
+        "abd_BD": int((~a & b & d).sum()),
+        "abd_ABD": int((a & b & d).sum()),
+        "A_not_Aci": int((a & ~ac).sum()),
+        "Aci_not_A": int((~a & ac).sum()),
+        "A_and_Aci": int((a & ac).sum()),
+        "C": int((~a & ~ac & ~b & ~d).sum()),
+    }
+
+
+def _circle(cx: int, cy: int, r: int, fill: str) -> str:
+    return f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{fill}" fill-opacity="0.38" stroke="{fill}" stroke-width="2"/>'
+
+
+def _vlabel(x: int, y: int, number: int, caption: str) -> str:
+    return (
+        f'<text x="{x}" y="{y}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="{BLACK}">{number}</text>'
+        f'<text x="{x}" y="{y + 16}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="{BLACK}">{html.escape(caption)}</text>'
+    )
+
+
+def venn_ab(c: dict[str, int]) -> str:
+    """Two circles: bucket A and bucket B. Their union is what removes bot-sufficient."""
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 300" role="img" aria-label="Venn diagram of bucket A and bucket B">
+{_circle(220, 145, 115, VERM)}
+{_circle(390, 145, 115, PURPLE)}
+{_vlabel(165, 140, c["A_only"], "A only")}
+{_vlabel(445, 140, c["B_only"], "B only")}
+{_vlabel(305, 140, c["AB"], "A and B")}
+<text x="320" y="278" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="{BLACK}">{c["sufficient"]} pull requests are outside both circles. Those are bot-sufficient.</text>
+</svg>"""
+
+
+def venn_abd(c: dict[str, int]) -> str:
+    """Three circles: A, B, and D. A-ci is drawn separately because it is a different claim."""
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 430" role="img" aria-label="Venn diagram of buckets A, B, and D">
+{_circle(230, 155, 112, VERM)}
+{_circle(390, 155, 112, PURPLE)}
+{_circle(310, 255, 112, SKY)}
+{_vlabel(165, 130, c["abd_A"], "A only")}
+{_vlabel(455, 130, c["abd_B"], "B only")}
+{_vlabel(310, 355, c["abd_D"], "D only")}
+{_vlabel(310, 118, c["abd_AB"], "A and B")}
+{_vlabel(230, 230, c["abd_AD"], "A and D")}
+{_vlabel(390, 230, c["abd_BD"], "B and D")}
+{_vlabel(310, 200, c["abd_ABD"], "A, B, and D")}
+</svg>"""
+
+
+def venn_aci(c: dict[str, int]) -> str:
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 280" role="img" aria-label="Venn diagram of bucket A and bucket A-ci">
+{_circle(230, 140, 105, VERM)}
+{_circle(390, 140, 105, ORANGE)}
+{_vlabel(175, 135, c["A_not_Aci"], "A only")}
+{_vlabel(445, 135, c["Aci_not_A"], "A-ci only")}
+{_vlabel(310, 135, c["A_and_Aci"], "both")}
+<text x="320" y="262" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="{BLACK}">A-ci stays in the bot-sufficient count. A does not.</text>
+</svg>"""
+
+
 def flowchart_svg(counts: dict) -> str:
     steps = [
         ("Opened PRs", counts.get("cohort", "")),
@@ -630,25 +716,60 @@ def main() -> None:
     def section_charts(*keys):
         return "".join(f'<div class="chart">{svgs[k]}</div>' for k in keys)
 
+    regions = overlap_counts(merged_lgtm)
+    venn_ab_svg = venn_ab(regions)
+    venn_abd_svg = venn_abd(regions)
+    venn_aci_svg = venn_aci(regions)
+    suff_n = regions["sufficient"]
+    suff_pct = (100.0 * suff_n / regions["n"]) if regions["n"] else 0.0
+
     body = f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><title>App pilot: bot LGTM and human review</title>
 <style>
-body {{ font-family: Georgia, serif; max-width: 980px; margin: 32px auto; color: #222; line-height: 1.45; }}
-h1,h2,h3 {{ font-family: Helvetica, Arial, sans-serif; }}
+body {{ font-family: Helvetica, Arial, sans-serif; max-width: 980px; margin: 32px auto; color: #222; line-height: 1.5; }}
+h1,h2,h3 {{ line-height: 1.25; }}
 .chart svg {{ max-width: 100%; height: auto; }}
-table {{ border-collapse: collapse; font-family: Helvetica, Arial, sans-serif; font-size: 13px; }}
+.assessment {{ background: #f4f8fb; border: 1px solid #d5e3ee; border-radius: 8px; padding: 16px 20px; margin: 16px 0 28px; }}
+.venn {{ margin: 8px 0 20px; }}
+table {{ border-collapse: collapse; font-size: 13px; }}
 td, th {{ border-bottom: 1px solid #ddd; padding: 4px 8px; text-align: left; }}
 code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 </style></head><body>
-<h1>What human review adds after the bot's first LGTM</h1>
-<p>Pilot for <code>foxglove/app</code> only. PRs opened 1 Apr 2026 through 30 Sep 2026. This draft stops here for review; the other six repos are not included.</p>
-<h2>1. Executive summary</h2>
-<p>Headline denominator: merged PRs by human authors that received a bot LGTM (n={len(merged_lgtm)}). Bot-authored PRs are excluded from that rate.</p>
+<h1>Is the first bot LGTM becoming sufficient?</h1>
+<p>Pilot for <code>foxglove/app</code> only. Pull requests opened 1 Apr 2026 through 30 Sep 2026. The other six repositories are not in this draft.</p>
+<section class="assessment">
+<h2>Assessment</h2>
+<p><strong>This study does not answer whether the first LGTM is becoming sufficient month over month.</strong></p>
+<p>The level, on the definition below, is {suff_n} of {regions["n"]} merged human pull requests ({suff_pct:.0f}%). Each of those pull requests has a bot LGTM and shows neither bucket A nor bucket B. The month slope is about {reg.get('uncontrolled', {}).get('month_coef', float('nan')):.2f} with no controls and about {reg.get('controlled', {}).get('month_coef', float('nan')):.2f} with size and tenure. Both 95% intervals include zero. The fit also warned that it did not fully converge. A slope that includes zero, from a fit that did not settle, is not a trend.</p>
+<p>Four facts keep the month question open:</p>
 <ul>
-<li>Bot-sufficient rate, uncontrolled logistic regression on month: {html.escape(reg_line(reg.get('uncontrolled') or {}))}.</li>
-<li>Same regression with size and tenure controls: {html.escape(reg_line(reg.get('controlled') or {}))}.</li>
-<li>PRs merged with no human approval: {no_appr}. The with-vs-without approval escape comparison is reported below and is not a random contrast.</li>
-<li>Not mergeable at the first bot LGTM SHA: {not_mergeable} of {known_n} headline PRs with CI data. No CI data: {sha_unknown_n} PRs with an unknown LGTM SHA after a rebase, {fetch_error_n} PRs whose CI fetch failed before any check result, and {no_file_n} PRs with no CI fetch result.</li>
+<li>April has 3 headline pull requests and May has 5. The exact comment <code>LGTM</code> starts on 18 Jun 2026, so the early months are a different signal.</li>
+<li>The bot's model and prompt changed on 18 Jun, from 26 Jul to 28 Jul, and on 22 Sep. One slope across those changes mixes a definition change with a catch-rate change.</li>
+<li>September's 30-day follow-up was still open on 3 Oct 2026. Later fixes for September are still missing.</li>
+<li>Bucket B only counts a fix when the title looks like a fix and git blame can name the source pull request. Missed fixes would lower the sufficient share. The Linear sample matched 5 of 25 bug-ticket fix pull requests. Sentry is not connected.</li>
+</ul>
+<p>{not_mergeable} of {known_n} headline pull requests were not mergeable at the first LGTM commit. {no_appr} merged with no human approval. Those two facts are about process. They do not identify a month trend.</p>
+</section>
+<h2>Where the categories overlap</h2>
+<p>A pull request can sit in more than one bucket. Read the number in each region. The circles are the sets. The caption under a number is that region only.</p>
+<h3>A and B decide bot-sufficient</h3>
+<p>Bucket A is a real medium or high bug, security, or data-loss comment after the LGTM. The author acknowledged it, or a later commit changed that file, and CI at the counterfactual commit would not have caught it. Bucket B is a later fix whose blamed line was already in that commit, merged within 30 days. A pull request in A or B is not bot-sufficient.</p>
+<div class="venn chart">{venn_ab_svg}</div>
+<h3>A, B, and D: when the line existed</h3>
+<p>Bucket D is a later fix whose blamed line was absent at the counterfactual commit and present on the final head, merged within 30 days. D alone leaves the pull request bot-sufficient. The center of this diagram is the small set that is A, B, and D together.</p>
+<div class="venn chart">{venn_abd_svg}</div>
+<h3>A and A-ci</h3>
+<p>A-ci is the same kind of comment as A, and the comment names CI, a test, or lint, while a required check was already failing. A-ci stays bot-sufficient. The study cannot read check logs, so A-ci is a low count.</p>
+<div class="venn chart">{venn_aci_svg}</div>
+<p>Bucket C is the {regions["C"]} headline pull requests in none of A, A-ci, B, or D. Bot-sufficient is larger than C: it also includes D-only and A-ci-only, because those two do not contain A or B. In this run that adds {regions["sufficient"] - regions["C"]} pull requests, for {regions["sufficient"]} bot-sufficient in total.</p>
+<p>The rest of this page is the evidence behind the assessment.</p>
+<h2>1. Counts behind the assessment</h2>
+<ul>
+<li>Headline pull requests: {len(merged_lgtm)}. Human author, merged, and at least one bot LGTM.</li>
+<li>Month model with no controls: {html.escape(reg_line(reg.get('uncontrolled') or {}))}.</li>
+<li>Same model with size and tenure: {html.escape(reg_line(reg.get('controlled') or {}))}.</li>
+<li>Merged with no human approval: {no_appr}.</li>
+<li>Not mergeable at the first bot LGTM commit: {not_mergeable} of {known_n}. Missing CI data: {sha_unknown_n} with an unknown LGTM commit after a rebase, {fetch_error_n} whose CI fetch failed before any check result, and {no_file_n} with no CI fetch result.</li>
 </ul>
 {section_charts('suff','time','funnel')}
 <h2>2. Method</h2>
@@ -658,14 +779,15 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <p>Counterfactual merge SHA: the commit the first LGTM reviewed, if required checks passed there; otherwise the first later commit where those checks passed and the latest bot review on that commit was still an LGTM. Stale reviews are not dismissed on push.</p>
 <p>Bucket A is a real medium or high bug, security, or data-loss finding after the LGTM that led to a code change or an explicit author acknowledgment, and that CI at the counterfactual SHA would not have caught. A-ci is that same finding when the comment ties it to a failing required check. A-ci counts as bot-sufficient. Bucket B is a later fix whose blamed lines were already in the counterfactual SHA. Bucket D is a later fix whose lines were added after that SHA. B is a lower bound. Bucket C is none of A, A-ci, B, or D.</p>
 <p>Primary model, chosen before looking at results: <code>bot_sufficient ~ month</code> (April = 0 … September = 5), then the same model plus size bucket and author-tenure bucket. Repo is constant in this pilot, so it is omitted. Engagement (non-nit human comments after the LGTM) is a sensitivity check only.</p>
-<h2>3. Is bot review becoming sufficient?</h2>
+<h2>3. The month charts, read with the assessment</h2>
+<p>These charts describe the same pull requests. They do not turn the month coefficient into a trend. Gray points have fewer than 10 pull requests. The shaded month is September, whose follow-up window was still open.</p>
 {section_charts('suff','buckets','cats','cov')}
 <p>Uncontrolled: {html.escape(reg_line(reg.get('uncontrolled') or {}))}. With size and tenure: {html.escape(reg_line(reg.get('controlled') or {}))}. With engagement added: {html.escape(reg_line(reg.get('engagement') or {}))}.</p>
-<p>Bot config changes worth lining up with the chart: 18 Jun 2026 (the word LGTM, and app stops reviewing drafts unless opted in), 26–28 Jul (Opus 5, then a return to Opus 4.8), 22 Sep (Opus 5.5 and inline-only findings). If the rate moves at those dates, the pool of LGTM'd PRs changed definition, not only the bot's catch rate.</p>
+<p>Bot config changes worth lining up with the chart: 18 Jun 2026 (the word LGTM, and app stops reviewing drafts unless opted in), 26 Jul to 28 Jul (Opus 5, then a return to Opus 4.8), 22 Sep (Opus 5.5 and inline-only findings). If the rate moves at those dates, the pool of LGTM'd pull requests changed definition, along with the bot's catch rate.</p>
 <h2>4. Time, catch value, counterfactual</h2>
 {section_charts('time','size','ecdf','funnel','stack','appr')}
 <p>Times are calendar hours between recorded timestamps. They include nights, weekends, and time waiting on the author or CI. They are total delay, not reviewer effort. A negative LGTM-to-approval time means the human approved before the bot's first LGTM; those PRs stay in the distribution.</p>
-<p>Merged with no human approval: {no_appr} of {len(merged_lgtm)} headline PRs. Branch protection on <code>main</code> requires one approving review, so these merges bypassed that rule. The bypass list on the current ruleset is the <code>foxglovebot</code> team. Who actually merged is in the PR table. This group was chosen by people. If it is small, the escape-rate contrast is not a usable comparison and the counterfactual rests on buckets A–D.</p>
+<p>Merged with no human approval: {no_appr} of {len(merged_lgtm)} headline PRs. Branch protection on <code>main</code> requires one approving review, so these merges bypassed that rule. The bypass list on the current ruleset is the <code>foxglovebot</code> team. Who actually merged is in the PR table. This group was chosen by people. If it is small, the escape-rate contrast is not a usable comparison and the counterfactual rests on buckets A, A-ci, B, and D.</p>
 <h2>5. Caveats</h2>
 <ul>
 <li>Defect-catching only. Bot-sufficient does not mean human review has no other value.</li>
@@ -680,7 +802,15 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <li>The classifier is Grok, reading findings about a Claude review bot. Agreement with a hand-labeled sample is not computed until <code>labeling_sample.csv</code> is filled in.</li>
 <li>Monthly per-person cells are often n&lt;10. Rates sit next to the person's repo (app only, in this pilot) and size mix.</li>
 </ul>
-<h2>6. Appendix</h2>
+<h2>6. Next steps</h2>
+<ol>
+<li>Hand-label <code>out/labeling_sample.csv</code> (100 findings). Compare those labels with the classifier before treating bucket A as settled. Cohen's kappa uses the empty columns <code>your_category</code> and <code>your_severity</code>.</li>
+<li>Leave the month question open until two conditions hold. The LGTM definition stays stable for several months, and September's 30-day window has closed. Recompute September after 31 Oct 2026. Fit separate periods at 18 Jun, from 26 Jul to 28 Jul, and at 22 Sep, instead of one slope from April to September.</li>
+<li>Raise the recall of bucket B before reading 85% as a ceiling. Connect Sentry, or search for fixes beyond the title words, and rerun <code>scripts/escapes.py</code>. The current Linear sample found the fix pull request for 5 of 25 tickets.</li>
+<li>Keep this pilot on <code>app</code> until the label check and the escape recall check are in. The other six repositories wait on that review.</li>
+<li>Treat A-ci as incomplete until check logs are readable. The comment has to name CI, a test, or lint today.</li>
+</ol>
+<h2>7. Appendix</h2>
 <h3>Bot</h3>
 <p>Login: <code>claude[bot]</code> on REST, <code>claude</code> on GraphQL. The bot submits <code>COMMENT</code> reviews, never <code>APPROVE</code>. First appearance in app: 15 Feb 2026, before the window (<code>#12483</code>).</p>
 <h3>Three LGTM examples</h3>
@@ -753,17 +883,19 @@ def dev_table(dev: pd.DataFrame) -> str:
 
 def markdown_summary(summary, n, no_appr, not_mergeable, known_n, sha_unknown_n, fetch_error_n, no_file_n, reg_line) -> str:
     reg = summary.get("regressions", {})
-    return f"""# App pilot: human review after the bot's first LGTM
+    return f"""# Is the first bot LGTM becoming sufficient?
 
-Scope is defect-catching only. Bot-sufficient means no observed bucket A or bucket B on a merged human PR that the bot LGTM'd. It does not mean human review adds nothing else.
+The study does not answer that question. The level on this definition is the bot-sufficient count below. The month slope includes zero, and the fit did not fully converge.
+
+Bot-sufficient means no bucket A and no bucket B on a merged human pull request that the bot LGTM'd. It means those two defect signals were not observed.
 
 - Headline PRs: {n}
 - Uncontrolled month coefficient: {reg_line(reg.get('uncontrolled') or {})}
 - With size and tenure controls: {reg_line(reg.get('controlled') or {})}
 - Merged with no human approval: {no_appr}
-- Not mergeable at the first bot LGTM SHA: {not_mergeable} of {known_n} headline PRs with CI data. No CI data: {sha_unknown_n} PRs with an unknown LGTM SHA after a rebase, {fetch_error_n} PRs whose CI fetch failed before any check result, and {no_file_n} PRs with no CI fetch result.
+- Not mergeable at the first bot LGTM commit: {not_mergeable} of {known_n} headline PRs with CI data. No CI data: {sha_unknown_n} PRs with an unknown LGTM commit after a rebase, {fetch_error_n} PRs whose CI fetch failed before any check result, and {no_file_n} PRs with no CI fetch result.
 
-Charts and the full method are in `out/report.html`. Per-developer stats are in `out/per-developer.html`. Hand labels go in `out/labeling_sample.csv`.
+The full reading, the Venn diagrams, and the next steps are in `out/report.html`. Per-developer stats are in `out/per-developer.html`.
 
 September has a partial follow-up window. The LGTM string itself dates from 18 Jun 2026.
 """
