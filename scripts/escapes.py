@@ -14,8 +14,11 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
+import time
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
 
 from common import FIX_TITLE_RE, PR_REF_RE, git_cred_helper, git_env, load_ci_index, parse_ts, study_repo
@@ -45,10 +48,31 @@ def git(*args: str, check: bool = True) -> str:
         "safe.directory=*",
         *args,
     ]
-    proc = subprocess.run(cmd, text=True, capture_output=True, env=env)
-    if check and proc.returncode != 0:
-        raise RuntimeError(proc.stderr[-400:] or f"git {' '.join(args[:4])} failed")
-    return proc.stdout
+    last_err = ""
+    for attempt in range(4):
+        proc = subprocess.run(cmd, text=True, capture_output=True, env=env)
+        if proc.returncode == 0 or not check:
+            return proc.stdout
+        last_err = proc.stderr or ""
+        transient = any(
+            s in last_err.lower()
+            for s in (
+                "lock",
+                "unable to access",
+                "could not resolve",
+                "connection",
+                "timed out",
+                "rpc failed",
+                "early eof",
+                "the remote end hung up",
+                "fetch",
+            )
+        )
+        if attempt < 3 and transient:
+            time.sleep(0.5 * (attempt + 1))
+            continue
+        break
+    raise RuntimeError(last_err[-400:] or f"git {' '.join(args[:4])} failed")
 
 
 def parse_removed_lines(diff_text: str, cap: int = 80) -> list[dict]:
@@ -152,24 +176,10 @@ def file_text(sha: str | None, path: str, cache: dict) -> str | None:
     if not sha:
         cache[key] = None
         return None
-    env = git_env()
-    proc = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(REPO),
-            "-c",
-            "credential.helper=",
-            "-c",
-            f"credential.helper=!{git_cred_helper()}",
-            "show",
-            f"{sha}:{path}",
-        ],
-        text=True,
-        capture_output=True,
-        env=env,
-    )
-    cache[key] = proc.stdout if proc.returncode == 0 else None
+    try:
+        cache[key] = git("show", f"{sha}:{path}", check=True)
+    except RuntimeError:
+        cache[key] = None
     return cache[key]
 
 
@@ -205,7 +215,112 @@ def candidate(pr: dict) -> bool:
     return False
 
 
+_BY_NUMBER: dict[int, dict] = {}
+_SUBJECT: dict[str, int | None] = {}
+_BLOBS: dict = {}
+
+
+def _init_worker(by_number: dict[int, dict]) -> None:
+    global _BY_NUMBER
+    _BY_NUMBER = by_number
+
+
+def links_for_fix(fix: dict) -> list[dict]:
+    merge = fix["merge_commit"]
+    try:
+        parent = git("rev-parse", f"{merge}^", check=True).strip()
+    except RuntimeError:
+        return []
+    try:
+        diff = git("diff", "-U0", parent, merge, check=True)
+    except RuntimeError:
+        return []
+    removed = parse_removed_lines(diff)
+    if not removed:
+        return []
+    by_file: dict[str, list] = defaultdict(list)
+    for item in removed:
+        by_file[item["path"]].append(item)
+    attributions = []
+    for path, items in by_file.items():
+        wanted = [it["line"] for it in items]
+        blamed = blame_lines(parent, path, wanted)
+        for it in items:
+            sha = blamed.get(it["line"])
+            if not sha:
+                continue
+            intro = subject_pr(sha, _SUBJECT)
+            attributions.append({**it, "blame_sha": sha, "intro_pr": intro})
+    if not attributions:
+        return []
+    counts: dict[int, int] = defaultdict(int)
+    for a in attributions:
+        if a["intro_pr"]:
+            counts[a["intro_pr"]] += 1
+    if not counts:
+        return []
+    rows = []
+    for intro_pr, n_lines in counts.items():
+        intro = _BY_NUMBER.get(intro_pr)
+        if not intro:
+            continue
+        share = n_lines / max(1, len(attributions))
+        conf = "high" if share >= 0.7 else "medium" if share >= 0.4 else "low"
+        cf = intro.get("counterfactual_sha") or intro.get("first_lgtm_sha")
+        head = intro.get("head_sha")
+        lines_for = [a for a in attributions if a["intro_pr"] == intro_pr]
+        presence = []
+        for a in lines_for[:12]:
+            cf_text = file_text(cf, a["path"], _BLOBS) if cf else None
+            head_text = file_text(head, a["path"], _BLOBS) if head else None
+            presence.append(
+                {
+                    "path": a["path"],
+                    "line_text": a["text"][:240],
+                    "at_counterfactual": line_present(cf_text, a["text"]) if cf else "no_sha",
+                    "at_head": line_present(head_text, a["text"]) if head else "no_sha",
+                }
+            )
+        fix_merged = parse_ts(fix.get("merged_at"))
+        intro_merged = parse_ts(intro.get("merged_at"))
+        delta_days = None
+        if fix_merged and intro_merged:
+            delta_days = (fix_merged - intro_merged).total_seconds() / 86400.0
+        within_30 = None
+        if delta_days is not None:
+            within_30 = 0 <= delta_days <= 30
+        # Partial follow-up: introducer merged after 2026-09-03 has <30 days by 2026-10-03.
+        partial_window = bool(intro_merged and intro_merged >= datetime(2026, 9, 3, tzinfo=timezone.utc))
+        rows.append(
+            {
+                "fix_pr": fix["number"],
+                "fix_url": fix.get("url"),
+                "fix_title": fix.get("title"),
+                "fix_merged_at": fix.get("merged_at"),
+                "intro_pr": intro_pr,
+                "intro_url": intro.get("url"),
+                "intro_merged_at": intro.get("merged_at"),
+                "intro_month": intro.get("month"),
+                "intro_in_cohort": intro.get("in_cohort"),
+                "intro_bot_lgtm": intro.get("bot_lgtm"),
+                "intro_merged": intro.get("merged"),
+                "intro_author_type": intro.get("author_type"),
+                "lines": n_lines,
+                "share": round(share, 3),
+                "confidence": conf,
+                "delta_days": delta_days,
+                "within_30_days": within_30,
+                "partial_followup_window": partial_window,
+                "presence": presence,
+            }
+        )
+    return rows
+
+
 def main() -> None:
+    workers = 4
+    if "--workers" in sys.argv:
+        workers = max(1, int(sys.argv[sys.argv.index("--workers") + 1]))
     prs = []
     with open(INTERIM / "prs.jsonl") as fh:
         for line in fh:
@@ -218,107 +333,34 @@ def main() -> None:
             pr["counterfactual_sha"] = info["sha"]
             pr["mergeable_at_lgtm"] = info["mergeable_at_lgtm"]
     fixes = [p for p in prs if candidate(p) and p.get("merge_commit")]
-    print(f"candidate fix PRs {len(fixes)}", flush=True)
-    subject_cache: dict[str, int | None] = {}
-    blob_cache: dict = {}
+    print(f"candidate fix PRs {len(fixes)} workers {workers}", flush=True)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     written = 0
+    scanned = 0
+    started = time.time()
     with OUT.open("w") as out:
-        for i, fix in enumerate(fixes):
-            merge = fix["merge_commit"]
-            try:
-                parent = git("rev-parse", f"{merge}^", check=True).strip()
-            except RuntimeError:
-                continue
-            try:
-                diff = git("diff", "-U0", parent, merge, check=True)
-            except RuntimeError:
-                continue
-            removed = parse_removed_lines(diff)
-            if not removed:
-                continue
-            by_file: dict[str, list] = defaultdict(list)
-            for item in removed:
-                by_file[item["path"]].append(item)
-            attributions = []
-            for path, items in by_file.items():
-                wanted = [it["line"] for it in items]
-                blamed = blame_lines(parent, path, wanted)
-                for it in items:
-                    sha = blamed.get(it["line"])
-                    if not sha:
-                        continue
-                    intro = subject_pr(sha, subject_cache)
-                    attributions.append({**it, "blame_sha": sha, "intro_pr": intro})
-            if not attributions:
-                continue
-            counts: dict[int, int] = defaultdict(int)
-            for a in attributions:
-                if a["intro_pr"]:
-                    counts[a["intro_pr"]] += 1
-            if not counts:
-                continue
-            for intro_pr, n_lines in counts.items():
-                intro = by_number.get(intro_pr)
-                if not intro:
-                    continue
-                share = n_lines / max(1, len(attributions))
-                conf = "high" if share >= 0.7 else "medium" if share >= 0.4 else "low"
-                cf = intro.get("counterfactual_sha") or intro.get("first_lgtm_sha")
-                head = intro.get("head_sha")
-                lines_for = [a for a in attributions if a["intro_pr"] == intro_pr]
-                presence = []
-                for a in lines_for[:12]:
-                    cf_text = file_text(cf, a["path"], blob_cache) if cf else None
-                    head_text = file_text(head, a["path"], blob_cache) if head else None
-                    presence.append(
-                        {
-                            "path": a["path"],
-                            "line_text": a["text"][:240],
-                            "at_counterfactual": line_present(cf_text, a["text"]) if cf else "no_sha",
-                            "at_head": line_present(head_text, a["text"]) if head else "no_sha",
-                        }
-                    )
-                fix_merged = parse_ts(fix.get("merged_at"))
-                intro_merged = parse_ts(intro.get("merged_at"))
-                delta_days = None
-                if fix_merged and intro_merged:
-                    delta_days = (fix_merged - intro_merged).total_seconds() / 86400.0
-                within_30 = None
-                if delta_days is not None:
-                    within_30 = 0 <= delta_days <= 30
-                # Partial follow-up: introducer merged after 2026-09-03 has <30 days by 2026-10-03.
-                partial_window = bool(intro_merged and intro_merged >= datetime(2026, 9, 3, tzinfo=timezone.utc))
-                out.write(
-                    json.dumps(
-                        {
-                            "fix_pr": fix["number"],
-                            "fix_url": fix.get("url"),
-                            "fix_title": fix.get("title"),
-                            "fix_merged_at": fix.get("merged_at"),
-                            "intro_pr": intro_pr,
-                            "intro_url": intro.get("url"),
-                            "intro_merged_at": intro.get("merged_at"),
-                            "intro_month": intro.get("month"),
-                            "intro_in_cohort": intro.get("in_cohort"),
-                            "intro_bot_lgtm": intro.get("bot_lgtm"),
-                            "intro_merged": intro.get("merged"),
-                            "intro_author_type": intro.get("author_type"),
-                            "lines": n_lines,
-                            "share": round(share, 3),
-                            "confidence": conf,
-                            "delta_days": delta_days,
-                            "within_30_days": within_30,
-                            "partial_followup_window": partial_window,
-                            "presence": presence,
-                        },
-                        separators=(",", ":"),
-                    )
-                    + "\n"
-                )
+        def consume(rows: list[dict]) -> None:
+            nonlocal written, scanned
+            for row in rows:
+                out.write(json.dumps(row, separators=(",", ":")) + "\n")
                 written += 1
-            if (i + 1) % 25 == 0:
-                print(f"fixes scanned {i+1}/{len(fixes)} links {written}", flush=True)
+            scanned += 1
+            if scanned % 25 == 0:
+                rate = scanned / max(1.0, time.time() - started) * 60
+                print(
+                    f"fixes scanned {scanned}/{len(fixes)} links {written} ({rate:.1f}/min)",
+                    flush=True,
+                )
+
+        if workers == 1:
+            _init_worker(by_number)
+            for fix in fixes:
+                consume(links_for_fix(fix))
+        else:
+            with ProcessPoolExecutor(max_workers=workers, initializer=_init_worker, initargs=(by_number,)) as ex:
+                futures = [ex.submit(links_for_fix, fix) for fix in fixes]
+                for fut in as_completed(futures):
+                    consume(fut.result())
     print(f"wrote {written} introducer links", flush=True)
 
 
