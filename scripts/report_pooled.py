@@ -826,6 +826,58 @@ def main() -> None:
     area_phrase = ", ".join(f"{name} {int(count)}" for name, count in area_counts.head(3).items())
     a_bug_n = int((a_findings["category"] == "BUG").sum())
     a_finding_n = int(len(a_findings))
+    a_all = comments[comments["bucket_a"] == True]
+    a_pr_n = int(head["in_A"].sum())
+    a_app_n = int(app_only["in_A"].sum())
+    a_high_n = int((a_all["severity"] == "high").sum())
+    a_sec_n = int((a_all["category"] == "SECURITY").sum())
+    a_loss_n = int((a_all["category"] == "DATA_LOSS_OR_CORRUPTION").sum())
+    a_bug_all = int((a_all["category"] == "BUG").sum())
+    a_change_n = int((a_all["code_change"] == True).sum())
+    a_finding_all = int(len(a_all))
+    top_areas = ["packages/app", "packages/api", "packages/viz"]
+    top_area_n = int(area_counts.reindex(top_areas).fillna(0).sum())
+    green_a_n = int(((head["mergeable_at_lgtm"] == True) & (head["in_A"] == True)).sum())
+    b_n = int(head["in_B"].sum())
+    b_app_n = int(app_only["in_B"].sum())
+    b_xl_n = int(app_only.loc[app_only["size_bucket"] == "XL", "in_B"].sum())
+    size_help_rows = []
+    for size in sizes:
+        group = app_only[app_only["size_bucket"] == size]
+        n_s = int(len(group))
+        a_s = int(group["in_A"].sum())
+        rate = (100.0 * a_s / n_s) if n_s else 0
+        share = "<1%" if 0 < rate < 1 else pct(a_s, n_s)
+        size_help_rows.append(
+            f"<tr><td>{size}</td><td>{n_s}</td><td>{a_s}</td><td>{share}</td></tr>"
+        )
+    other_a_bits = []
+    other_a_zero = []
+    for repo in REPOS:
+        if repo == "app":
+            continue
+        count = int(head.loc[head["repo"] == repo, "in_A"].sum())
+        if count:
+            other_a_bits.append(f"{repo} {count}")
+        else:
+            other_a_zero.append(repo)
+    other_a_phrase = ", ".join(other_a_bits)
+    if len(other_a_zero) > 1:
+        other_a_zero_phrase = ", ".join(other_a_zero[:-1]) + ", and " + other_a_zero[-1]
+    else:
+        other_a_zero_phrase = ", ".join(other_a_zero)
+    area_bits = [f"{name} ({int(area_counts.get(name, 0))})" for name in top_areas]
+    area_named = ", ".join(area_bits[:-1]) + ", and " + area_bits[-1]
+
+    def _approval(frame: pd.DataFrame) -> str:
+        return hour_phrase(hour_p50(frame, "lgtm_to_approval_h"))
+
+    xl_app = app_only[app_only["size_bucket"] == "XL"]
+    l_app = app_only[app_only["size_bucket"] == "L"]
+    xl_a_wait = _approval(xl_app[xl_app["in_A"] == True])
+    xl_rest_wait = _approval(xl_app[xl_app["in_A"] != True])
+    l_a_wait = _approval(l_app[l_app["in_A"] == True])
+    l_rest_wait = _approval(l_app[l_app["in_A"] != True])
     p50_approval = hour_p50(head, "lgtm_to_approval_h")
     p50_merge = hour_p50(head, "lgtm_to_merge_h")
     p50_after = hour_p50(head, "approval_to_merge_h")
@@ -921,7 +973,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 </style></head><body>
 <h1>Conclusion: keep human review, and the months are flat</h1>
 <p>All seven repositories. Pull requests opened 1 Apr 2026 through 30 Sep 2026.</p>
-<p class="nav"><a href="#path">The wait</a><a href="#change">What to change</a><a href="#buckets">Buckets</a><a href="#app">Why app is lower</a></p>
+<p class="nav"><a href="#path">The wait</a><a href="#change">What to change</a><a href="#helps">Where review helps</a><a href="#buckets">Buckets</a><a href="#app">Why app is lower</a></p>
 <h2 id="path">The path from open to merge</h2>
 <p>Stage 1 is open to the first bot LGTM. Tests run during stage 1. Stage 2 is the wait for a human approval. Stage 3 is approval to merge.</p>
 <p>The bars cover the {gantt["n"]} headline pull requests where a person approved after the bot. {gantt["appr_before"]} approvals came before the bot. Those pull requests are left off the bars.</p>
@@ -930,6 +982,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <p>Tests are still running at the LGTM on {gantt["ci_still_at_lgtm"]} of {gantt["ci_known"]} pull requests.</p>
 {gantt_html(gantt, 3, True)}
 <p>Adding the three stage medians gives {_clock(chain)}. The median time from open to merge is {_clock(gantt["merge"])}. A pull request that is slow at one stage is often a different pull request from one that is slow at the next, so the open-to-merge median is the longer clock.</p>
+<p>The long green bar is the human review. That stage is where bucket A is found. <a href="#helps">Where human review helps</a> counts those catches.</p>
 <section class="assessment">
 <h2 id="change">How to change code review</h2>
 <p><strong>Keep a human approval on app. Treat a bot LGTM as a merge signal only after the required checks pass on that commit. Try a lighter review only as a pilot in one owned area.</strong></p>
@@ -938,6 +991,19 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <p>On actions, mcap, foxglove-sdk, infra, infra-admin, and data-platform, {six_miss} of {six_n} are in A or B ({pct(six_miss, six_n)}). A lighter pilot fits that group. Limit it to one area with one owner. Merge only after required checks pass. Revert quickly if production signals fail. Keep it a pilot until that pilot has a result.</p>
 <p>{not_mergeable} of {len(known)} headline pull requests were not mergeable at the first LGTM commit. Required checks were still failing, or had not run. Wait for those checks. On app that wait is a median of {minute_phrase(wait["by_repo"]["app"]["p50"])}. It blocks a red build. It does not catch bucket A. Bucket A is a label on a human comment, and those comments are the bugs CI would not have caught. Among the {mergeable_n} pull requests that were already mergeable at that commit, {mergeable_miss} are still in A or B ({pct(mergeable_miss, mergeable_n)}).</p>
 <p>The wait is the human approval. Median time from LGTM to the first human approval is {hour_phrase(p50_approval)}. Median time from that approval to merge is {hour_phrase(p50_after)}. Median time from LGTM to merge is {hour_phrase(p50_merge)}. These are calendar hours. They include nights and weekends. {no_appr} headline pull requests merged with no human approval. That group is too small for a comparison.</p>
+<h2 id="helps">Where human review helps</h2>
+<p>Human review helps when a person finds a real bug after the bot has said LGTM, and CI at that commit would not have caught it. That catch is bucket A.</p>
+<p><strong>The catches sit on large app changes, in packages/app, packages/api, and packages/viz.</strong></p>
+<p>{a_pr_n} of {n} headline pull requests are in bucket A. {a_app_n} of those {a_pr_n} are in app. Those pull requests carry {a_finding_all} comments. {a_bug_all} are bugs, {a_loss_n} are data loss, and {a_sec_n} are security. {a_high_n} are high severity. {a_change_n} of the {a_finding_all} were followed by a commit that changed that file.</p>
+<p>App, by size. The share is the portion of headline pull requests in that size that are in bucket A.</p>
+<table><thead><tr><th>App size</th><th>Headline</th><th>Bucket A</th><th>Share</th></tr></thead><tbody>
+{"".join(size_help_rows)}
+</tbody></table>
+<p>On app, {top_area_n} of {a_finding_n} bucket A findings are in {html.escape(area_named)}. Those three paths are the place to aim a deeper read and a better bot check.</p>
+<p>Outside app, bucket A is {a_pr_n - a_app_n} pull requests: {other_a_phrase}. {other_a_zero_phrase} have none in this window.</p>
+<p>{green_a_n} of the {mergeable_n} pull requests that were already green at the LGTM commit are still in bucket A. The required checks had passed. The person still found the bug.</p>
+<p>On app the wait is longer when the pull request is in bucket A. For XL the median from LGTM to approval is {xl_a_wait} with a bucket A catch and {xl_rest_wait} without one. For L the medians are {l_a_wait} and {l_rest_wait}. The file change is in the record, so the longer clock includes the fix.</p>
+<p>Bucket B is a later fix of a line that was already in the LGTM commit. That bug merged. B is {b_n} headline pull requests. {b_app_n} are in app. {b_xl_n} are XL app changes. A comment in bucket A is the help. A later fix in bucket B is a bug that shipped.</p>
 <h2>How the months are moving</h2>
 <p><strong>From June through September the bot-sufficient share stays near 88%. This study does not show it rising or falling.</strong></p>
 <p>The monthly shares are {jun_phrase}. April has {apr_n} headline pull requests and May has {may_n}. The word LGTM starts on 18 Jun 2026, so those two months are a different signal.</p>
@@ -1081,6 +1147,8 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 Bucket C is the ordinary case: none of A, A-ci, B, or D. C is {slices["C"]} of {n} headline pull requests. Bot-sufficient is C plus D-only and A-ci-only, {suff_n} of {n}. A or B is the other {n - suff_n}. The funnel in the HTML puts those rows in order.
 
 Keep a human approval on app. {app_miss} of {app_n} headline pull requests there are in bucket A or B ({pct(app_miss, app_n)}).
+
+Human review helps in bucket A: a real bug after the bot LGTM that CI would not have caught. {a_pr_n} headline pull requests are in A, and {a_app_n} of them are in app. On app the share is {pct(int(app_only.loc[app_only.size_bucket=='XL','in_A'].sum()), int((app_only.size_bucket=='XL').sum()))} for XL and {pct(int(app_only.loc[app_only.size_bucket=='XS','in_A'].sum()), int((app_only.size_bucket=='XS').sum()))} for XS. {top_area_n} of {a_finding_n} app findings are in {html.escape(area_phrase)}. Bucket B is a bug that still merged: {b_n} pull requests, {b_xl_n} of them XL app changes.
 
 Treat a bot LGTM as a merge signal only after the required checks pass on that commit. {not_mergeable} of {len(known)} headline pull requests were not mergeable at the first LGTM. Among the {mergeable_n} that were already mergeable, {mergeable_miss} are still in A or B ({pct(mergeable_miss, mergeable_n)}).
 
