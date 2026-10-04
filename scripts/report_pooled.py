@@ -367,66 +367,45 @@ def exclusive_buckets(frame: pd.DataFrame) -> dict[str, int]:
     }
 
 
-def funnel_svg(steps: list[tuple[str, str, int]]) -> str:
-    """Each row is inside the row above it."""
+def funnel_html(steps: list[tuple[str, str, int]]) -> str:
+    """Each row is inside the row above it. The bars shrink with the count."""
     if not steps:
         return ""
     top = max(steps[0][2], 1)
-    width = 880
-    row_h = 58
-    height = 12 + len(steps) * row_h
-    parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" role="img" aria-label="Funnel from opened pull requests down to bucket C">'
-    ]
-    for i, (label, detail, count) in enumerate(steps):
-        y = 8 + i * row_h
-        bar_w = max(6, int(520 * count / top))
-        parts.append(
-            f'<text x="0" y="{y + 22}" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="{BLACK}">{html.escape(label)}</text>'
+    items = []
+    for label, detail, count in steps:
+        width = max(1.5, 100.0 * count / top)
+        items.append(
+            "<li>"
+            f'<div class="funnel-copy"><strong>{html.escape(label)}</strong>'
+            f"<span>{html.escape(detail)}</span></div>"
+            '<div class="funnel-meter">'
+            f'<div class="funnel-scale"><i style="width:{width:.1f}%"></i></div>'
+            f"<b>{count:,}</b></div></li>"
         )
-        parts.append(
-            f'<text x="0" y="{y + 40}" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#555">{html.escape(detail)}</text>'
-        )
-        parts.append(f'<rect x="250" y="{y + 10}" width="{bar_w}" height="26" rx="4" fill="#0072B2"/>')
-        parts.append(
-            f'<text x="{258 + bar_w}" y="{y + 28}" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="{BLACK}">{count:,}</text>'
-        )
-    parts.append("</svg>")
-    return "".join(parts)
+    return '<ol class="funnel">' + "".join(items) + "</ol>"
 
 
-def partition_svg(parts_data: list[tuple[str, int, str]], total: int) -> str:
+def partition_html(parts_data: list[tuple[str, int, str]], total: int) -> str:
     """One bar. The slices are exclusive and sum to the headline."""
-    width = 880
-    height = 220
-    bar_y = 36
-    bar_h = 36
-    usable = width - 20
-    bits = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" role="img" aria-label="Headline pull requests split into C, D, A-ci, A, and B">'
-    ]
-    x = 10
+    segs = []
+    legend = []
     for label, count, color in parts_data:
+        legend.append(
+            f'<li><i style="background:{color}"></i>{html.escape(label)} · {count:,}</li>'
+        )
         if total <= 0 or count <= 0:
             continue
-        w = usable * count / total
-        bits.append(f'<rect x="{x:.1f}" y="{bar_y}" width="{max(w, 1):.1f}" height="{bar_h}" fill="{color}"/>')
-        if w >= 36:
-            bits.append(
-                f'<text x="{x + w / 2:.1f}" y="{bar_y + 23}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="12" fill="#fff">{count}</text>'
-            )
-        x += w
-    legend_y = 96
-    col_w = 220
-    for i, (label, count, color) in enumerate(parts_data):
-        lx = 10 + (i % 4) * col_w
-        ly = legend_y + (i // 4) * 28
-        bits.append(f'<rect x="{lx}" y="{ly}" width="14" height="14" fill="{color}"/>')
-        bits.append(
-            f'<text x="{lx + 20}" y="{ly + 12}" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="{BLACK}">{html.escape(label)} · {count}</text>'
+        width = 100.0 * count / total
+        inner = html.escape(f"{count:,}") if width >= 8 else ""
+        segs.append(
+            f'<i style="width:{width:.2f}%;background:{color}" title="{html.escape(label)} {count:,}">{inner}</i>'
         )
-    bits.append("</svg>")
-    return "".join(bits)
+    return (
+        '<div class="part" role="img" aria-label="Headline pull requests split into C, D, A-ci, A, and B">'
+        f'<div class="part-bar">{"".join(segs)}</div>'
+        f'<ul class="legend">{"".join(legend)}</ul></div>'
+    )
 
 
 def _repo_row(label: str, opened: pd.DataFrame, human_merged: pd.DataFrame, group: pd.DataFrame, strong: bool) -> str:
@@ -463,13 +442,13 @@ def repo_table(prs: pd.DataFrame, head: pd.DataFrame) -> str:
     human_merged = opened[(opened["author_type"] == "human") & (opened["merged"] == True)]
     rows.append(_repo_row("All seven", opened, human_merged, head, True))
     return (
-        "<table><thead><tr>"
+        '<div class="table-scroll"><table class="nums"><thead><tr>'
         "<th>Repository</th><th>Opened in window</th><th>Human, merged</th>"
         "<th>Headline</th><th>C</th><th>Bot-sufficient</th><th>A or B</th><th>Not mergeable at LGTM</th>"
         "<th>A</th><th>B</th><th>D</th>"
         "</tr></thead><tbody>"
         + "".join(rows)
-        + "</tbody></table>"
+        + "</tbody></table></div>"
     )
 
 
@@ -494,10 +473,13 @@ APP_CI_PATHS = {
 }
 
 
-def _parse_ts(value: str | None) -> datetime | None:
-    if not value:
+def _parse_ts(value: object) -> datetime | None:
+    if value is None or isinstance(value, float):
         return None
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    text = str(value).strip()
+    if not text or text.lower() == "nan":
+        return None
+    return datetime.fromisoformat(text.replace("Z", "+00:00"))
 
 
 def minute_phrase(value: float | None) -> str:
@@ -518,17 +500,45 @@ def ci_wait(head: pd.DataFrame) -> dict:
         contexts: set[str] = set()
         if req_path.exists():
             contexts = set(json.loads(req_path.read_text()).get("contexts") or [])
-        for number in head.loc[head["repo"] == repo, "number"].astype(int):
-            eval_path = ci / "eval" / f"{number}.json"
+        lookup = {
+            int(number): row
+            for number, row in head.loc[head["repo"] == repo].set_index("number").iterrows()
+        }
+        for number, pr in lookup.items():
+            created = _parse_ts(pr.get("created_at") if hasattr(pr, "get") else pr["created_at"])
+            lgtm_at = _parse_ts(pr["first_lgtm_at"])
+            appr_at = _parse_ts(pr["first_human_approval_at"]) if pd.notna(pr["first_human_approval_at"]) else None
+            merged_at = _parse_ts(pr["merged_at"]) if pd.notna(pr["merged_at"]) else None
+
+            def _gap(a: datetime | None, b: datetime | None) -> float | None:
+                if a is None or b is None:
+                    return None
+                return (b - a).total_seconds() / 3600.0
+
+            record = {
+                "repo": repo,
+                "wall": None,
+                "first_passed": None,
+                "open_lgtm": _gap(created, lgtm_at),
+                "lgtm_appr": _gap(lgtm_at, appr_at),
+                "open_appr": _gap(created, appr_at),
+                "open_merge": _gap(created, merged_at),
+                "ci0": None,
+                "ci1": None,
+            }
+            eval_path = ci / "eval" / f"{int(number)}.json"
             if not eval_path.exists():
+                rows.append(record)
                 continue
             evals = json.loads(eval_path.read_text()).get("evals") or []
             if not evals:
+                rows.append(record)
                 continue
             first = evals[0]
+            record["first_passed"] = bool(first.get("passed"))
             runs_path = ci / "runs" / f"{first['sha']}.json"
             if not runs_path.exists():
-                rows.append({"repo": repo, "wall": None, "first_passed": bool(first.get("passed"))})
+                rows.append(record)
                 continue
             runs = json.loads(runs_path.read_text()).get("workflow_runs") or []
             picked: dict[str, dict] = {}
@@ -571,7 +581,12 @@ def ci_wait(head: pd.DataFrame) -> dict:
                 if repo == "app":
                     app_parts[path].append((end - start).total_seconds() / 60.0)
             wall = (max(ends) - min(starts)).total_seconds() / 60.0 if starts else None
-            rows.append({"repo": repo, "wall": wall, "first_passed": bool(first.get("passed"))})
+            record["wall"] = wall
+            record["first_passed"] = bool(first.get("passed"))
+            if starts:
+                record["ci0"] = (min(starts) - created).total_seconds() / 3600.0 if created else None
+                record["ci1"] = (max(ends) - created).total_seconds() / 3600.0 if created else None
+            rows.append(record)
     frame = pd.DataFrame(rows)
     by_repo = {}
     for repo in REPOS:
@@ -590,6 +605,12 @@ def ci_wait(head: pd.DataFrame) -> dict:
 
     green = head[head["mergeable_at_lgtm"] == True]["lgtm_to_merge_h"].dropna()
     red = head[head["mergeable_at_lgtm"] == False]["lgtm_to_merge_h"].dropna()
+    after = frame[frame["lgtm_appr"].notna() & (frame["lgtm_appr"] >= 0)]
+
+    def p50(column: str) -> float | None:
+        series = after[column].dropna() if column in after.columns else pd.Series(dtype=float)
+        return float(series.median()) if len(series) else None
+
     return {
         "by_repo": by_repo,
         "app_ci": part(".github/workflows/ci.yml"),
@@ -597,7 +618,79 @@ def ci_wait(head: pd.DataFrame) -> dict:
         "app_storybook": part(".github/workflows/storybook.yml"),
         "green_to_merge_p50": float(green.median()) if len(green) else None,
         "red_to_merge_p50": float(red.median()) if len(red) else None,
+        "gantt": {
+            "n": int(len(after)),
+            "lgtm": p50("open_lgtm"),
+            "ci0": p50("ci0"),
+            "ci1": p50("ci1"),
+            "appr": p50("open_appr"),
+            "merge": p50("open_merge"),
+            "lgtm_appr": p50("lgtm_appr"),
+            "appr_merge": float((after.loc[after["open_merge"].notna() & after["open_appr"].notna(), "open_merge"] - after.loc[after["open_merge"].notna() & after["open_appr"].notna(), "open_appr"]).median()) if (after["open_merge"].notna() & after["open_appr"].notna()).any() else None,
+            "ci_still_at_lgtm": int(((frame["ci1"] > frame["open_lgtm"]) & frame["ci1"].notna()).sum()),
+            "ci_known": int(frame["ci1"].notna().sum()),
+            "appr_before": int((frame["lgtm_appr"] < 0).sum()),
+            "ci_minutes": float(((after["ci1"] - after["ci0"]).dropna() * 60).median()) if after["ci0"].notna().any() else None,
+        },
     }
+
+
+def _clock(hours: float | None) -> str:
+    if hours is None:
+        return "n/a"
+    if abs(hours) < 1:
+        return f"{hours * 60:.0f} min"
+    return f"{hours:.1f} h"
+
+
+def gantt_html(gantt: dict, axis_hours: float, zoom: bool) -> str:
+    """Median clocks from pull request open. Tests overlap stage 1.
+
+    The layout is HTML so the labels stay full size on a phone and on a desktop.
+    """
+    lgtm = float(gantt["lgtm"] or 0)
+    ci0 = float(gantt["ci0"] or 0)
+    ci_len = float(gantt.get("ci_minutes") or 0) / 60.0
+    human = float(gantt.get("lgtm_appr") or 0)
+    tail = float(gantt.get("appr_merge") or 0)
+    bars = [
+        ("1. Open to bot LGTM", 0.0, lgtm, "#0072B2", _clock(lgtm)),
+        ("Tests, required CI", ci0, ci0 + ci_len, "#E69F00", _clock(ci_len)),
+        ("2. Human, to approval", lgtm, lgtm + human, "#009E73", _clock(human)),
+        ("3. Approval to merge", lgtm + human, lgtm + human + tail, "#56B4E9", _clock(tail)),
+    ]
+    if zoom:
+        bars = bars[:3]
+    axis = float(axis_hours) if axis_hours else 1.0
+    ticks = list(range(int(axis) + 1)) if zoom else list(range(0, int(axis) + 1, 6))
+    if ticks[-1] != int(axis):
+        ticks.append(int(axis))
+    rows = []
+    for label, start, end, color, duration in bars:
+        start_c = max(0.0, start)
+        end_c = max(start_c, end)
+        clipped = end_c > axis + 1e-9
+        vis_end = min(end_c, axis)
+        left = 100.0 * min(start_c, axis) / axis
+        width = max(100.0 * (vis_end - min(start_c, axis)) / axis, 0.6)
+        note = f"{duration}, continues past {axis:.0f} h" if clipped else duration
+        rows.append(
+            '<div class="gantt-row">'
+            f'<div class="gantt-name"><i style="background:{color}"></i>'
+            f"<span><strong>{html.escape(label)}</strong><em>{html.escape(note)}</em></span></div>"
+            '<div class="gantt-track">'
+            f'<b style="left:{left:.2f}%;width:{width:.2f}%;background:{color}"></b>'
+            "</div></div>"
+        )
+    tick_html = "".join(f"<span>{tick} h</span>" for tick in ticks)
+    title = "First 3 hours" if zoom else "Open to merge"
+    return (
+        f'<figure class="gantt" aria-label="Gantt chart, {html.escape(title)}">'
+        f"<figcaption>{html.escape(title)}</figcaption>"
+        + "".join(rows)
+        + f'<div class="gantt-axis-row"><div></div><div class="gantt-axis">{tick_html}</div></div>'
+        "</figure>"
+    )
 
 
 def ci_table(wait: dict) -> str:
@@ -614,11 +707,11 @@ def ci_table(wait: dict) -> str:
             "</tr>"
         )
     return (
-        "<table><thead><tr><th>Repository</th><th>Headline</th>"
+        '<div class="table-scroll"><table class="nums"><thead><tr><th>Repository</th><th>Headline</th>'
         "<th>First LGTM commit not green</th><th>CI median</th><th>CI p90</th>"
         "</tr></thead><tbody>"
         + "".join(rows)
-        + "</tbody></table>"
+        + "</tbody></table></div>"
     )
 
 
@@ -758,22 +851,87 @@ def main() -> None:
     six_unc = slope_sentence(fits["six_uncontrolled"], "month")
     engage = slope_sentence(fits["all_engagement"], "month")
     exact_line = slope_sentence(fits["exact_controlled"], "month")
+    gantt = wait["gantt"]
+    chain = (gantt["lgtm"] or 0) + (gantt["lgtm_appr"] or 0) + (gantt["appr_merge"] or 0)
+    gantt_axis = max(6, int(chain + 2))
+    gantt_axis = ((gantt_axis + 5) // 6) * 6
 
     body = f"""<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>All repositories: bot LGTM and human review</title>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>All repositories: bot LGTM and human review</title>
 <style>
-body {{ font-family: Helvetica, Arial, sans-serif; max-width: 980px; margin: 32px auto; color: #222; line-height: 1.5; }}
-h1,h2,h3 {{ line-height: 1.25; }}
-.chart svg {{ max-width: 100%; height: auto; }}
-.assessment {{ background: #f4f8fb; border: 1px solid #d5e3ee; border-radius: 8px; padding: 16px 20px; margin: 16px 0 28px; }}
-table {{ border-collapse: collapse; font-size: 13px; }}
-td, th {{ border-bottom: 1px solid #ddd; padding: 4px 8px; text-align: left; }}
+body {{ font-family: Helvetica, Arial, sans-serif; max-width: 980px; margin: 0 auto; padding: 16px 16px 72px; color: #222; line-height: 1.5; font-size: 16px; }}
+h1 {{ font-size: 1.45rem; line-height: 1.25; }}
+h2 {{ font-size: 1.2rem; line-height: 1.3; margin-top: 1.6em; }}
+h3 {{ font-size: 1.05rem; line-height: 1.3; }}
+.nav {{ display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 8px 0 4px; }}
+.nav a {{ color: #0b4f8a; }}
+.assessment {{ background: #f4f8fb; border: 1px solid #d5e3ee; border-radius: 8px; padding: 14px 14px; margin: 16px 0 28px; }}
+.chart {{ overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 12px 0 20px; }}
+.chart svg {{ display: block; width: 100%; min-width: 680px; height: auto; }}
+.swipe-hint {{ display: none; color: #555; font-size: 0.92rem; margin: 0 0 6px; }}
+.table-scroll {{ overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 8px 0 18px; }}
+table {{ border-collapse: collapse; width: 100%; font-size: 15px; }}
+td, th {{ border-bottom: 1px solid #ddd; padding: 8px 10px; text-align: left; vertical-align: top; }}
+table.nums {{ min-width: 640px; }}
+table.def td:first-child {{ font-weight: 700; white-space: nowrap; }}
 code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
+.gantt {{ margin: 4px 0 22px; }}
+.gantt figcaption {{ font-weight: 700; margin: 0 0 8px; }}
+.gantt-row, .gantt-axis-row {{ display: grid; grid-template-columns: minmax(190px, 250px) minmax(0, 1fr); gap: 6px 12px; align-items: center; margin: 0 0 10px; }}
+.gantt-name {{ display: flex; gap: 8px; align-items: flex-start; min-width: 0; }}
+.gantt-name i {{ width: 12px; height: 12px; border-radius: 2px; margin-top: 5px; flex: none; }}
+.gantt-name span {{ display: flex; flex-direction: column; min-width: 0; }}
+.gantt-name em {{ font-style: normal; color: #555; font-size: 0.92rem; }}
+.gantt-track {{ position: relative; height: 22px; background: #eee; border-radius: 4px; }}
+.gantt-track b {{ position: absolute; top: 3px; height: 16px; border-radius: 3px; min-width: 6px; }}
+.gantt-axis {{ display: flex; justify-content: space-between; color: #555; font-size: 12px; }}
+.funnel {{ list-style: none; padding: 0; margin: 8px 0 18px; }}
+.funnel li {{ display: grid; grid-template-columns: minmax(180px, 34%) minmax(0, 1fr); gap: 4px 16px; align-items: center; margin: 0 0 12px; }}
+.funnel-copy {{ display: flex; flex-direction: column; min-width: 0; }}
+.funnel-copy span {{ color: #555; font-size: 0.92rem; }}
+.funnel-meter {{ display: flex; align-items: center; gap: 8px; min-width: 0; }}
+.funnel-scale {{ flex: 1; height: 22px; background: #eee; border-radius: 4px; min-width: 0; }}
+.funnel-scale i {{ display: block; height: 100%; background: #0072B2; border-radius: 4px; }}
+.funnel-meter b {{ flex: none; min-width: 4.2em; text-align: right; }}
+.part {{ margin: 8px 0 18px; }}
+.part-bar {{ display: flex; height: 40px; border-radius: 6px; overflow: hidden; background: #eee; }}
+.part-bar > i {{ display: flex; align-items: center; justify-content: center; color: #fff; font-style: normal; font-size: 12px; overflow: hidden; min-width: 2px; }}
+.legend {{ display: flex; flex-wrap: wrap; gap: 8px 16px; list-style: none; padding: 10px 0 0; margin: 0; }}
+.legend li {{ display: flex; align-items: center; gap: 6px; }}
+.legend i {{ width: 12px; height: 12px; border-radius: 2px; flex: none; }}
+@media (min-width: 900px) {{
+  body {{ padding: 28px 32px 80px; font-size: 17px; }}
+  h1 {{ font-size: 1.85rem; }}
+  .assessment {{ padding: 18px 20px; }}
+}}
+@media (max-width: 640px) {{
+  .swipe-hint {{ display: block; }}
+  .gantt-row, .gantt-axis-row, .funnel li {{ grid-template-columns: 1fr; gap: 4px; }}
+  .gantt-axis-row > :first-child {{ display: none; }}
+  .gantt-track {{ height: 28px; }}
+  .gantt-track b {{ top: 5px; height: 18px; }}
+  table.def, table.def thead, table.def tbody, table.def tr, table.def td {{ display: block; width: auto; }}
+  table.def thead {{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }}
+  table.def tr {{ border: 1px solid #ddd; border-radius: 8px; margin: 0 0 12px; padding: 8px 12px; }}
+  table.def td {{ border: 0; padding: 4px 0; white-space: normal; }}
+  table.def td::before {{ content: attr(data-label); display: block; font-size: 12px; color: #555; font-weight: 700; }}
+}}
 </style></head><body>
 <h1>Conclusion: keep human review, and the months are flat</h1>
-<p>All seven repositories. Pull requests opened 1 Apr 2026 through 30 Sep 2026. The rest of this page is the evidence.</p>
+<p>All seven repositories. Pull requests opened 1 Apr 2026 through 30 Sep 2026.</p>
+<p class="nav"><a href="#path">The wait</a><a href="#change">What to change</a><a href="#buckets">Buckets</a><a href="#app">Why app is lower</a></p>
+<h2 id="path">The path from open to merge</h2>
+<p>Stage 1 is open to the first bot LGTM. Tests run during stage 1. Stage 2 is the wait for a human approval. Stage 3 is approval to merge.</p>
+<p>The bars cover the {gantt["n"]} headline pull requests where a person approved after the bot. {gantt["appr_before"]} approvals came before the bot. Those pull requests are left off the bars.</p>
+<p>Each bar is as long as the median wait for that stage. Tests start at their median start, during stage 1. Stage 2 starts at the end of stage 1. Stage 3 starts at the end of stage 2. The first chart runs through merge. The second chart is the first 3 hours, so stage 1 and the tests are wide enough to see.</p>
+{gantt_html(gantt, gantt_axis, False)}
+<p>Tests are still running at the LGTM on {gantt["ci_still_at_lgtm"]} of {gantt["ci_known"]} pull requests.</p>
+{gantt_html(gantt, 3, True)}
+<p>Adding the three stage medians gives {_clock(chain)}. The median time from open to merge is {_clock(gantt["merge"])}. A pull request that is slow at one stage is often a different pull request from one that is slow at the next, so the open-to-merge median is the longer clock.</p>
 <section class="assessment">
-<h2>How to change code review</h2>
+<h2 id="change">How to change code review</h2>
 <p><strong>Keep a human approval on app. Treat a bot LGTM as a merge signal only after the required checks pass on that commit. Try a lighter review only as a pilot in one owned area.</strong></p>
 <p>{suff_n} of {n} headline pull requests are bot-sufficient ({pct(suff_n, n)}). Bot-sufficient means neither bucket A nor bucket B. Bucket C is {slices["C"]} of those {suff_n}. C is the usual case: no A, no A-ci, no B, and no D. The funnel below counts every bucket, including C. The other {n - suff_n} pull requests are in A or B.</p>
 <p>On app, {app_miss} of {app_n} headline pull requests are in A or B ({pct(app_miss, app_n)}). Keep the human approval there.</p>
@@ -793,28 +951,28 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <li>The controlled fit warned that it did not fully settle. A coefficient from a fit that did not settle is not a trend.</li>
 </ul>
 </section>
-<h2>What A, B, C, and D mean</h2>
+<h2 id="buckets">What A, B, C, and D mean</h2>
 <p>There are five labels. C is the one the other letters leave out. A pull request can carry more than one of A, A-ci, B, and D. C means it carries none of them.</p>
-<table>
+<table class="def">
 <thead><tr><th>Bucket</th><th>What it is</th><th>Bot-sufficient?</th></tr></thead>
 <tbody>
-<tr><td>C</td><td>None of the four signals below. This is the ordinary headline pull request.</td><td>Yes</td></tr>
-<tr><td>A</td><td>A real medium or high bug, security issue, or data-loss comment after the first bot LGTM. The author acknowledged it, or a later commit changed that file. CI at the counterfactual commit would not have caught it.</td><td>No</td></tr>
-<tr><td>A-ci</td><td>The same kind of comment as A, and the comment names CI, a test, or lint, while a required check was already failing.</td><td>Yes. The check was already red.</td></tr>
-<tr><td>B</td><td>A later fix. Blame shows the fixed line was already in the LGTM commit. The fix merged within 30 days. The line text is unique, and the match is medium or high confidence. B misses fixes the title search does not see, so it is a lower bound.</td><td>No</td></tr>
-<tr><td>D</td><td>A later fix whose blamed line was not in the LGTM commit. The line was added before the final head. The fix merged within 30 days.</td><td>Yes, when D is alone. The line was not there at the LGTM.</td></tr>
+<tr><td data-label="Bucket">C</td><td data-label="What it is">None of the four signals below. This is the ordinary headline pull request.</td><td data-label="Bot-sufficient?">Yes</td></tr>
+<tr><td data-label="Bucket">A</td><td data-label="What it is">A real medium or high bug, security issue, or data-loss comment after the first bot LGTM. The author acknowledged it, or a later commit changed that file. CI at the counterfactual commit would not have caught it.</td><td data-label="Bot-sufficient?">No</td></tr>
+<tr><td data-label="Bucket">A-ci</td><td data-label="What it is">The same kind of comment as A, and the comment names CI, a test, or lint, while a required check was already failing.</td><td data-label="Bot-sufficient?">Yes. The check was already red.</td></tr>
+<tr><td data-label="Bucket">B</td><td data-label="What it is">A later fix. Blame shows the fixed line was already in the LGTM commit. The fix merged within 30 days. The line text is unique, and the match is medium or high confidence. B misses fixes the title search does not see, so it is a lower bound.</td><td data-label="Bot-sufficient?">No</td></tr>
+<tr><td data-label="Bucket">D</td><td data-label="What it is">A later fix whose blamed line was not in the LGTM commit. The line was added before the final head. The fix merged within 30 days.</td><td data-label="Bot-sufficient?">Yes, when D is alone. The line was not there at the LGTM.</td></tr>
 </tbody>
 </table>
 <p>Read the funnel from top to bottom. Each row is inside the row above it. The last row is bucket C.</p>
-<div class="chart">{funnel_svg([
+{funnel_html([
     ("Opened in the window", "1 Apr through 30 Sep 2026", opened_n),
     ("Human author, merged", "May have no bot LGTM", human_merged_n),
     ("Headline", "Also has a bot LGTM", n),
     ("Bot-sufficient", "Not in A and not in B", suff_n),
     ("Bucket C", "Also not in A-ci and not in D", slices["C"]),
-])}</div>
+])}
 <p>The bar below splits the {n} headline pull requests into slices that do not overlap. They sum to {n}. C is the long green slice. A or B is the part that removes bot-sufficient.</p>
-<div class="chart">{partition_svg([
+{partition_html([
     ("C", slices["C"], GREEN),
     ("D only", slices["D_only"], SKY),
     ("A-ci only", slices["Aci_only"], ORANGE),
@@ -822,7 +980,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
     ("A only", slices["A_only"], VERM),
     ("B only", slices["B_only"], PURPLE),
     ("A and B", slices["AB"], "#000000"),
-], n)}</div>
+], n)}
 <h2>How long we wait for CI, and whether it is worth it</h2>
 <p>The clock below is the wall-clock time of the required pull_request workflows on the first LGTM commit. Workflows run together, so the wait is the span from the earliest start to the latest finish, not the sum of the jobs. actions has no required checks, so it has no CI gate.</p>
 {ci_table(wait)}
@@ -835,15 +993,15 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <p>Bucket A keeps a comment only when all of these hold. It is after the LGTM. It is real. It is a bug, a security issue, or data loss. The severity is medium or high. The author acknowledged it, or a later commit changed that file. If the comment also names CI, a test, or lint, and a required check was already failing, the comment is A-ci instead.</p>
 <p>Bucket B and bucket D do not come from this comment pass. They come from a later pull request whose title looks like a fix, then from git blame on the lines that fix changed.</p>
 <p>Read this funnel from top to bottom. Each row is inside the row above it. The last row is the comments that became bucket A or A-ci.</p>
-<div class="chart">{funnel_svg([
+{funnel_html([
     ("Human comments on headline pull requests", "Review comments, review bodies, and issue comments", comment_counts["on_headline"]),
     ("After the first bot LGTM", "Comments before the LGTM stay out of A", comment_counts["after"]),
     ("Marked real", "The hunk or a reply shows a real issue", comment_counts["real_after"]),
     ("Medium or high bug, security, or data loss", "Nits and questions are out", comment_counts["mh_defect"]),
     ("Became A or A-ci", "Author ack or a later edit of that file", comment_counts["entered"]),
-])}</div>
+])}
 <p>{comment_counts["bucket_a"]} of those last-row comments are bucket A. {comment_counts["bucket_aci"]} are A-ci. {comment_counts["nit_after"]} real comments after the LGTM are nits, and they do not enter A. The app labels and the other repositories' labels were separate passes with the same rubric. Hand labels in <code>labeling_sample.csv</code> are still empty, so a second reader has not checked the agreement.</p>
-<h2>Why app is lower, and how to shift left</h2>
+<h2 id="app">Why app is lower, and how to shift left</h2>
 <p>App is {pct(app_n - app_miss, app_n)} bot-sufficient ({app_n - app_miss} of {app_n}). The other six repositories together are {pct(six_suff, six_n)} ({six_suff} of {six_n}). The 88% line in the month chart is all seven repositories together, and app is most of that count.</p>
 <p>App pull requests are larger. The median app headline pull request is {int(app_only['lines'].median())} lines. The median in the other six is {int(other_only['lines'].median())} lines. Size buckets are XS under 50 lines, S under 200, M under 500, L under 1,000, and XL at 1,000 or more.</p>
 <p>Give app the other repositories' size mix and its bot-sufficient share would be {pct(round(app_at_other_mix * 1000), 1000)}. Give the other repositories app's size mix and their share would be {pct(round(other_at_app_mix * 1000), 1000)}. Size mix is a large part of the gap. A gap remains inside the same size bucket, and it is widest on L and XL.</p>
@@ -857,6 +1015,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <p>Per-repository pages, with their own Venn diagrams, are <code>out/report.html</code> for app and <code>out/&lt;repo&gt;/report.html</code> for the other six. Per-developer pages sit beside those files.</p>
 <h2>Where A, B, and D overlap</h2>
 <p>The funnel already counted bucket C. These circles are only the pull requests that carry A, B, D, or A-ci. A pull request can sit in more than one circle. C is everyone outside the circles: {regions["C"]} headline pull requests.</p>
+<p class="swipe-hint">Swipe each chart sideways to read the labels.</p>
 <h3>A and B decide bot-sufficient</h3>
 <p>Bucket A is a real medium or high bug, security, or data-loss comment after the LGTM. The author acknowledged it, or a later commit changed that file, and CI at the counterfactual commit would not have caught it. Bucket B is a later fix whose blamed line was already in that commit, merged within 30 days. A pull request in A or B is not bot-sufficient.</p>
 <div class="chart">{venn_ab(regions)}</div>
@@ -868,6 +1027,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <div class="chart">{venn_aci(regions)}</div>
 <p>Bucket C is the {regions["C"]} headline pull requests outside every circle. Bot-sufficient is C plus the pull requests that are D only or A-ci only. That adds {regions["sufficient"] - regions["C"]} pull requests, for {regions["sufficient"]} bot-sufficient in total.</p>
 <h2>1. The month charts</h2>
+<p class="swipe-hint">Swipe each chart sideways to read the axis.</p>
 <p>These charts describe the same pull requests. They do not turn the month coefficient into a trend. Gray points have fewer than 10 pull requests. The shaded month is September.</p>
 <div class="chart">{svgs["pooled"]}</div>
 <div class="chart">{svgs["by_repo"]}</div>
@@ -875,6 +1035,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <div class="chart">{svgs["cats"]}</div>
 <p>Engagement sensitivity, still with repository, size, and tenure: {html.escape(engage)}. Restricting the controlled model to a body that is exactly <code>LGTM</code> leaves out {n - int(len(exact))} headline pull requests. {html.escape(exact_line)}.</p>
 <h2>2. Time after the LGTM</h2>
+<p class="swipe-hint">Swipe the chart sideways to read the axis.</p>
 <div class="chart">{svgs["time"]}</div>
 <p>Times are calendar hours. They include nights, weekends, and waiting on the author or CI. A negative LGTM-to-approval time means the human approved before the bot's first LGTM.</p>
 <h2>3. Method</h2>
@@ -913,6 +1074,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 """
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "report.html").write_text(body)
+    (OUT / "output.html").write_text(body)
     (OUT / "report.md").write_text(
         f"""# Conclusion: keep human review, and the months are flat
 
