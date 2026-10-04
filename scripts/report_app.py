@@ -1006,9 +1006,14 @@ def dev_table(dev: pd.DataFrame) -> str:
 
 def markdown_summary(summary, n, no_appr, not_mergeable, known_n, sha_unknown_n, fetch_error_n, no_file_n, reg_line, rel_out) -> str:
     reg = summary.get("regressions", {})
+    unc = reg.get("uncontrolled") or {}
+    if unc.get("ok"):
+        lead = "The study does not answer that question. The level on this definition is the bot-sufficient count below. The month slope includes zero, and the fit did not fully converge."
+    else:
+        lead = "The study does not answer that question. The level on this definition is the bot-sufficient count below. The month model was not fit, so there is no slope to read."
     return f"""# Is the first bot LGTM becoming sufficient?
 
-The study does not answer that question. The level on this definition is the bot-sufficient count below. The month slope includes zero, and the fit did not fully converge.
+{lead}
 
 Bot-sufficient means no bucket A and no bucket B on a merged human pull request that the bot LGTM'd. It means those two defect signals were not observed.
 

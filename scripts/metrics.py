@@ -501,7 +501,10 @@ def main() -> None:
             "bot_sufficient ~ month_index + C(size_bucket, Treatment(reference='S')) + C(tenure_bucket, Treatment(reference='2y+')) + substantive_comments_after",
         )
     else:
-        regressions["uncontrolled"] = {"ok": False, "error": f"n={len(reg_df)}"}
+        skipped = {"ok": False, "error": f"n={len(reg_df)}"}
+        regressions["uncontrolled"] = skipped
+        regressions["controlled"] = dict(skipped)
+        regressions["engagement"] = dict(skipped)
 
     # category mix after LGTM by month
     cat_rows = []
