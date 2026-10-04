@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 from report_app import (
     BLACK,
     GRAY,
+    GREEN,
     MONTH_LABELS,
     ORANGE,
     PURPLE,
@@ -341,11 +342,98 @@ def slope_sentence(block: dict, label: str) -> str:
     return sentence
 
 
+def _flag(frame: pd.DataFrame, column: str) -> pd.Series:
+    if column not in frame.columns or frame.empty:
+        return pd.Series(False, index=frame.index)
+    return frame[column].fillna(False).astype(bool)
+
+
+def exclusive_buckets(frame: pd.DataFrame) -> dict[str, int]:
+    """Mutually exclusive slices. They add up to the headline count."""
+    a = _flag(frame, "in_A")
+    ac = _flag(frame, "in_Aci")
+    b = _flag(frame, "in_B")
+    d = _flag(frame, "in_D")
+    return {
+        "n": int(len(frame)),
+        "C": int((~a & ~ac & ~b & ~d).sum()),
+        "D_only": int((~a & ~b & d & ~ac).sum()),
+        "Aci_only": int((~a & ~b & ac & ~d).sum()),
+        "D_and_Aci": int((~a & ~b & d & ac).sum()),
+        "A_only": int((a & ~b).sum()),
+        "B_only": int((b & ~a).sum()),
+        "AB": int((a & b).sum()),
+    }
+
+
+def funnel_svg(steps: list[tuple[str, str, int]]) -> str:
+    """Each row is inside the row above it."""
+    if not steps:
+        return ""
+    top = max(steps[0][2], 1)
+    width = 880
+    row_h = 58
+    height = 12 + len(steps) * row_h
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" role="img" aria-label="Funnel from opened pull requests down to bucket C">'
+    ]
+    for i, (label, detail, count) in enumerate(steps):
+        y = 8 + i * row_h
+        bar_w = max(6, int(520 * count / top))
+        parts.append(
+            f'<text x="0" y="{y + 22}" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="{BLACK}">{html.escape(label)}</text>'
+        )
+        parts.append(
+            f'<text x="0" y="{y + 40}" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#555">{html.escape(detail)}</text>'
+        )
+        parts.append(f'<rect x="250" y="{y + 10}" width="{bar_w}" height="26" rx="4" fill="#0072B2"/>')
+        parts.append(
+            f'<text x="{258 + bar_w}" y="{y + 28}" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="{BLACK}">{count:,}</text>'
+        )
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def partition_svg(parts_data: list[tuple[str, int, str]], total: int) -> str:
+    """One bar. The slices are exclusive and sum to the headline."""
+    width = 880
+    height = 220
+    bar_y = 36
+    bar_h = 36
+    usable = width - 20
+    bits = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" role="img" aria-label="Headline pull requests split into C, D, A-ci, A, and B">'
+    ]
+    x = 10
+    for label, count, color in parts_data:
+        if total <= 0 or count <= 0:
+            continue
+        w = usable * count / total
+        bits.append(f'<rect x="{x:.1f}" y="{bar_y}" width="{max(w, 1):.1f}" height="{bar_h}" fill="{color}"/>')
+        if w >= 36:
+            bits.append(
+                f'<text x="{x + w / 2:.1f}" y="{bar_y + 23}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="12" fill="#fff">{count}</text>'
+            )
+        x += w
+    legend_y = 96
+    col_w = 220
+    for i, (label, count, color) in enumerate(parts_data):
+        lx = 10 + (i % 4) * col_w
+        ly = legend_y + (i // 4) * 28
+        bits.append(f'<rect x="{lx}" y="{ly}" width="14" height="14" fill="{color}"/>')
+        bits.append(
+            f'<text x="{lx + 20}" y="{ly + 12}" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="{BLACK}">{html.escape(label)} · {count}</text>'
+        )
+    bits.append("</svg>")
+    return "".join(bits)
+
+
 def _repo_row(label: str, opened: pd.DataFrame, human_merged: pd.DataFrame, group: pd.DataFrame, strong: bool) -> str:
     n = int(len(group))
     suff = int(group["bot_sufficient"].sum()) if n else 0
     known = group[group["ci_known"] == True] if n else group
     not_mergeable = int((known["mergeable_at_lgtm"] == False).sum()) if n else 0
+    bucket_c = exclusive_buckets(group)["C"] if n else 0
     name = f"<strong>{html.escape(label)}</strong>" if strong else html.escape(label)
     return (
         "<tr>"
@@ -353,6 +441,7 @@ def _repo_row(label: str, opened: pd.DataFrame, human_merged: pd.DataFrame, grou
         f"<td>{len(opened)}</td>"
         f"<td>{len(human_merged)}</td>"
         f"<td>{n}</td>"
+        f"<td>{bucket_c}</td>"
         f"<td>{suff} ({pct(suff, n)})</td>"
         f"<td>{n - suff}</td>"
         f"<td>{not_mergeable}</td>"
@@ -375,7 +464,7 @@ def repo_table(prs: pd.DataFrame, head: pd.DataFrame) -> str:
     return (
         "<table><thead><tr>"
         "<th>Repository</th><th>Opened in window</th><th>Human, merged</th>"
-        "<th>Headline</th><th>Bot-sufficient</th><th>A or B</th><th>Not mergeable at LGTM</th>"
+        "<th>Headline</th><th>C</th><th>Bot-sufficient</th><th>A or B</th><th>Not mergeable at LGTM</th>"
         "<th>A</th><th>B</th><th>D</th>"
         "</tr></thead><tbody>"
         + "".join(rows)
@@ -403,6 +492,11 @@ def main() -> None:
     head = headline(prs)
     six = head[head["repo"] != "app"].copy()
     regions = overlap_counts(head)
+    slices = exclusive_buckets(head)
+    opened_n = int((prs["in_cohort"] == True).sum())
+    human_merged_n = int(
+        ((prs["in_cohort"] == True) & (prs["author_type"] == "human") & (prs["merged"] == True)).sum()
+    )
     monthly = month_rows(head)
     reg = reg_frame(head)
     six_reg = reg_frame(six)
@@ -523,7 +617,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <section class="assessment">
 <h2>How to change code review</h2>
 <p><strong>Keep a human approval on app. Treat a bot LGTM as a merge signal only after the required checks pass on that commit. Try a lighter review only as a pilot in one owned area.</strong></p>
-<p>{suff_n} of {n} headline pull requests are bot-sufficient ({pct(suff_n, n)}). Bot-sufficient means a human author, a merge, a bot LGTM, and neither bucket A nor bucket B. The other {n - suff_n} pull requests are the ones where review still finds a defect CI would miss, or a line that was already there and needed a later fix.</p>
+<p>{suff_n} of {n} headline pull requests are bot-sufficient ({pct(suff_n, n)}). Bot-sufficient means neither bucket A nor bucket B. Bucket C is {slices["C"]} of those {suff_n}. C is the usual case: no A, no A-ci, no B, and no D. The funnel below counts every bucket, including C. The other {n - suff_n} pull requests are in A or B.</p>
 <p>On app, {app_miss} of {app_n} headline pull requests are in A or B ({pct(app_miss, app_n)}). Keep the human approval there.</p>
 <p>On actions, mcap, foxglove-sdk, infra, infra-admin, and data-platform, {six_miss} of {six_n} are in A or B ({pct(six_miss, six_n)}). A lighter pilot fits that group. Limit it to one area with one owner. Merge only after required checks pass. Revert quickly if production signals fail. Keep it a pilot until that pilot has a result.</p>
 <p>{not_mergeable} of {len(known)} headline pull requests were not mergeable at the first LGTM commit. Required checks were still failing, or had not run. Wait for those checks. Among the {mergeable_n} pull requests that were already mergeable at that commit, {mergeable_miss} are still in A or B ({pct(mergeable_miss, mergeable_n)}). Green CI plus a bot LGTM still leaves about one in ten for a human to catch.</p>
@@ -541,6 +635,36 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <li>The controlled fit warned that it did not fully settle. A coefficient from a fit that did not settle is not a trend.</li>
 </ul>
 </section>
+<h2>What A, B, C, and D mean</h2>
+<p>There are five labels. C is the one the other letters leave out. A pull request can carry more than one of A, A-ci, B, and D. C means it carries none of them.</p>
+<table>
+<thead><tr><th>Bucket</th><th>What it is</th><th>Bot-sufficient?</th></tr></thead>
+<tbody>
+<tr><td>C</td><td>None of the four signals below. This is the ordinary headline pull request.</td><td>Yes</td></tr>
+<tr><td>A</td><td>A real medium or high bug, security issue, or data-loss comment after the first bot LGTM. The author acknowledged it, or a later commit changed that file. CI at the counterfactual commit would not have caught it.</td><td>No</td></tr>
+<tr><td>A-ci</td><td>The same kind of comment as A, and the comment names CI, a test, or lint, while a required check was already failing.</td><td>Yes. The check was already red.</td></tr>
+<tr><td>B</td><td>A later fix. Blame shows the fixed line was already in the LGTM commit. The fix merged within 30 days. The line text is unique, and the match is medium or high confidence. B misses fixes the title search does not see, so it is a lower bound.</td><td>No</td></tr>
+<tr><td>D</td><td>A later fix whose blamed line was not in the LGTM commit. The line was added before the final head. The fix merged within 30 days.</td><td>Yes, when D is alone. The line was not there at the LGTM.</td></tr>
+</tbody>
+</table>
+<p>Read the funnel from top to bottom. Each row is inside the row above it. The last row is bucket C.</p>
+<div class="chart">{funnel_svg([
+    ("Opened in the window", "1 Apr through 30 Sep 2026", opened_n),
+    ("Human author, merged", "May have no bot LGTM", human_merged_n),
+    ("Headline", "Also has a bot LGTM", n),
+    ("Bot-sufficient", "Not in A and not in B", suff_n),
+    ("Bucket C", "Also not in A-ci and not in D", slices["C"]),
+])}</div>
+<p>The bar below splits the {n} headline pull requests into slices that do not overlap. They sum to {n}. C is the long green slice. A or B is the part that removes bot-sufficient.</p>
+<div class="chart">{partition_svg([
+    ("C", slices["C"], GREEN),
+    ("D only", slices["D_only"], SKY),
+    ("A-ci only", slices["Aci_only"], ORANGE),
+    ("D and A-ci", slices["D_and_Aci"], "#0072B2"),
+    ("A only", slices["A_only"], VERM),
+    ("B only", slices["B_only"], PURPLE),
+    ("A and B", slices["AB"], "#000000"),
+], n)}</div>
 <h2>Why app is lower, and how to shift left</h2>
 <p>App is {pct(app_n - app_miss, app_n)} bot-sufficient ({app_n - app_miss} of {app_n}). The other six repositories together are {pct(six_suff, six_n)} ({six_suff} of {six_n}). The 88% line in the month chart is all seven repositories together, and app is most of that count.</p>
 <p>App pull requests are larger. The median app headline pull request is {int(app_only['lines'].median())} lines. The median in the other six is {int(other_only['lines'].median())} lines. Size buckets are XS under 50 lines, S under 200, M under 500, L under 1,000, and XL at 1,000 or more.</p>
@@ -553,8 +677,8 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <p>Headline means a human author, merged, opened in the window, and at least one bot comment that contains the word LGTM. Opened-in-window is every pull request in that window, including ones with no LGTM.</p>
 {repo_table(prs, head)}
 <p>Per-repository pages, with their own Venn diagrams, are <code>out/report.html</code> for app and <code>out/&lt;repo&gt;/report.html</code> for the other six. Per-developer pages sit beside those files.</p>
-<h2>Where the categories overlap</h2>
-<p>These circles use the {n} headline pull requests from all seven repositories. A pull request can sit in more than one bucket.</p>
+<h2>Where A, B, and D overlap</h2>
+<p>The funnel already counted bucket C. These circles are only the pull requests that carry A, B, D, or A-ci. A pull request can sit in more than one circle. C is everyone outside the circles: {regions["C"]} headline pull requests.</p>
 <h3>A and B decide bot-sufficient</h3>
 <p>Bucket A is a real medium or high bug, security, or data-loss comment after the LGTM. The author acknowledged it, or a later commit changed that file, and CI at the counterfactual commit would not have caught it. Bucket B is a later fix whose blamed line was already in that commit, merged within 30 days. A pull request in A or B is not bot-sufficient.</p>
 <div class="chart">{venn_ab(regions)}</div>
@@ -564,7 +688,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <h3>A and A-ci</h3>
 <p>A-ci is the same kind of comment as A, and the comment names CI, a test, or lint, while a required check was already failing. A-ci stays bot-sufficient.</p>
 <div class="chart">{venn_aci(regions)}</div>
-<p>Bucket C is the {regions["C"]} headline pull requests in none of A, A-ci, B, or D. Bot-sufficient also includes D-only and A-ci-only. That adds {regions["sufficient"] - regions["C"]} pull requests, for {regions["sufficient"]} bot-sufficient in total.</p>
+<p>Bucket C is the {regions["C"]} headline pull requests outside every circle. Bot-sufficient is C plus the pull requests that are D only or A-ci only. That adds {regions["sufficient"] - regions["C"]} pull requests, for {regions["sufficient"]} bot-sufficient in total.</p>
 <h2>1. The month charts</h2>
 <p>These charts describe the same pull requests. They do not turn the month coefficient into a trend. Gray points have fewer than 10 pull requests. The shaded month is September.</p>
 <div class="chart">{svgs["pooled"]}</div>
@@ -605,12 +729,16 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 {examples(head, "in_B")}
 <h3>Bucket D</h3>
 {examples(head, "in_D")}
+<h3>Bucket C</h3>
+<p>Bucket C has no defect example. A pull request is in C when it shows none of A, A-ci, B, or D. There are {slices["C"]} of them.</p>
 </body></html>
 """
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "report.html").write_text(body)
     (OUT / "report.md").write_text(
         f"""# Conclusion: keep human review, and the months are flat
+
+Bucket C is the ordinary case: none of A, A-ci, B, or D. C is {slices["C"]} of {n} headline pull requests. Bot-sufficient is C plus D-only and A-ci-only, {suff_n} of {n}. A or B is the other {n - suff_n}. The funnel in the HTML puts those rows in order.
 
 Keep a human approval on app. {app_miss} of {app_n} headline pull requests there are in bucket A or B ({pct(app_miss, app_n)}).
 
