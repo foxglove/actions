@@ -338,7 +338,10 @@ def chart_approval(comp: pd.DataFrame) -> str:
     hi = sub["hi"].astype(float)
     colors = [GRAY if int(n) < 10 else APP for n in sub["n"]]
     ax.bar(xs, rates, color=colors)
-    ax.errorbar(xs, rates, yerr=[rates - lo.fillna(rates), hi.fillna(rates) - rates], fmt="none", ecolor=BLACK, capsize=4)
+    # A zero rate can sit a float-epsilon below the Wilson lower bound.
+    low_err = np.clip(rates.to_numpy() - lo.fillna(rates).to_numpy(), 0, None)
+    high_err = np.clip(hi.fillna(rates).to_numpy() - rates.to_numpy(), 0, None)
+    ax.errorbar(xs, rates, yerr=[low_err, high_err], fmt="none", ecolor=BLACK, capsize=4)
     ax.set_xticks(xs, [f"{g}\nn={n}" for g, n in zip(sub["group"], sub["n"])])
     ax.set_ylim(0, 1)
     n0 = int(sub.loc[sub["group"] == "no_human_approval", "n"].iloc[0]) if (sub["group"] == "no_human_approval").any() else 0
