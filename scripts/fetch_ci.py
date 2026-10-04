@@ -196,11 +196,9 @@ def evaluate_sha(gh: GitHub, sha: str) -> dict:
                 checks[name] = "missing"
                 source[name] = "no_run"
         else:
-            try:
-                jobs = job_map(gh, run)
-            except GitHubError as exc:
-                jobs = {}
-                source["_error"] = str(exc)[:180]
+            # A 5xx or timeout must not look like a failed required check.
+            # main() leaves the PR unwritten so the next wave retries it.
+            jobs = job_map(gh, run)
             for name in names:
                 conclusion = match_job(jobs, name)
                 if conclusion == "skipped":
@@ -261,7 +259,6 @@ def main() -> None:
                         break
             except GitHubError as exc:
                 print(f"ci skip {path.stem}: {exc}", flush=True)
-                skipped.add(path.stem)
                 if exc.status in (404, 422):
                     # Keep checks that already finished. A later SHA can 422
                     # after a force-push; the earlier failure still shows the
@@ -275,6 +272,9 @@ def main() -> None:
                             "fetch_error": str(exc)[:300],
                         },
                     )
+                    skipped.discard(path.stem)
+                else:
+                    skipped.add(path.stem)
                 continue
             skipped.discard(path.stem)
             save(out, {"number": int(path.stem), "shas": shas, "evals": evals})

@@ -53,6 +53,7 @@ def main() -> None:
         by_pr[int(f["pr"])].append(f)
     cache: dict[tuple[str, str], set[str] | None] = {}
     diff_failures = 0
+    rebased = 0
     for number, group in by_pr.items():
         pr = prs.get(number)
         if not pr:
@@ -74,10 +75,11 @@ def main() -> None:
                 if c.get("at") and at and c["at"] <= at:
                     base = c["sha"]
             if base is None:
-                # A rebase rewrites committedDate, so every commit can look later
-                # than the finding. Diff from the parent of the first commit so
-                # that commit's own files are included.
-                base = f"{commits[0]['sha']}^"
+                # A rebase rewrites committedDate. The commit before the
+                # finding is not known, so a same-path change cannot be shown.
+                finding["code_change_confidence"] = "rebased_unknown"
+                rebased += 1
+                continue
             if base == head:
                 continue
             key = (base, head)
@@ -101,7 +103,7 @@ def main() -> None:
             fh.write(json.dumps(finding, separators=(",", ":")) + "\n")
     changed = sum(1 for f in findings if f.get("code_change"))
     print(
-        f"findings {len(findings)} with code change {changed} diffs {len(cache)} diff_failed {diff_failures}",
+        f"findings {len(findings)} with code change {changed} diffs {len(cache)} diff_failed {diff_failures} rebased {rebased}",
         flush=True,
     )
 

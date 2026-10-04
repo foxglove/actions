@@ -257,14 +257,7 @@ def main() -> None:
                 if a["intro_pr"]:
                     counts[a["intro_pr"]] += 1
             if not counts:
-                confidence = "low"
-                top_pr = None
-                top_n = 0
-            else:
-                top_pr, top_n = max(counts.items(), key=lambda kv: kv[1])
-                share = top_n / max(1, len(attributions))
-                confidence = "high" if share >= 0.7 else "medium" if share >= 0.4 else "low"
-            # Evaluate every introducer that we know, not only the top one.
+                continue
             for intro_pr, n_lines in counts.items():
                 intro = by_number.get(intro_pr)
                 if not intro:

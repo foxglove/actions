@@ -531,7 +531,8 @@ def main() -> None:
     dev = pd.read_csv(OUT / "per_developer.csv")
     summary = json.loads((OUT / "summary.json").read_text())
     escapes = pd.read_csv(OUT / "escapes.csv") if (OUT / "escapes.csv").exists() else pd.DataFrame()
-    history = json.loads((ROOT / "data/raw/app/meta/bot_history.json").read_text())
+    history_path = ROOT / "data/raw/app/meta/bot_history.json"
+    history = json.loads(history_path.read_text()) if history_path.exists() else {}
     rules = json.loads((ROOT / "data/raw/app/meta/rulesets.json").read_text())
     main_rules = next(r for r in rules if r.get("name") == "main branch protections")
 

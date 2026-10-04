@@ -381,6 +381,7 @@ def main() -> None:
     example_lgtm = []
     bot_round_counts = []
     n = 0
+    truncated_n = 0
     for path in paths:
         try:
             pr = json.loads(path.read_text())
@@ -388,6 +389,8 @@ def main() -> None:
             print(f"skip partial {path.name}", flush=True)
             continue
         n += 1
+        if pr.get("_truncated_fields"):
+            truncated_n += 1
         created = parse_ts(pr.get("createdAt"))
         merged = parse_ts(pr.get("mergedAt"))
         closed = parse_ts(pr.get("closedAt"))
@@ -556,7 +559,7 @@ def main() -> None:
     pr_out.close()
     finding_out.close()
     (INTERIM / "lgtm_examples.json").write_text(json.dumps(example_lgtm, indent=2))
-    print(f"done {n} prs", flush=True)
+    print(f"done {n} prs truncated_fields {truncated_n}", flush=True)
 
 
 if __name__ == "__main__":

@@ -487,7 +487,8 @@ def main() -> None:
                 extend_thread_comments(gh, n, pr)
             except GitHubError as exc:
                 print(f"pagination failed for {n}: {exc}", flush=True)
-                pr["_pagination_error"] = str(exc)
+                save(PRS / f"{n}.error.json", {"error": str(exc)})
+                continue
             note_truncation(pr)
             save(PRS / f"{n}.json", pr)
         done += len(chunk)

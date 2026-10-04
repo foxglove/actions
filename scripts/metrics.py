@@ -721,7 +721,7 @@ def main() -> None:
         "not_mergeable": sum(1 for p in headline if p.get("ci_known") and not p.get("mergeable_at_lgtm")),
         "ci_known_headline": sum(1 for p in headline if p.get("ci_known")),
         "lgtm_sha_unknown": sum(1 for p in headline if p.get("sha_unknown")),
-        "ci_fetch_error": sum(1 for p in headline if p.get("fetch_error")),
+        "ci_fetch_error": sum(1 for p in headline if p.get("fetch_error") and not p.get("ci_known")),
         "human_before_lgtm": sum(1 for p in cohort if p.get("bot_lgtm") and p.get("human_review_before_lgtm")),
         "lgtm_prs": sum(1 for p in cohort if p.get("bot_lgtm")),
         "labeled_findings": labeled,

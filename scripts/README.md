@@ -40,3 +40,11 @@ The helpers read `FOX_FINE_GRAINED_TOKEN` from the environment. They do not stor
 7. `python3 scripts/escapes.py` — fix-title blame links.
 8. `python3 scripts/metrics.py` — tables and `out/summary.json`.
 9. `python3 scripts/report_app.py` — `out/report.html` and `out/per-developer.html`.
+
+## Optional local files
+
+These are not written by the scripts. The report and the recall estimate run without them.
+
+`data/raw/app/meta/bot_history.json` lists config changes for the report appendix. Shape: `{"actions": [{"date": "2026-06-18", "repo": "foxglove/actions", "sha": "<commit>", "summary": "<one line>"}], "app_workflow": []}`. Build it from the `foxglove/actions` history. Do not commit it.
+
+`data/raw/app/meta/linear_recall.json` is the Linear bug sample for escape recall. Shape: `{"tickets": [{"id": "FG-1", "title": "", "team": "", "created": "", "fix_prs": [123], "named_intro_prs": [456], "note": ""}]}`. `metrics.py` reports recall as unavailable when the file is absent.
