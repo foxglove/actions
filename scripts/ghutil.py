@@ -7,16 +7,18 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import shutil
 import subprocess
 import tempfile
 import time
 
 API = "https://api.github.com"
-# curl --max-time is enforced by the curl process, so a stuck poll cannot
-# outlive it the way urlopen and SIGALRM have on this host.
+# curl --max-time is the first limit. On this host a stuck poll has ignored
+# both that and SIGALRM, so the parent also SIGKILLs the curl process group.
 _CURL_MAX_TIME = 45
 _CURL_CONNECT_TIMEOUT = 15
+_CURL_KILL_AFTER = 10
 
 
 def _parse_curl_headers(raw: bytes) -> dict:
@@ -69,6 +71,25 @@ class GitHub:
         print(f"rate limit ({reason}); sleeping {wait}s", flush=True)
         time.sleep(wait)
 
+    def _run_curl(self, cmd: list[str]) -> subprocess.CompletedProcess:
+        """Run curl. SIGKILL the process group if it is still alive after the limit."""
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+        try:
+            stdout, stderr = proc.communicate(timeout=_CURL_MAX_TIME + _CURL_KILL_AFTER)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.communicate()
+            raise TimeoutError(f"GitHub request exceeded {_CURL_MAX_TIME}s")
+        return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
+
     def _curl(
         self, method: str, url: str, data: bytes | None, extra: dict
     ) -> tuple[int, dict, bytes]:
@@ -112,8 +133,8 @@ class GitHub:
             ]
             if data is not None:
                 cmd[1:1] = ["--data-binary", f"@{body_path}"]
-            proc = subprocess.run(cmd, capture_output=True)
-            if proc.returncode == 28:
+            proc = self._run_curl(cmd)
+            if proc.returncode in (28, 124) or proc.returncode < 0:
                 raise TimeoutError(f"GitHub request exceeded {_CURL_MAX_TIME}s")
             if proc.returncode != 0:
                 err = proc.stderr.decode("utf-8", "replace")[:300]
