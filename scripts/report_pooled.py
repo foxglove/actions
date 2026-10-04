@@ -446,6 +446,41 @@ def main() -> None:
     jun_phrase = ", ".join(
         f"{MONTH_LABELS[row.month]} {pct(int(row.k), int(row.n))} (n={int(row.n)})" for row in jun.itertuples()
     )
+    sizes = ["XS", "S", "M", "L", "XL"]
+    app_only = head[head["repo"] == "app"]
+    other_only = head[head["repo"] != "app"]
+
+    def _size_share(frame: pd.DataFrame) -> pd.Series:
+        return frame["size_bucket"].value_counts(normalize=True).reindex(sizes).fillna(0.0)
+
+    def _size_rate(frame: pd.DataFrame) -> pd.Series:
+        return frame.groupby("size_bucket")["bot_sufficient"].mean().reindex(sizes)
+
+    app_at_other_mix = float((_size_rate(app_only) * _size_share(other_only)).sum())
+    other_at_app_mix = float((_size_rate(other_only) * _size_share(app_only)).sum())
+    large = app_only[app_only["size_bucket"].isin(["L", "XL"])]
+    large_miss = int((~large["bot_sufficient"]).sum())
+    app_miss_n = int((~app_only["bot_sufficient"]).sum())
+    headline_keys = set(zip(app_only["repo"], app_only["number"].astype(int)))
+    on_headline = pd.Series(
+        [(repo, int(pr)) in headline_keys for repo, pr in zip(findings["repo"], findings["pr"])],
+        index=findings.index,
+    )
+    a_findings = findings.loc[on_headline & (findings["bucket_a"] == True)].copy()
+
+    def _area(path: object) -> str:
+        if not isinstance(path, str) or not path:
+            return "(no path)"
+        parts = path.split("/")
+        if parts[0] == "packages" and len(parts) > 1:
+            return "/".join(parts[:2])
+        return parts[0]
+
+    a_findings["area"] = a_findings["path"].map(_area)
+    area_counts = a_findings["area"].value_counts()
+    area_phrase = ", ".join(f"{name} {int(count)}" for name, count in area_counts.head(3).items())
+    a_bug_n = int((a_findings["category"] == "BUG").sum())
+    a_finding_n = int(len(a_findings))
     p50_approval = hour_p50(head, "lgtm_to_approval_h")
     p50_merge = hour_p50(head, "lgtm_to_merge_h")
     p50_after = hour_p50(head, "approval_to_merge_h")
@@ -506,6 +541,14 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 <li>The controlled fit warned that it did not fully settle. A coefficient from a fit that did not settle is not a trend.</li>
 </ul>
 </section>
+<h2>Why app is lower, and how to shift left</h2>
+<p>App is {pct(app_n - app_miss, app_n)} bot-sufficient ({app_n - app_miss} of {app_n}). The other six repositories together are {pct(six_suff, six_n)} ({six_suff} of {six_n}). The 88% line in the month chart is all seven repositories together, and app is most of that count.</p>
+<p>App pull requests are larger. The median app headline pull request is {int(app_only['lines'].median())} lines. The median in the other six is {int(other_only['lines'].median())} lines. Size buckets are XS under 50 lines, S under 200, M under 500, L under 1,000, and XL at 1,000 or more.</p>
+<p>Give app the other repositories' size mix and its bot-sufficient share would be {pct(round(app_at_other_mix * 1000), 1000)}. Give the other repositories app's size mix and their share would be {pct(round(other_at_app_mix * 1000), 1000)}. Size mix is a large part of the gap. A gap remains inside the same size bucket, and it is widest on L and XL.</p>
+<p>On app, XS is {pct(int(app_only.loc[app_only.size_bucket=='XS','bot_sufficient'].sum()), int((app_only.size_bucket=='XS').sum()))} and S is {pct(int(app_only.loc[app_only.size_bucket=='S','bot_sufficient'].sum()), int((app_only.size_bucket=='S').sum()))}. L is {pct(int(app_only.loc[app_only.size_bucket=='L','bot_sufficient'].sum()), int((app_only.size_bucket=='L').sum()))}. XL is {pct(int(app_only.loc[app_only.size_bucket=='XL','bot_sufficient'].sum()), int((app_only.size_bucket=='XL').sum()))}. L and XL are {len(large)} of {app_n} app headline pull requests and {large_miss} of {app_miss_n} app misses.</p>
+<p>Bucket A on app is {int(app_only.in_A.sum())} pull requests. Bucket B is {int(app_only.in_B.sum())}. Both rise with size. On XL, A is {int(app_only.loc[app_only.size_bucket=='XL','in_A'].sum())} of {int((app_only.size_bucket=='XL').sum())} and B is {int(app_only.loc[app_only.size_bucket=='XL','in_B'].sum())} of {int((app_only.size_bucket=='XL').sum())}. B is a later fix of a line that was already in the LGTM commit. That count comes from the later fix.</p>
+<p>The {a_finding_n} bucket A findings on app are mostly bugs ({a_bug_n}). The paths with the most are {html.escape(area_phrase)}. A-ci on app is {int(app_only.in_Aci.sum())} pull requests. Today's required checks are not the net that catches these.</p>
+<p><strong>Shift left by splitting L and XL app changes, and by aiming tests and the bot at packages/app, packages/api, and packages/viz.</strong> App pull requests under 200 lines are already in the mid-90s, which is where the other repositories sit. A bot LGTM on a 1,000-line app diff is the case that later shows a bug or a fix. Catch that diff before the LGTM: smaller pull requests, a test for the behavior in those three packages, and a bot pass that withholds LGTM on a large diff until it has looked for a bug.</p>
 <h2>Counts by repository</h2>
 <p>Headline means a human author, merged, opened in the window, and at least one bot comment that contains the word LGTM. Opened-in-window is every pull request in that window, including ones with no LGTM.</p>
 {repo_table(prs, head)}
@@ -578,6 +621,8 @@ A lighter review can be a pilot in one owned area of actions, mcap, foxglove-sdk
 From June through September the bot-sufficient share stays near 88%: {jun_phrase}. With repository, size, and tenure, {all_ctrl}.
 
 Median time from LGTM to the first human approval is {hour_phrase(p50_approval)}. Median time from that approval to merge is {hour_phrase(p50_after)}.
+
+App is {pct(app_n - app_miss, app_n)} bot-sufficient. The other six are {pct(six_suff, six_n)}. App's median headline pull request is {int(app_only['lines'].median())} lines. Theirs is {int(other_only['lines'].median())} lines. L and XL app pull requests are {large_miss} of {app_miss_n} app misses. Shift left by splitting those changes, and by aiming tests and the bot at {html.escape(area_phrase)}.
 
 The full reading and the Venn diagrams are in `{rel}/report.html`.
 
