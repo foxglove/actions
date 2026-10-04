@@ -313,6 +313,19 @@ def pct(k: int, n: int) -> str:
     return f"{100.0 * k / n:.0f}%"
 
 
+def hour_p50(frame: pd.DataFrame, column: str) -> float | None:
+    values = frame[column].dropna().astype(float)
+    if values.empty:
+        return None
+    return float(np.percentile(values, 50))
+
+
+def hour_phrase(value: float | None) -> str:
+    if value is None:
+        return "n/a"
+    return f"{value:.1f} h"
+
+
 def slope_sentence(block: dict, label: str) -> str:
     if not block or not block.get("ok"):
         err = (block or {}).get("error") or "no result"
@@ -328,48 +341,42 @@ def slope_sentence(block: dict, label: str) -> str:
     return sentence
 
 
+def _repo_row(label: str, opened: pd.DataFrame, human_merged: pd.DataFrame, group: pd.DataFrame, strong: bool) -> str:
+    n = int(len(group))
+    suff = int(group["bot_sufficient"].sum()) if n else 0
+    known = group[group["ci_known"] == True] if n else group
+    not_mergeable = int((known["mergeable_at_lgtm"] == False).sum()) if n else 0
+    name = f"<strong>{html.escape(label)}</strong>" if strong else html.escape(label)
+    return (
+        "<tr>"
+        f"<td>{name}</td>"
+        f"<td>{len(opened)}</td>"
+        f"<td>{len(human_merged)}</td>"
+        f"<td>{n}</td>"
+        f"<td>{suff} ({pct(suff, n)})</td>"
+        f"<td>{n - suff}</td>"
+        f"<td>{not_mergeable}</td>"
+        f"<td>{int(group['in_A'].sum()) if n else 0}</td>"
+        f"<td>{int(group['in_B'].sum()) if n else 0}</td>"
+        f"<td>{int(group['in_D'].sum()) if n else 0}</td>"
+        "</tr>"
+    )
+
+
 def repo_table(prs: pd.DataFrame, head: pd.DataFrame) -> str:
     rows = []
     for repo in REPOS:
         opened = prs[(prs["repo"] == repo) & (prs["in_cohort"] == True)]
         human_merged = opened[(opened["author_type"] == "human") & (opened["merged"] == True)]
-        group = head[head["repo"] == repo]
-        n = int(len(group))
-        suff = int(group["bot_sufficient"].sum()) if n else 0
-        rows.append(
-            "<tr>"
-            f"<td>{html.escape(repo)}</td>"
-            f"<td>{len(opened)}</td>"
-            f"<td>{len(human_merged)}</td>"
-            f"<td>{n}</td>"
-            f"<td>{suff} ({pct(suff, n)})</td>"
-            f"<td>{int(group['in_A'].sum()) if n else 0}</td>"
-            f"<td>{int(group['in_Aci'].sum()) if n else 0}</td>"
-            f"<td>{int(group['in_B'].sum()) if n else 0}</td>"
-            f"<td>{int(group['in_D'].sum()) if n else 0}</td>"
-            "</tr>"
-        )
-    n = int(len(head))
-    suff = int(head["bot_sufficient"].sum())
+        rows.append(_repo_row(repo, opened, human_merged, head[head["repo"] == repo], False))
     opened = prs[prs["in_cohort"] == True]
     human_merged = opened[(opened["author_type"] == "human") & (opened["merged"] == True)]
-    rows.append(
-        "<tr>"
-        "<td><strong>All seven</strong></td>"
-        f"<td>{len(opened)}</td>"
-        f"<td>{len(human_merged)}</td>"
-        f"<td>{n}</td>"
-        f"<td>{suff} ({pct(suff, n)})</td>"
-        f"<td>{int(head['in_A'].sum())}</td>"
-        f"<td>{int(head['in_Aci'].sum())}</td>"
-        f"<td>{int(head['in_B'].sum())}</td>"
-        f"<td>{int(head['in_D'].sum())}</td>"
-        "</tr>"
-    )
+    rows.append(_repo_row("All seven", opened, human_merged, head, True))
     return (
         "<table><thead><tr>"
         "<th>Repository</th><th>Opened in window</th><th>Human, merged</th>"
-        "<th>Headline</th><th>Bot-sufficient</th><th>A</th><th>A-ci</th><th>B</th><th>D</th>"
+        "<th>Headline</th><th>Bot-sufficient</th><th>A or B</th><th>Not mergeable at LGTM</th>"
+        "<th>A</th><th>B</th><th>D</th>"
         "</tr></thead><tbody>"
         + "".join(rows)
         + "</tbody></table>"
@@ -422,12 +429,33 @@ def main() -> None:
     no_appr = int(((head["human_approval_count"].fillna(0) == 0) & (head["review_dismissals"].fillna(0) == 0)).sum())
     known = head[head["ci_known"] == True]
     not_mergeable = int((known["mergeable_at_lgtm"] == False).sum())
+    mergeable = head[head["mergeable_at_lgtm"] == True]
+    mergeable_n = int(len(mergeable))
+    mergeable_miss = int((~mergeable["bot_sufficient"]).sum()) if mergeable_n else 0
     apr_n = int((head["month"] == "2026-04").sum())
     may_n = int((head["month"] == "2026-05").sum())
     suff_n = int(head["bot_sufficient"].sum())
     n = int(len(head))
     six_n = int(len(six))
     six_suff = int(six["bot_sufficient"].sum())
+    app_head = head[head["repo"] == "app"]
+    app_n = int(len(app_head))
+    app_miss = app_n - int(app_head["bot_sufficient"].sum())
+    six_miss = six_n - six_suff
+    jun = monthly[monthly["month"] >= "2026-06"]
+    jun_phrase = ", ".join(
+        f"{MONTH_LABELS[row.month]} {pct(int(row.k), int(row.n))} (n={int(row.n)})" for row in jun.itertuples()
+    )
+    p50_approval = hour_p50(head, "lgtm_to_approval_h")
+    p50_merge = hour_p50(head, "lgtm_to_merge_h")
+    p50_after = hour_p50(head, "approval_to_merge_h")
+    month_wait = []
+    for month in MONTHS:
+        if month < "2026-06":
+            continue
+        group = head[head["month"] == month]
+        month_wait.append(f"{MONTH_LABELS[month]} {hour_phrase(hour_p50(group, 'lgtm_to_approval_h'))}")
+    wait_phrase = ", ".join(month_wait)
 
     svgs = {
         "pooled": chart_pooled(monthly),
@@ -455,22 +483,28 @@ table {{ border-collapse: collapse; font-size: 13px; }}
 td, th {{ border-bottom: 1px solid #ddd; padding: 4px 8px; text-align: left; }}
 code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 </style></head><body>
-<h1>Is the first bot LGTM becoming sufficient?</h1>
-<p>All seven repositories. Pull requests opened 1 Apr 2026 through 30 Sep 2026. The bucket definitions match the app report. This page adds the model that pools the repositories.</p>
+<h1>Conclusion: keep human review, and the months are flat</h1>
+<p>All seven repositories. Pull requests opened 1 Apr 2026 through 30 Sep 2026. The rest of this page is the evidence.</p>
 <section class="assessment">
-<h2>Assessment</h2>
-<p><strong>This study does not answer whether the first LGTM is becoming sufficient month over month.</strong></p>
-<p>The level, on the same definition as the app report, is {suff_n} of {n} merged human pull requests ({pct(suff_n, n)}). Each of those pull requests has a bot LGTM and shows neither bucket A nor bucket B. app is {int((head['repo']=='app').sum())} of those {n}. The other six repositories together are {six_suff} of {six_n} ({pct(six_suff, six_n)}).</p>
-<p>With repository, size, and tenure in the model, {all_ctrl}. With month alone, {all_unc}.</p>
-<p>The same two fits on actions, mcap, foxglove-sdk, infra, infra-admin, and data-platform: with repository, size, and tenure, {six_ctrl}. With month alone, {six_unc}.</p>
-<p>Four facts keep the month question open:</p>
+<h2>How to change code review</h2>
+<p><strong>Keep a human approval on app. Treat a bot LGTM as a merge signal only after the required checks pass on that commit. Try a lighter review only as a pilot in one owned area.</strong></p>
+<p>{suff_n} of {n} headline pull requests are bot-sufficient ({pct(suff_n, n)}). Bot-sufficient means a human author, a merge, a bot LGTM, and neither bucket A nor bucket B. The other {n - suff_n} pull requests are the ones where review still finds a defect CI would miss, or a line that was already there and needed a later fix.</p>
+<p>On app, {app_miss} of {app_n} headline pull requests are in A or B ({pct(app_miss, app_n)}). Keep the human approval there.</p>
+<p>On actions, mcap, foxglove-sdk, infra, infra-admin, and data-platform, {six_miss} of {six_n} are in A or B ({pct(six_miss, six_n)}). A lighter pilot fits that group. Limit it to one area with one owner. Merge only after required checks pass. Revert quickly if production signals fail. Keep it a pilot until that pilot has a result.</p>
+<p>{not_mergeable} of {len(known)} headline pull requests were not mergeable at the first LGTM commit. Required checks were still failing, or had not run. Wait for those checks. Among the {mergeable_n} pull requests that were already mergeable at that commit, {mergeable_miss} are still in A or B ({pct(mergeable_miss, mergeable_n)}). Green CI plus a bot LGTM still leaves about one in ten for a human to catch.</p>
+<p>The wait is the human approval. Median time from LGTM to the first human approval is {hour_phrase(p50_approval)}. Median time from that approval to merge is {hour_phrase(p50_after)}. Median time from LGTM to merge is {hour_phrase(p50_merge)}. These are calendar hours. They include nights and weekends. {no_appr} headline pull requests merged with no human approval. That group is too small for a comparison.</p>
+<h2>How the months are moving</h2>
+<p><strong>From June through September the bot-sufficient share stays near 88%. This study does not show it rising or falling.</strong></p>
+<p>The monthly shares are {jun_phrase}. April has {apr_n} headline pull requests and May has {may_n}. The word LGTM starts on 18 Jun 2026, so those two months are a different signal.</p>
+<p>With repository, size, and tenure in the model, {all_ctrl}. With month alone, {all_unc}. On actions, mcap, foxglove-sdk, infra, infra-admin, and data-platform, with repository, size, and tenure, {six_ctrl}. With month alone on those six, {six_unc}.</p>
+<p>Median hours from LGTM to the first human approval, by month: {wait_phrase}. That series is the clock, not the defect rate. It is not a fitted trend.</p>
+<p>Four facts keep a month trend off the table:</p>
 <ul>
-<li>April has {apr_n} headline pull requests and May has {may_n}. The exact comment <code>LGTM</code> starts on 18 Jun 2026. Before that, a clean bot pass was ordinary prose, and this study does not count that prose. The early months are a different signal.</li>
-<li>The bot's model and prompt changed on 18 Jun, from 26 Jul to 28 Jul, and on 22 Sep. One slope across those changes mixes a definition change with a catch-rate change.</li>
+<li>The bot's model and prompt changed on 18 Jun, from 26 Jul to 28 Jul, and on 22 Sep. One slope across those dates mixes a definition change with a catch-rate change.</li>
 <li>September's 30-day follow-up was still open on 3 Oct 2026. Later fixes for September are still missing.</li>
 <li>Bucket B only counts a fix when the title looks like a fix and git blame can name the source pull request. The Linear check of that search exists for app only. Sentry is not connected. Missed fixes would lower the sufficient share.</li>
+<li>The controlled fit warned that it did not fully settle. A coefficient from a fit that did not settle is not a trend.</li>
 </ul>
-<p>{not_mergeable} of {len(known)} headline pull requests with CI data were not mergeable at the first LGTM commit. {no_appr} merged with no human approval. Those two facts are about process. They do not identify a month trend.</p>
 </section>
 <h2>Counts by repository</h2>
 <p>Headline means a human author, merged, opened in the window, and at least one bot comment that contains the word LGTM. Opened-in-window is every pull request in that window, including ones with no LGTM.</p>
@@ -514,6 +548,7 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 </ul>
 <h2>5. Next steps</h2>
 <ol>
+<li>Keep human approval on app. If you run a lighter review, pick one owned area in the other six repositories, require green checks on the LGTM commit, and revert quickly when production signals fail.</li>
 <li>Leave the month question open until the LGTM definition stays stable for several months and September's 30-day window has closed. Recompute September after 31 Oct 2026.</li>
 <li>Classify prose clean passes before 18 Jun 2026 if April and May need to enter the headline. Mark 18 Jun as a definition break on every chart.</li>
 <li>Hand-label each repository's <code>labeling_sample.csv</code> before treating bucket A as settled.</li>
@@ -531,26 +566,18 @@ code {{ font-family: ui-monospace, monospace; font-size: 0.92em; }}
 """
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "report.html").write_text(body)
-    lead = (
-        "The study does not answer that question. "
-        f"The level is {suff_n} of {n} headline pull requests ({pct(suff_n, n)}). "
-        f"With repository, size, and tenure, {all_ctrl}. "
-        "With repository, size, and tenure on actions, mcap, foxglove-sdk, infra, infra-admin, and data-platform, "
-        f"{six_ctrl}."
-    )
     (OUT / "report.md").write_text(
-        f"""# Is the first bot LGTM becoming sufficient?
+        f"""# Conclusion: keep human review, and the months are flat
 
-{lead}
+Keep a human approval on app. {app_miss} of {app_n} headline pull requests there are in bucket A or B ({pct(app_miss, app_n)}).
 
-Bot-sufficient means no bucket A and no bucket B on a merged human pull request that the bot LGTM'd.
+Treat a bot LGTM as a merge signal only after the required checks pass on that commit. {not_mergeable} of {len(known)} headline pull requests were not mergeable at the first LGTM. Among the {mergeable_n} that were already mergeable, {mergeable_miss} are still in A or B ({pct(mergeable_miss, mergeable_n)}).
 
-- Headline pull requests, all seven repositories: {n}
-- Bot-sufficient: {suff_n} ({pct(suff_n, n)})
-- Headline pull requests in actions, mcap, foxglove-sdk, infra, infra-admin, and data-platform: {six_n}
-- Bot-sufficient in those six: {six_suff} ({pct(six_suff, six_n)})
-- Merged with no human approval: {no_appr}
-- Not mergeable at the first bot LGTM commit: {not_mergeable} of {len(known)} headline pull requests with CI data
+A lighter review can be a pilot in one owned area of actions, mcap, foxglove-sdk, infra, infra-admin, or data-platform. Those six have {six_miss} of {six_n} in A or B ({pct(six_miss, six_n)}). Merge only after checks pass. Revert quickly if production signals fail.
+
+From June through September the bot-sufficient share stays near 88%: {jun_phrase}. With repository, size, and tenure, {all_ctrl}.
+
+Median time from LGTM to the first human approval is {hour_phrase(p50_approval)}. Median time from that approval to merge is {hour_phrase(p50_after)}.
 
 The full reading and the Venn diagrams are in `{rel}/report.html`.
 
