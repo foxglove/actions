@@ -8,7 +8,26 @@ Scripts for the `foxglove/app` pilot. They read `FOX_FINE_GRAINED_TOKEN` and do 
 git clone --filter=blob:none https://github.com/foxglove/app.git /tmp/foxglove-app
 ```
 
-Set `FOXGLOVE_APP_CLONE` if the clone lives somewhere else. The fetch scripts expect `/tmp/empty-gitconfig`, `/tmp/git-askpass.sh`, and `/tmp/git-cred.sh` so Git does not use the actions-repo credentials. `git_env()` in `common.py` points at those paths.
+Set `FOXGLOVE_APP_CLONE` if the clone lives somewhere else. Git must not use the actions-repo credentials. `common.git_env()` and `common.git_cred_helper()` point at three helper files. Override the paths with `STUDY_GIT_CONFIG`, `STUDY_GIT_ASKPASS`, and `STUDY_GIT_CRED`.
+
+```bash
+: > /tmp/empty-gitconfig
+cat > /tmp/git-askpass.sh << 'EOF'
+#!/bin/sh
+case "$1" in
+  *Username*) printf '%s\n' "x-access-token" ;;
+  *) printf '%s\n' "$FOX_FINE_GRAINED_TOKEN" ;;
+esac
+EOF
+cat > /tmp/git-cred.sh << 'EOF'
+#!/bin/sh
+echo "username=x-access-token"
+echo "password=$FOX_FINE_GRAINED_TOKEN"
+EOF
+chmod 700 /tmp/git-askpass.sh /tmp/git-cred.sh
+```
+
+The helpers read `FOX_FINE_GRAINED_TOKEN` from the environment. They do not store it.
 
 ## Order
 

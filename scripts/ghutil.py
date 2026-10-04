@@ -16,6 +16,7 @@ import time
 API = "https://api.github.com"
 # curl --max-time is the first limit. On this host a stuck poll has ignored
 # both that and SIGALRM, so the parent also SIGKILLs the curl process group.
+# The Authorization header is fed to curl on stdin (`--config -`), not a file.
 _CURL_MAX_TIME = 45
 _CURL_CONNECT_TIMEOUT = 15
 _CURL_KILL_AFTER = 10
@@ -71,32 +72,36 @@ class GitHub:
         print(f"rate limit ({reason}); sleeping {wait}s", flush=True)
         time.sleep(wait)
 
-    def _run_curl(self, cmd: list[str]) -> subprocess.CompletedProcess:
+    def _run_curl(self, cmd: list[str], stdin: bytes | None = None) -> subprocess.CompletedProcess:
         """Run curl. SIGKILL the process group if it is still alive after the limit."""
+        limit = _CURL_MAX_TIME + _CURL_KILL_AFTER
         proc = subprocess.Popen(
             cmd,
+            stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             start_new_session=True,
         )
         try:
-            stdout, stderr = proc.communicate(timeout=_CURL_MAX_TIME + _CURL_KILL_AFTER)
+            stdout, stderr = proc.communicate(input=stdin, timeout=limit)
         except subprocess.TimeoutExpired:
             try:
                 os.killpg(proc.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
-            proc.communicate()
-            raise TimeoutError(f"GitHub request exceeded {_CURL_MAX_TIME}s")
+            try:
+                proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+            raise TimeoutError(f"GitHub request exceeded {limit}s")
         return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
 
     def _curl(
         self, method: str, url: str, data: bytes | None, extra: dict
     ) -> tuple[int, dict, bytes]:
-        """One GitHub call. The token stays in a mode-600 curl config, never on argv."""
+        """One GitHub call. The token is passed to curl on stdin, never on argv or disk."""
         cfg_dir = tempfile.mkdtemp(prefix="ghcurl-")
         try:
-            cfg_path = os.path.join(cfg_dir, "curl.cfg")
             body_path = os.path.join(cfg_dir, "body")
             hdr_path = os.path.join(cfg_dir, "headers")
             out_path = os.path.join(cfg_dir, "out")
@@ -104,16 +109,13 @@ class GitHub:
             for key, value in self._headers(extra).items():
                 safe = str(value).replace("\\", "\\\\").replace('"', '\\"')
                 lines.append(f'header = "{key}: {safe}"')
-            fd = os.open(cfg_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w") as fh:
-                fh.write("\n".join(lines) + "\n")
             if data is not None:
                 with open(body_path, "wb") as fh:
                     fh.write(data)
             cmd = [
                 "curl",
                 "--config",
-                cfg_path,
+                "-",
                 "--max-time",
                 str(_CURL_MAX_TIME),
                 "--connect-timeout",
@@ -133,9 +135,18 @@ class GitHub:
             ]
             if data is not None:
                 cmd[1:1] = ["--data-binary", f"@{body_path}"]
-            proc = self._run_curl(cmd)
-            if proc.returncode in (28, 124) or proc.returncode < 0:
-                raise TimeoutError(f"GitHub request exceeded {_CURL_MAX_TIME}s")
+            proc = self._run_curl(cmd, stdin=("\n".join(lines) + "\n").encode())
+            if proc.returncode == 28:
+                err = proc.stderr.decode("utf-8", "replace").strip()[:300]
+                if self._token and self._token in err:
+                    err = err.replace(self._token, "[redacted]")
+                raise TimeoutError(f"GitHub request timed out: {err}")
+            if proc.returncode < 0:
+                try:
+                    sig = signal.Signals(-proc.returncode).name
+                except ValueError:
+                    sig = str(-proc.returncode)
+                raise ConnectionError(f"curl killed by {sig}")
             if proc.returncode != 0:
                 err = proc.stderr.decode("utf-8", "replace")[:300]
                 if self._token and self._token in err:

@@ -23,11 +23,19 @@ later cancelled run.
 from __future__ import annotations
 
 import json
-import subprocess
 import time
 from pathlib import Path
 
-from common import STATUS_CHECKS, contains_lgtm, first_lgtm_sha, is_review_bot, pr_commits
+from common import (
+    STATUS_CHECKS,
+    bot_lgtm_events,
+    contains_lgtm,
+    fetch_prs_running,
+    first_lgtm_sha,
+    is_review_bot,
+    parse_ts,
+    pr_commits,
+)
 from ghutil import GitHub, GitHubError
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,6 +85,8 @@ def lgtm_sha_chain(pr: dict) -> list[str]:
     start = first_lgtm_sha(pr)
     if not start:
         return []
+    events = bot_lgtm_events(pr)
+    first_at = events[0]["at"] if events else None
     reviews = []
     for rev in (pr.get("reviews") or {}).get("nodes") or []:
         if not is_review_bot(rev.get("author")):
@@ -101,8 +111,12 @@ def lgtm_sha_chain(pr: dict) -> list[str]:
             seen = True
         if sha == start:
             started = True
-            if not seen:
-                # A comment LGTM stands until a later bot review replaces it.
+            # A comment LGTM stands when this commit has no later bot review.
+            # An earlier non-LGTM review must not clear it.
+            here = by_sha.get(sha) or []
+            if first_at is not None and (
+                not here or max(parse_ts(r["at"]) for r in here) < first_at
+            ):
                 stands = True
                 seen = True
         if started and seen and stands:
@@ -215,22 +229,10 @@ def pr_files() -> list[Path]:
     return [p for p in PRS.glob("*.json") if p.stem.isdigit()]
 
 
-def fetch_running() -> bool:
-    # The tmux supervisor's argv also contains this script name, so a plain
-    # pgrep -f match stays true after the Python process exits.
-    try:
-        out = subprocess.check_output(["pgrep", "-af", "scripts/fetch_prs.py"], text=True)
-    except subprocess.CalledProcessError:
-        return False
-    return any(
-        "python3" in line and "scripts/fetch_prs.py" in line and "tmux" not in line
-        for line in out.splitlines()
-    )
-
-
 def main() -> None:
     gh = GitHub()
     idle = 0
+    skipped: set[str] = set()
     while True:
         wrote = 0
         for path in pr_files():
@@ -243,7 +245,11 @@ def main() -> None:
                 continue
             shas = lgtm_sha_chain(pr)
             if not shas:
-                save(out, {"number": int(path.stem), "shas": [], "evals": [], "no_lgtm": True})
+                if bot_lgtm_events(pr):
+                    save(out, {"number": int(path.stem), "shas": [], "evals": [], "sha_unknown": True})
+                else:
+                    save(out, {"number": int(path.stem), "shas": [], "evals": [], "no_lgtm": True})
+                skipped.discard(path.stem)
                 wrote += 1
                 continue
             evals = []
@@ -255,16 +261,28 @@ def main() -> None:
                         break
             except GitHubError as exc:
                 print(f"ci skip {path.stem}: {exc}", flush=True)
+                skipped.add(path.stem)
+                if exc.status in (404, 422):
+                    save(
+                        out,
+                        {
+                            "number": int(path.stem),
+                            "shas": shas,
+                            "evals": [],
+                            "fetch_error": str(exc)[:300],
+                        },
+                    )
                 continue
+            skipped.discard(path.stem)
             save(out, {"number": int(path.stem), "shas": shas, "evals": evals})
             wrote += 1
             if wrote % 40 == 0:
                 print(f"ci wrote {wrote} this wave", flush=True)
         print(f"wave {wrote} evals {len(list((CI / 'eval').glob('*.json')))}", flush=True)
-        if wrote == 0 and not fetch_running():
+        if wrote == 0 and not fetch_prs_running():
             idle += 1
             if idle >= 2:
-                print("ci fetch complete", flush=True)
+                print(f"ci fetch complete; {len(skipped)} PRs skipped", flush=True)
                 return
         else:
             idle = 0

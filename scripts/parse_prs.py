@@ -25,8 +25,10 @@ from common import (
     iso,
     month_key,
     norm_login,
+    first_lgtm_sha,
     parse_ts,
     size_bucket,
+    study_repo,
     tenure_bucket,
 )
 
@@ -34,7 +36,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PRS_DIR = ROOT / "data" / "raw" / "app" / "prs"
 META = ROOT / "data" / "raw" / "app" / "meta"
 INTERIM = ROOT / "data" / "interim"
-GIT_LOG = Path("/tmp/foxglove-app")
+GIT_LOG = study_repo()
 
 NOREPLY_RE = re.compile(r"^(?:\d+\+)?([A-Za-z0-9-]+)@users\.noreply\.github\.com$", re.I)
 SHORT_ACK_RE = re.compile(
@@ -409,11 +411,7 @@ def main() -> None:
         lgtms = collect_lgtm_events(pr)
         first = lgtms[0] if lgtms else None
         first_at = first["at"] if first else None
-        first_sha = first.get("sha") if first else None
-        if first and not first_sha:
-            # Comment LGTM: last commit at or before the comment.
-            prior = [c for c in commits if c["at"] <= first_at]
-            first_sha = prior[-1]["sha"] if prior else (pr.get("headRefOid"))
+        first_sha = first_lgtm_sha(pr) if first else None
         stands = lgtm_stands_by_sha(commits, reviews)
         approvals = human_approvals(pr)
         first_approval = approvals[0] if approvals else None

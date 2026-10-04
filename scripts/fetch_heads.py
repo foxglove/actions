@@ -11,7 +11,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from common import git_env, study_repo
+from common import fetch_prs_running, git_cred_helper, git_env, study_repo
 
 ROOT = Path(__file__).resolve().parents[1]
 PRS = ROOT / "data" / "raw" / "app" / "prs"
@@ -37,7 +37,7 @@ def fetch_batch(numbers: list[int]) -> None:
         "-c",
         "credential.helper=",
         "-c",
-        "credential.helper=!/tmp/git-cred.sh",
+        f"credential.helper=!{git_cred_helper()}",
         "fetch",
         "--filter=blob:none",
         "--no-tags",
@@ -47,27 +47,17 @@ def fetch_batch(numbers: list[int]) -> None:
     proc = subprocess.run(cmd, text=True, capture_output=True, env=git_env())
     if proc.returncode != 0:
         # Fall back one by one so one deleted PR does not drop the batch.
+        err = proc.stderr or ""
         print(f"batch failed ({proc.returncode}); splitting {numbers[0]}..{numbers[-1]}", flush=True)
-        print(proc.stderr[-300:].replace("\n", " "), flush=True)
+        print(err[-300:].replace("\n", " "), flush=True)
         if len(numbers) == 1:
-            record_failure(numbers[0])
-            return
+            if "couldn't find remote ref" in err:
+                record_failure(numbers[0])
+                return
+            raise SystemExit(f"head fetch failed for {numbers[0]}: {err[-300:]}")
         mid = len(numbers) // 2
         fetch_batch(numbers[:mid])
         fetch_batch(numbers[mid:])
-
-
-def fetch_running() -> bool:
-    # The tmux supervisor's argv also contains this script name, so a plain
-    # pgrep -f match stays true after the Python process exits.
-    try:
-        out = subprocess.check_output(["pgrep", "-af", "scripts/fetch_prs.py"], text=True)
-    except subprocess.CalledProcessError:
-        return False
-    return any(
-        "python3" in line and "scripts/fetch_prs.py" in line and "tmux" not in line
-        for line in out.splitlines()
-    )
 
 
 def load_failures() -> set[int]:
@@ -106,7 +96,7 @@ def main() -> None:
         missing = pending()
         print(f"heads missing {len(missing)}", flush=True)
         if not missing:
-            if fetch_running():
+            if fetch_prs_running():
                 time.sleep(20)
                 continue
             idle += 1

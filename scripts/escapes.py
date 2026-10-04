@@ -12,14 +12,13 @@ bucket B (present at the counterfactual SHA) from bucket D (added after it).
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from common import FIX_TITLE_RE, PR_REF_RE, git_env, parse_ts, study_repo
+from common import FIX_TITLE_RE, PR_REF_RE, git_cred_helper, git_env, load_ci_index, parse_ts, study_repo
 
 ROOT = Path(__file__).resolve().parents[1]
 INTERIM = ROOT / "data" / "interim"
@@ -41,7 +40,7 @@ def git(*args: str, check: bool = True) -> str:
         "-c",
         "credential.helper=",
         "-c",
-        "credential.helper=!/tmp/git-cred.sh",
+        f"credential.helper=!{git_cred_helper()}",
         "-c",
         "safe.directory=*",
         *args,
@@ -153,11 +152,7 @@ def file_text(sha: str | None, path: str, cache: dict) -> str | None:
     if not sha:
         cache[key] = None
         return None
-    env = os.environ.copy()
-    env["GIT_CONFIG_GLOBAL"] = "/tmp/empty-gitconfig"
-    env["GIT_CONFIG_NOSYSTEM"] = "1"
-    env["GIT_TERMINAL_PROMPT"] = "0"
-    env["GIT_ASKPASS"] = "/tmp/git-askpass.sh"
+    env = git_env()
     proc = subprocess.run(
         [
             "git",
@@ -166,7 +161,7 @@ def file_text(sha: str | None, path: str, cache: dict) -> str | None:
             "-c",
             "credential.helper=",
             "-c",
-            "credential.helper=!/tmp/git-cred.sh",
+            f"credential.helper=!{git_cred_helper()}",
             "show",
             f"{sha}:{path}",
         ],
@@ -191,8 +186,6 @@ def line_present(text: str | None, line: str) -> str:
 
 def load_counterfactual() -> dict[int, dict]:
     """First green SHA at or after the first bot LGTM, while LGTM still stands."""
-    from common import load_ci_index
-
     return load_ci_index(ROOT / "data" / "raw" / "app" / "ci" / "eval")
 
 

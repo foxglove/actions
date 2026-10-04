@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -245,7 +246,9 @@ def first_lgtm_sha(pr: dict) -> str | None:
     prior = [row["sha"] for row in pr_commits(pr) if row["at"] <= first["at"]]
     if prior:
         return prior[-1]
-    return pr.get("headRefOid")
+    # A rebase rewrites committedDate, so every commit can fall after the comment.
+    # The current head is then later than the LGTM. Do not score CI on it.
+    return None
 
 
 def load_ci_index(eval_dir: Path) -> dict[int, dict]:
@@ -258,7 +261,12 @@ def load_ci_index(eval_dir: Path) -> dict[int, dict]:
             continue
         data = json.loads(path.read_text())
         shas = data.get("shas") or []
-        ci_known = bool(shas) and not data.get("no_lgtm")
+        ci_known = (
+            bool(shas)
+            and not data.get("no_lgtm")
+            and not data.get("sha_unknown")
+            and not data.get("fetch_error")
+        )
         chosen = None
         mergeable = False
         first_eval = None
@@ -279,12 +287,18 @@ def load_ci_index(eval_dir: Path) -> dict[int, dict]:
             "lgtm_sha_missing_checks": (first_eval or {}).get("missing") or [],
             "lgtm_sha_passed": bool(first_eval and first_eval.get("passed")) if ci_known else None,
             "ci_known": ci_known,
+            "sha_unknown": bool(data.get("sha_unknown")),
+            "fetch_error": bool(data.get("fetch_error")),
         }
     return out
 
 
 def study_repo() -> Path:
     return Path(os.environ.get("FOXGLOVE_APP_CLONE", "/tmp/foxglove-app"))
+
+
+def git_cred_helper() -> str:
+    return os.environ.get("STUDY_GIT_CRED", "/tmp/git-cred.sh")
 
 
 def git_env() -> dict:
@@ -294,6 +308,19 @@ def git_env() -> dict:
     env["GIT_TERMINAL_PROMPT"] = "0"
     env["GIT_ASKPASS"] = os.environ.get("STUDY_GIT_ASKPASS", "/tmp/git-askpass.sh")
     return env
+
+
+def fetch_prs_running() -> bool:
+    """True only while the Python PR fetch is alive.
+
+    A shell wrapper whose argv still contains the script name does not count.
+    pgrep anchors at the start of the command line.
+    """
+    proc = subprocess.run(
+        ["pgrep", "-f", r"^python3 ([^ ]*/)?scripts/fetch_prs\.py"],
+        capture_output=True,
+    )
+    return proc.returncode == 0
 
 
 def wilson_interval(k: int, n: int, z: float = 1.96) -> tuple[float | None, float | None]:

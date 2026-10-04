@@ -7,7 +7,7 @@ import subprocess
 from collections import defaultdict
 from pathlib import Path
 
-from common import git_env, study_repo
+from common import git_cred_helper, git_env, study_repo
 
 ROOT = Path(__file__).resolve().parents[1]
 INTERIM = ROOT / "data" / "interim"
@@ -23,7 +23,7 @@ def name_only(sha_a: str, sha_b: str) -> set[str] | None:
             "-c",
             "credential.helper=",
             "-c",
-            "credential.helper=!/tmp/git-cred.sh",
+            f"credential.helper=!{git_cred_helper()}",
             "diff",
             "--name-only",
             sha_a,
