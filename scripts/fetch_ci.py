@@ -263,12 +263,15 @@ def main() -> None:
                 print(f"ci skip {path.stem}: {exc}", flush=True)
                 skipped.add(path.stem)
                 if exc.status in (404, 422):
+                    # Keep checks that already finished. A later SHA can 422
+                    # after a force-push; the earlier failure still shows the
+                    # LGTM SHA was not mergeable.
                     save(
                         out,
                         {
                             "number": int(path.stem),
                             "shas": shas,
-                            "evals": [],
+                            "evals": evals,
                             "fetch_error": str(exc)[:300],
                         },
                     )

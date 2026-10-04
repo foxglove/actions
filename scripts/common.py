@@ -261,11 +261,14 @@ def load_ci_index(eval_dir: Path) -> dict[int, dict]:
             continue
         data = json.loads(path.read_text())
         shas = data.get("shas") or []
+        evals = data.get("evals") or []
+        # A fetch_error after a real check result still counts. An error
+        # before any result does not.
         ci_known = (
             bool(shas)
+            and bool(evals)
             and not data.get("no_lgtm")
             and not data.get("sha_unknown")
-            and not data.get("fetch_error")
         )
         chosen = None
         mergeable = False
@@ -278,6 +281,8 @@ def load_ci_index(eval_dir: Path) -> dict[int, dict]:
                 mergeable = bool(shas) and ev.get("sha") == shas[0]
                 break
         if chosen is None and shas:
+            # No later SHA passed. Buckets B and D use the first LGTM SHA,
+            # not a SHA the fetch could not read.
             chosen = shas[0]
         out[int(data["number"])] = {
             "counterfactual_sha": chosen,
