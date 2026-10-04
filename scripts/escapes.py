@@ -120,22 +120,31 @@ def parse_removed_lines(diff_text: str, cap: int = 80) -> list[dict]:
     return removed
 
 
+def _line_ranges(lines: list[int]) -> list[tuple[int, int]]:
+    ordered = sorted(set(lines))
+    ranges: list[tuple[int, int]] = []
+    start = prev = ordered[0]
+    for n in ordered[1:]:
+        if n == prev + 1:
+            prev = n
+            continue
+        ranges.append((start, prev))
+        start = prev = n
+    ranges.append((start, prev))
+    return ranges
+
+
 def blame_lines(parent: str, path: str, lines: list[int]) -> dict[int, str]:
     if not lines:
         return {}
-    start, end = min(lines), max(lines)
-    # One blame for the span, then keep only requested lines.
+    # Blame only the removed lines. A min-to-max span walks unrelated lines
+    # in large generated files and does not change which lines are kept.
+    args = ["blame", "--line-porcelain"]
+    for start, end in _line_ranges(lines):
+        args.extend(["-L", f"{start},{end}"])
+    args.extend([parent, "--", path])
     try:
-        out = git(
-            "blame",
-            "--line-porcelain",
-            "-L",
-            f"{start},{end}",
-            parent,
-            "--",
-            path,
-            check=True,
-        )
+        out = git(*args, check=True)
     except RuntimeError:
         return {}
     mapping = {}
