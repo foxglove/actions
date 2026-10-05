@@ -6,7 +6,11 @@ explicit="${1:-}"
 shared_default="${2:-.foxglove-actions/checkov/checkov.yml}"
 consumer_root="${3:-checkov.yml}"
 
-if [[ -n "${explicit}" && -f "${explicit}" ]]; then
+if [[ -n "${explicit}" ]]; then
+  if [[ ! -f "${explicit}" ]]; then
+    echo "::error::config_file '${explicit}' does not exist." >&2
+    exit 1
+  fi
   echo "config_file=${explicit}" >> "${GITHUB_OUTPUT}"
   echo "Using explicit Checkov config: ${explicit}"
   exit 0

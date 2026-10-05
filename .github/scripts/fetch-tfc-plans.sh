@@ -65,9 +65,13 @@ api() {
 }
 
 extract_run_ids_from_statuses() {
+  # Status list is newest-first. unique_by keeps the first (newest) status per context
+  # so a re-run does not leave a stale run id in the scan set.
   jq -r '
-    .statuses[]?
-    | select(.context // "" | test("Terraform Cloud|HCP Terraform"; "i"))
+    .statuses
+    | map(select(.context // "" | test("Terraform Cloud|HCP Terraform"; "i")))
+    | unique_by(.context)
+    | .[]
     | .target_url // empty
     | capture("/runs/(?<id>run-[A-Za-z0-9]+)")
     | .id
@@ -79,12 +83,17 @@ run_ids=""
 
 echo "Waiting up to ${timeout_seconds}s for TFC commit statuses on ${commit_sha}..."
 
+forbidden=false
 while (( SECONDS < deadline )); do
   # List endpoint includes target_url; combined /status often nulls it out.
-  status_json="$(curl -fsSL \
+  if ! status_json="$(curl -fsSL \
     --header "Authorization: Bearer ${GITHUB_TOKEN}" \
     --header "Accept: application/vnd.github+json" \
-    "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${commit_sha}/statuses?per_page=100")"
+    "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${commit_sha}/statuses?per_page=100")"; then
+    echo "::warning::Could not list commit statuses; retrying."
+    sleep "${poll_seconds}"
+    continue
+  fi
 
   # Normalize array → {statuses: [...]} for the jq helper.
   status_json="$(printf '%s\n' "${status_json}" | jq '{statuses: .}')"
@@ -99,12 +108,21 @@ while (( SECONDS < deadline )); do
         --header "Authorization: Bearer ${TFE_TOKEN}" \
         --header "Content-Type: application/vnd.api+json" \
         "https://${tfc_host}/api/v2/runs/${run_id}/plan/${plan_endpoint}" || echo "000")"
-      if [[ "${status_code}" == "204" || "${status_code}" == "404" || "${status_code}" == "401" || "${status_code}" == "403" || "${status_code}" == "000" ]]; then
+      if [[ "${status_code}" == "401" || "${status_code}" == "403" ]]; then
+        echo "::warning::TFC plan download forbidden (HTTP ${status_code}) for ${run_id}. json-output requires workspace admin."
+        forbidden=true
+        all_ready=false
+        break
+      fi
+      if [[ "${status_code}" == "204" || "${status_code}" == "404" || "${status_code}" == "000" ]]; then
         all_ready=false
         break
       fi
     done <<< "${run_ids}"
 
+    if [[ "${forbidden}" == "true" ]]; then
+      break
+    fi
     if [[ "${all_ready}" == "true" ]]; then
       break
     fi
@@ -112,6 +130,17 @@ while (( SECONDS < deadline )); do
 
   sleep "${poll_seconds}"
 done
+
+if [[ "${forbidden}" == "true" ]]; then
+  write_output skipped_reason forbidden
+  write_output plan_count 0
+  summarize <<EOF
+## Checkov Terraform plan mode
+
+Skipped: TFC returned 401/403 for plan JSON. \`json-output\` needs a user or team token with workspace admin.
+EOF
+  exit 0
+fi
 
 if [[ -z "${run_ids}" ]]; then
   echo "No TFC run IDs found for commit ${commit_sha} within timeout."

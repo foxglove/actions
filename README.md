@@ -79,6 +79,7 @@ jobs:
       contents: read
       actions: read
       security-events: write
+    # Keep uses: and actions_ref on the same ref.
     uses: foxglove/actions/.github/workflows/checkov-helm.yml@main
     with:
       actions_ref: main

@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       directory:
-        description: Directory (or comma-separated directories) for static Terraform scans
+        description: Single directory for static Terraform scans (checkov-action takes one path)
         type: string
         required: false
         default: .
@@ -48,16 +48,21 @@ on:
         type: string
         required: false
         default: app.terraform.io
+      artifact_suffix:
+        description: Suffix for the uploaded artifact name (unique if this workflow is called more than once)
+        type: string
+        required: false
+        default: default
     secrets:
       TFE_TOKEN:
         description: TFC token for plan JSON download (see docs — full json-output needs workspace admin)
         required: false
 
+# checks/statuses are not requested while plan mode is parked (default mode is static).
+# Re-enable statuses: read on this workflow and on callers when plan mode is turned on.
 permissions:
   contents: read
   actions: read
-  checks: read
-  statuses: read
   security-events: write
 
 jobs:
@@ -78,16 +83,20 @@ jobs:
       - name: Resolve Checkov config
         id: config
         shell: bash
+        env:
+          CONFIG_FILE: ${{ inputs.config_file }}
         run: |
           bash .foxglove-actions/.github/scripts/resolve-checkov-config.sh \
-            "${{ inputs.config_file }}" \
+            "${CONFIG_FILE}" \
             ".foxglove-actions/checkov/checkov.yml" \
             "checkov.yml"
 
       - name: Validate mode
         shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
         run: |
-          mode="${{ inputs.mode }}"
+          mode="${MODE}"
           case "${mode}" in
             static|plan|both) ;;
             *)
@@ -214,7 +223,7 @@ jobs:
         if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
-          name: checkov-terraform-${{ github.job }}
+          name: checkov-terraform-${{ inputs.artifact_suffix }}
           path: |
             checkov-terraform-static.sarif
             checkov-terraform-static.json
@@ -228,9 +237,5 @@ jobs:
           sarif_file: checkov-terraform-static.sarif
           category: checkov-terraform-static
 
-      - name: Upload plan SARIF to Code Scanning
-        if: ${{ (success() || failure()) && inputs.upload_sarif && (inputs.mode == 'plan' || inputs.mode == 'both') }}
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: checkov-plan-results
-          category: checkov-terraform-plan
+      # Plan SARIF is kept as an artifact only. upload-sarif rejects multiple files
+      # that share one tool+category, and the directory is absent when plan mode skips.

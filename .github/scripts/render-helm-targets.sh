@@ -11,9 +11,47 @@ layout="${1:?layout required (sibling|shared)}"
 out_dir="${2:?output directory required}"
 shift 2
 
+# SOFT_FAIL=true (default): render failures are warnings and the script exits 0.
+# SOFT_FAIL=false: any render failure or zero successful renders exits 1.
+soft_fail="${SOFT_FAIL:-true}"
+# Optional comma-separated helm --set pairs (e.g. key=placeholder).
+helm_set="${HELM_SET:-}"
+
 mkdir -p "${out_dir}"
 render_count=0
 fail_count=0
+
+helm_set_args=()
+if [[ -n "${helm_set}" ]]; then
+  IFS=',' read -r -a helm_sets <<< "${helm_set}"
+  for pair in "${helm_sets[@]}"; do
+    pair="$(echo "${pair}" | xargs)"
+    [[ -n "${pair}" ]] || continue
+    helm_set_args+=(--set "${pair}")
+  done
+fi
+
+build_deps() {
+  local chart_dir="$1"
+  if [[ ! -f "${chart_dir}/Chart.lock" ]]; then
+    return 0
+  fi
+  local err
+  err="$(mktemp)"
+  if helm dependency build "${chart_dir}" >"${err}" 2>&1; then
+    rm -f "${err}"
+    return 0
+  fi
+  echo "::warning::helm dependency build failed for ${chart_dir}; trying update"
+  cat "${err}" >&2 || true
+  if helm dependency update "${chart_dir}" >"${err}" 2>&1; then
+    rm -f "${err}"
+    return 0
+  fi
+  echo "::warning::helm dependency update failed for ${chart_dir}"
+  cat "${err}" >&2 || true
+  rm -f "${err}"
+}
 
 render_one() {
   local chart_dir="$1"
@@ -24,6 +62,7 @@ render_one() {
   mkdir -p "${dest}"
   if helm template "${release_name}" "${chart_dir}" \
     --values "${values_file}" \
+    "${helm_set_args[@]}" \
     --output-dir "${dest}" \
     >/dev/null 2>"${dest}/.helm-stderr"; then
     render_count=$((render_count + 1))
@@ -42,11 +81,7 @@ case "${layout}" in
       chart_name="$(basename "$(dirname "${chart_dir}")")"
       targets_root="$(dirname "${chart_dir}")/targets"
       [[ -d "${targets_root}" ]] || continue
-      # Prefer vendored chart deps when present.
-      if [[ -f "${chart_dir}/Chart.lock" ]]; then
-        helm dependency build "${chart_dir}" >/dev/null 2>&1 || \
-          helm dependency update "${chart_dir}" >/dev/null 2>&1 || true
-      fi
+      build_deps "${chart_dir}"
       while IFS= read -r -d '' values_file; do
         rel="${values_file#"${targets_root}/"}"
         safe_rel="${rel//\//__}"
@@ -60,6 +95,11 @@ case "${layout}" in
     chart_dirs_csv="${1:?chart_dirs required for shared layout}"
     targets_dir="${2:?targets_dir required for shared layout}"
     IFS=',' read -r -a chart_dirs <<< "${chart_dirs_csv}"
+    for chart_dir in "${chart_dirs[@]}"; do
+      chart_dir="$(echo "${chart_dir}" | xargs)"
+      [[ -n "${chart_dir}" && -d "${chart_dir}" ]] || continue
+      build_deps "${chart_dir}"
+    done
     while IFS= read -r -d '' values_file; do
       target_name="$(basename "${values_file}")"
       target_name="${target_name%.yaml}"
@@ -68,10 +108,6 @@ case "${layout}" in
         chart_dir="$(echo "${chart_dir}" | xargs)"
         [[ -n "${chart_dir}" && -d "${chart_dir}" ]] || continue
         chart_name="$(basename "${chart_dir}")"
-        if [[ -f "${chart_dir}/Chart.lock" ]]; then
-          helm dependency build "${chart_dir}" >/dev/null 2>&1 || \
-            helm dependency update "${chart_dir}" >/dev/null 2>&1 || true
-        fi
         dest="${out_dir}/${chart_name}/${target_name}"
         render_one "${chart_dir}" "${values_file}" "${chart_name}" "${dest}"
       done
@@ -95,7 +131,14 @@ echo "out_dir=${out_dir}" >> "${GITHUB_OUTPUT:-/dev/null}"
   echo "- Render failures: **${fail_count}**"
 } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 
-if [[ "${render_count}" -eq 0 ]]; then
-  echo "No charts were rendered; nothing to scan." >&2
+if [[ "${soft_fail}" == "true" ]]; then
+  if [[ "${render_count}" -eq 0 || "${fail_count}" -gt 0 ]]; then
+    echo "::warning::Helm render incomplete (ok=${render_count}, failed=${fail_count}). soft_fail=true, continuing."
+  fi
+  exit 0
+fi
+
+if [[ "${render_count}" -eq 0 || "${fail_count}" -gt 0 ]]; then
+  echo "Helm render failed (ok=${render_count}, failed=${fail_count})." >&2
   exit 1
 fi

@@ -47,6 +47,16 @@ on:
         type: string
         required: false
         default: ""
+      helm_set:
+        description: Optional comma-separated helm --set pairs applied to every render (e.g. imageHash=checkov-placeholder)
+        type: string
+        required: false
+        default: ""
+      artifact_suffix:
+        description: Suffix for the uploaded artifact name (required to be unique if this workflow is called more than once)
+        type: string
+        required: false
+        default: default
 
 permissions:
   contents: read
@@ -76,31 +86,39 @@ jobs:
       - name: Resolve Checkov config
         id: config
         shell: bash
+        env:
+          CONFIG_FILE: ${{ inputs.config_file }}
         run: |
           bash .foxglove-actions/.github/scripts/resolve-checkov-config.sh \
-            "${{ inputs.config_file }}" \
+            "${CONFIG_FILE}" \
             ".foxglove-actions/checkov/checkov.yml" \
             "checkov.yml"
 
       - name: Render Helm charts with target values
         id: render
         shell: bash
+        env:
+          LAYOUT: ${{ inputs.layout }}
+          CHARTS_ROOT: ${{ inputs.charts_root }}
+          CHART_DIRS: ${{ inputs.chart_dirs }}
+          TARGETS_DIR: ${{ inputs.targets_dir }}
+          HELM_SET: ${{ inputs.helm_set }}
+          SOFT_FAIL: ${{ inputs.soft_fail }}
         run: |
-          if [[ "${{ inputs.layout }}" == "sibling" ]]; then
-            bash .foxglove-actions/.github/scripts/render-helm-targets.sh \
-              sibling \
-              checkov-rendered \
-              "${{ inputs.charts_root }}"
-          elif [[ "${{ inputs.layout }}" == "shared" ]]; then
-            bash .foxglove-actions/.github/scripts/render-helm-targets.sh \
-              shared \
-              checkov-rendered \
-              "${{ inputs.chart_dirs }}" \
-              "${{ inputs.targets_dir }}"
-          else
-            echo "Invalid layout '${{ inputs.layout }}' (expected sibling or shared)" >&2
-            exit 1
-          fi
+          case "${LAYOUT}" in
+            sibling)
+              bash .foxglove-actions/.github/scripts/render-helm-targets.sh \
+                sibling checkov-rendered "${CHARTS_ROOT}"
+              ;;
+            shared)
+              bash .foxglove-actions/.github/scripts/render-helm-targets.sh \
+                shared checkov-rendered "${CHART_DIRS}" "${TARGETS_DIR}"
+              ;;
+            *)
+              echo "Invalid layout '${LAYOUT}' (expected sibling or shared)" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Run Checkov (Kubernetes manifests)
         id: checkov
@@ -120,12 +138,15 @@ jobs:
       - name: Summarize results
         if: success() || failure()
         shell: bash
+        env:
+          LAYOUT: ${{ inputs.layout }}
+          SOFT_FAIL: ${{ inputs.soft_fail }}
         run: |
           {
             echo "## Checkov Helm (rendered targets → kubernetes)"
             echo
-            echo "- Layout: \`${{ inputs.layout }}\`"
-            echo "- Soft fail: \`${{ inputs.soft_fail }}\`"
+            echo "- Layout: \`${LAYOUT}\`"
+            echo "- Soft fail: \`${SOFT_FAIL}\`"
             if [[ -f checkov-helm.json ]]; then
               failed="$(jq '[.. | .failed_checks? // empty | length] | add // 0' checkov-helm.json 2>/dev/null || echo unknown)"
               passed="$(jq '[.. | .passed_checks? // empty | length] | add // 0' checkov-helm.json 2>/dev/null || echo unknown)"
@@ -142,7 +163,7 @@ jobs:
         if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
-          name: checkov-helm-${{ github.job }}
+          name: checkov-helm-${{ inputs.artifact_suffix }}
           path: |
             checkov-helm.sarif
             checkov-helm.json

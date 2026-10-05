@@ -18,15 +18,18 @@ Local OSS only — no Bridgecrew / Prisma API key, and `skip_results_upload` / `
 ```yaml
 jobs:
   checkov-helm:
-    uses: foxglove/actions/.github/workflows/checkov-helm.yml@e7cb50b44827f5d73eccbbc59b2b3a1c8a9632dc
+    # Keep uses: and actions_ref on the same ref. Dependabot updates uses: only.
+    uses: foxglove/actions/.github/workflows/checkov-helm.yml@<full-commit-sha>
     with:
-      actions_ref: e7cb50b44827f5d73eccbbc59b2b3a1c8a9632dc
+      actions_ref: <full-commit-sha>
       layout: shared
       chart_dirs: deploy/api,deploy/billing
       targets_dir: deploy/targets
 ```
 
-After this repo’s Checkov PR merges, callers can use `@main` for both `uses` and `actions_ref`.
+Use the same ref for `uses` and `actions_ref`. After merge, `@main` is fine for both.
+
+`checkov-terraform` requests only `contents: read`, `actions: read`, and `security-events: write` while plan mode is parked. Do not grant `checks` or `statuses` until plan mode is re-enabled (it will need `statuses: read`).
 
 ## Helm layouts
 
@@ -36,6 +39,14 @@ After this repo’s Checkov PR merges, callers can use `@main` for both `uses` a
 | `shared`  | `chart_dirs`, `targets_dir`      | `app`, `data-platform` — each chart × each file in `targets_dir`         |
 
 Rendered manifests land in `checkov-rendered/` and are scanned with `framework: kubernetes`.
+
+`helm_set` is an optional comma-separated list of `key=value` pairs passed as `helm --set` on every render. Use it for values that deploy workflows inject with `--set` and that `required` rejects when empty (for example `indexedBucketDlqReplay.imageHash=checkov-placeholder`).
+
+With `soft_fail: true` (default), a failed or empty render is a warning and the job continues. With `soft_fail: false`, any render failure fails the job.
+
+### Known Helm gaps
+
+`charts/arc` in `infra` only templates a service account. Runner pods come from the upstream `gha-runner-scale-set` chart, with values generated in the deploy workflow. This scan does not cover those pods. Acceptable for the first pass.
 
 ## Terraform modes
 
