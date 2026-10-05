@@ -286,6 +286,25 @@ describe("tallyVotes and formatReviewBody", () => {
     assert.equal(tally.lgtm, false);
   });
 
+  it("keeps the LGTM token out of quoted juror text", () => {
+    const tally = tallyVotes(
+      resultsMap({ opus: { status: "voted", verdict: verdict() } }),
+    );
+    const finding = (body) => ({
+      path: "src/a.ts",
+      line: 1,
+      body,
+      jurors: ["opus"],
+    });
+    const body = formatReviewBody({
+      tally,
+      outside: [finding("Otherwise LGTM.")],
+      unplaced: [finding("lgtm once this is fixed.")],
+    });
+    assert.doesNotMatch(body, /LGTM/i);
+    assert.match(body, /Otherwise looks good to me\./);
+  });
+
   it("lists findings on unchanged files in the body", () => {
     const tally = tallyVotes(
       resultsMap({ opus: { status: "voted", verdict: verdict() } }),
@@ -408,6 +427,31 @@ describe("dedupeFindings", () => {
   });
 });
 
+describe("redactSecrets", () => {
+  it("removes configured secrets and token-shaped strings", () => {
+    const text = [
+      "value my-configured-secret here",
+      "anthropic sk-ant-api03-abcdefghijklmnopqrstuvwxyz",
+      "xai xai-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345",
+      "github ghs_abcdefghijklmnopqrstuvwxyz",
+    ].join("\n");
+    assert.equal(
+      jury.redactSecrets(text, ["my-configured-secret", "", undefined]),
+      [
+        "value [redacted] here",
+        "anthropic [redacted]",
+        "xai [redacted]",
+        "github [redacted]",
+      ].join("\n"),
+    );
+  });
+
+  it("keeps ordinary words that contain a token prefix", () => {
+    const text = "Use the task-runner-configuration-file and sk-learn.";
+    assert.equal(jury.redactSecrets(text, ["short"]), text);
+  });
+});
+
 describe("createClerk", () => {
   it("sends a forced tool call and reads the groups", async () => {
     let request;
@@ -504,6 +548,33 @@ describe("recordJurorResult and readJurorResults", () => {
     assert.equal(
       results.get("opus").reason,
       "The juror job did not return a result.",
+    );
+  });
+
+  it("redacts the API keys from a recorded verdict", () => {
+    const dir = temp();
+    const verdictFile = path.join(dir, "verdict.json");
+    fs.writeFileSync(
+      verdictFile,
+      JSON.stringify(
+        verdict({
+          lgtm: false,
+          comments: [comment({ body: "The key is grok-secret-value." })],
+        }),
+      ),
+    );
+    const result = recordJurorResult({
+      JUROR: "grok",
+      AVAILABLE: "true",
+      SUCCEEDED: "true",
+      VERDICT_FILE: verdictFile,
+      RESULT_FILE: path.join(dir, "grok.json"),
+      XAI_API_KEY: "grok-secret-value",
+    });
+    assert.equal(result.verdict.comments[0].body, "The key is [redacted].");
+    assert.doesNotMatch(
+      fs.readFileSync(path.join(dir, "grok.json"), "utf8"),
+      /grok-secret-value/,
     );
   });
 
@@ -792,7 +863,9 @@ describe("publishJuryReview", () => {
       },
     });
     // Groups the two replies that both name `Foo` and leaves every other item alone.
+    const clerkCalls = [];
     const clerk = async (items) => {
+      clerkCalls.push(items.map((item) => item.id));
       const foo = items.filter((item) => item.body.includes("`Foo`"));
       const rest = items.filter((item) => !item.body.includes("`Foo`"));
       return [
@@ -862,6 +935,39 @@ describe("publishJuryReview", () => {
     assert.equal(result.replies, 1);
     assert.equal(result.comments, 1);
     assert.deepEqual(core.log.failed, []);
+    // Replies and comments share one clerk call. T_fixed is resolved, so it no longer covers
+    // anything; the two open threads on src/a.ts are the existing items.
+    assert.deepEqual(clerkCalls, [["r1", "r2", "c1", "e1", "e2"]]);
+  });
+
+  it("redacts secrets before it publishes juror text", async () => {
+    const fake = fakeGitHub({ files });
+    const resultsDir = writeResults({
+      opus: {
+        status: "voted",
+        verdict: verdict({
+          lgtm: false,
+          comments: [
+            comment({
+              body: "Leaked opus-secret-value and xai-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123.",
+            }),
+          ],
+        }),
+      },
+    });
+    await publishJuryReview({
+      github: fake.github,
+      context: CONTEXT,
+      core: quietCore(),
+      resultsDir,
+      clerk: null,
+      secrets: ["opus-secret-value"],
+    });
+    const [added] = fake.named("addPullRequestReviewThread");
+    assert.match(
+      added.args.input.body,
+      /^Leaked \[redacted\] and \[redacted\]\./,
+    );
   });
 
   it("falls back to a file comment, then to the review body", async () => {

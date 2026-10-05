@@ -235,6 +235,48 @@ function groupBy(items, keyOf) {
   return groups;
 }
 
+// Jurors read untrusted PR content and can run commands next to their API keys, so a prompt
+// injection could make one copy a key into its verdict. Nothing that a juror wrote is stored
+// or published before this filter removes the configured secrets and token-shaped strings.
+const TOKEN_PATTERN =
+  /\b(?:sk-ant-|sk-|xai-)[A-Za-z0-9_-]{20,}|\bgh[pousr]_[A-Za-z0-9]{20,}/g;
+
+function redactSecrets(text, secrets = []) {
+  let result = text;
+  for (const secret of secrets) {
+    if (typeof secret === "string" && secret.length >= 8) {
+      result = result.split(secret).join("[redacted]");
+    }
+  }
+  return result.replace(TOKEN_PATTERN, "[redacted]");
+}
+
+function redactVerdict(verdict, secrets) {
+  const redact = (text) => redactSecrets(text, secrets);
+  return {
+    fixed_threads: verdict.fixed_threads.map((entry) => ({
+      ...entry,
+      reply: redact(entry.reply),
+    })),
+    thread_replies: verdict.thread_replies.map((entry) => ({
+      ...entry,
+      body: redact(entry.body),
+    })),
+    comments: verdict.comments.map((comment) => ({
+      ...comment,
+      path: redact(comment.path),
+      body: redact(comment.body),
+    })),
+    lgtm: verdict.lgtm,
+  };
+}
+
+// People and tools search review bodies for LGTM, so juror text that the body quotes must not
+// add the token when the jury did not vote for it.
+function withoutLgtm(text) {
+  return text.replace(/\bLGTM\b/gi, "looks good to me");
+}
+
 // Diff and placement
 
 function parsePatch(patch) {
@@ -511,8 +553,17 @@ function recordJurorResult(env) {
       ? fs.readFileSync(env.VERDICT_FILE, "utf8")
       : "";
     const extracted = extractVerdict(raw);
+    const secrets = [
+      env.ANTHROPIC_API_KEY,
+      env.OPENAI_API_KEY,
+      env.XAI_API_KEY,
+    ];
     result = extracted.ok
-      ? { juror: juror.id, status: "voted", verdict: extracted.verdict }
+      ? {
+          juror: juror.id,
+          status: "voted",
+          verdict: redactVerdict(extracted.verdict, secrets),
+        }
       : {
           juror: juror.id,
           status: "failed",
@@ -527,7 +578,7 @@ function recordJurorResult(env) {
   return result;
 }
 
-function readJurorResults(directory) {
+function readJurorResults(directory, secrets = []) {
   const results = new Map();
   for (const juror of JURORS) {
     const file = path.join(directory, `${juror.id}.json`);
@@ -542,7 +593,7 @@ function readJurorResults(directory) {
     if (result?.status === "voted") {
       const validated = validateVerdict(result.verdict);
       result = validated.ok
-        ? { ...result, verdict: validated.verdict }
+        ? { ...result, verdict: redactVerdict(validated.verdict, secrets) }
         : {
             juror: juror.id,
             status: "failed",
@@ -587,7 +638,7 @@ async function askClerk({
   apiKey,
   model,
   fetchImpl = fetch,
-  timeoutMs = 120000,
+  timeoutMs = 60000,
 }) {
   const response = await fetchImpl("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -773,7 +824,8 @@ function describeVote(entry) {
 
 function formatFindingSection(finding) {
   const where = finding.line != null ? ` line ${finding.line}` : "";
-  return `#### \`${finding.path}\`${where}\n\n${truncate(finding.body.trim(), MAX_BODY_LENGTH)}\n\n${jurorLabel(finding.jurors)}`;
+  const body = withoutLgtm(truncate(finding.body.trim(), MAX_BODY_LENGTH));
+  return `#### \`${withoutLgtm(finding.path)}\`${where}\n\n${body}\n\n${jurorLabel(finding.jurors)}`;
 }
 
 // The review body says LGTM only for a majority. Other bodies must not contain that token,
@@ -1066,13 +1118,7 @@ async function resolveFixedThreads({ github, results, threadsById, core }) {
   return resolved;
 }
 
-async function postThreadReplies({
-  github,
-  results,
-  threadsById,
-  clerk,
-  core,
-}) {
+function replyFindings({ results, threadsById, core }) {
   const findings = [];
   for (const juror of votedJurors(results)) {
     for (const entry of juror.verdict.thread_replies) {
@@ -1085,6 +1131,7 @@ async function postThreadReplies({
       }
       findings.push({
         id: `r${findings.length + 1}`,
+        kind: "reply",
         key: `reply:${thread.id}`,
         juror: juror.id,
         order: findings.length,
@@ -1093,18 +1140,18 @@ async function postThreadReplies({
       });
     }
   }
-  const existing = [...threadsById.values()].flatMap((thread) =>
-    thread.comments
-      .slice(1)
-      .filter((comment) => comment.jury)
-      .map((comment) => ({ key: `reply:${thread.id}`, body: comment.body })),
-  );
-  const { findings: replies } = await dedupeFindings({
-    findings,
-    existing: existing.map((item, index) => ({ ...item, id: `p${index + 1}` })),
-    clerk,
-    core,
-  });
+  const existing = [...threadsById.values()]
+    .flatMap((thread) =>
+      thread.comments
+        .slice(1)
+        .filter((comment) => comment.jury)
+        .map((comment) => ({ key: `reply:${thread.id}`, body: comment.body })),
+    )
+    .map((item, index) => ({ ...item, id: `p${index + 1}` }));
+  return { findings, existing };
+}
+
+async function postReplies({ github, replies, core }) {
   let posted = 0;
   for (const reply of replies) {
     try {
@@ -1122,14 +1169,7 @@ async function postThreadReplies({
   return posted;
 }
 
-async function collectComments({
-  results,
-  files,
-  threads,
-  resolved,
-  clerk,
-  core,
-}) {
+function commentFindings({ results, files, threads, resolved }) {
   const filesByPath = indexFiles(files);
   const findings = [];
   for (const juror of votedJurors(results)) {
@@ -1138,6 +1178,7 @@ async function collectComments({
       findings.push({
         ...placed,
         id: `c${findings.length + 1}`,
+        kind: "comment",
         key: `${placed.placement === "thread" ? "file" : "outside"}:${placed.path}`,
         juror: juror.id,
         order: findings.length,
@@ -1157,29 +1198,7 @@ async function collectComments({
       line: thread.line,
       body: thread.comments[0].body,
     }));
-  const {
-    findings: deduped,
-    covered,
-    merged,
-  } = await dedupeFindings({
-    findings,
-    existing,
-    clerk,
-    core,
-  });
-  core.info(
-    `Comments: ${findings.length} from jurors, ${merged} merged as duplicates, ${covered} already covered by open threads, ${deduped.length} to publish.`,
-  );
-  const byLocation = (a, b) =>
-    a.path.localeCompare(b.path) || (a.line ?? 0) - (b.line ?? 0);
-  return {
-    threads: deduped
-      .filter((finding) => finding.placement === "thread")
-      .sort(byLocation),
-    outside: deduped
-      .filter((finding) => finding.placement === "outside")
-      .sort(byLocation),
-  };
+  return { findings, existing };
 }
 
 async function addThreads({ github, reviewId, threads, core }) {
@@ -1290,14 +1309,21 @@ async function minimizePriorReviews({ github, state, resolved, core }) {
   }
 }
 
-async function publishJuryReview({ github, context, core, resultsDir, clerk }) {
+async function publishJuryReview({
+  github,
+  context,
+  core,
+  resultsDir,
+  clerk,
+  secrets = [],
+}) {
   const pullRequest = context.payload.pull_request;
   if (!pullRequest) {
     throw new Error("The review jury runs only on pull_request events.");
   }
   const { owner, repo } = context.repo;
   const number = pullRequest.number;
-  const results = readJurorResults(resultsDir);
+  const results = readJurorResults(resultsDir, secrets);
   const tally = tallyVotes(results);
   for (const entry of tally.entries) {
     core.info(`${entry.name}: ${describeVote(entry)}`);
@@ -1329,21 +1355,37 @@ async function publishJuryReview({ github, context, core, resultsDir, clerk }) {
     threadsById,
     core,
   });
-  const replies = await postThreadReplies({
-    github,
-    results,
-    threadsById,
-    clerk,
-    core,
-  });
-  const { threads, outside } = await collectComments({
+  const replyItems = replyFindings({ results, threadsById, core });
+  const commentItems = commentFindings({
     results,
     files,
     threads: state.threads,
     resolved,
+  });
+  // One clerk call covers replies and comments: only items with the same key can merge.
+  const { findings, covered, merged } = await dedupeFindings({
+    findings: [...replyItems.findings, ...commentItems.findings],
+    existing: [...replyItems.existing, ...commentItems.existing],
     clerk,
     core,
   });
+  core.info(
+    `Juror items: ${replyItems.findings.length} replies and ${commentItems.findings.length} comments. ${merged} merged as duplicates, ${covered} already covered by open threads, ${findings.length} to publish.`,
+  );
+  const replies = await postReplies({
+    github,
+    replies: findings.filter((finding) => finding.kind === "reply"),
+    core,
+  });
+  const byLocation = (a, b) =>
+    a.path.localeCompare(b.path) || (a.line ?? 0) - (b.line ?? 0);
+  const comments = findings.filter((finding) => finding.kind === "comment");
+  const threads = comments
+    .filter((finding) => finding.placement === "thread")
+    .sort(byLocation);
+  const outside = comments
+    .filter((finding) => finding.placement === "outside")
+    .sort(byLocation);
   const published = await submitReview({
     github,
     owner,
@@ -1392,6 +1434,7 @@ module.exports = {
   publishJuryReview,
   readJurorResults,
   recordJurorResult,
+  redactSecrets,
   tallyVotes,
   validateVerdict,
   writeJurorContext,

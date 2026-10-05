@@ -25,6 +25,7 @@ Each juror returns a JSON verdict that matches [`prompts/review-verdict.schema.j
 - **Comments come from every juror, without duplicates.** Comments that describe the same issue become one comment that names every juror that raised it. A comment that an open review thread already covers is dropped. An Opus call groups the duplicates; if that call fails, only comments with identical text are merged.
 - **LGTM needs a majority.** The review body starts with `LGTM` only when at least 2 of the 3 jurors vote for it, so a PR can get LGTM together with comments from the minority. A juror's LGTM vote counts only when the juror raises no comments, and a juror that is absent or fails counts as a vote against. The body lists the vote of each juror, and it does not contain `LGTM` when the majority is missing.
 - **Threads resolve by majority.** The jury replies to and resolves one of its earlier threads only when at least 2 jurors report it fixed. Replies to other authors' threads come from every juror, without duplicates.
+- Juror text is published only after the API keys and token-shaped strings are removed from it, because a prompt injection in a PR could make a juror copy its key into a comment.
 - Earlier jury reviews that have no open threads are minimized as outdated. Threads and reviews from the single-model reviewer that came before the jury (`claude[bot]`) count as the jury's own.
 
 Add the `skip-claude-review` label to a PR to skip the review.

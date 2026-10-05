@@ -365,6 +365,10 @@ jobs:
           SUCCEEDED: ${{ steps.opus1.outputs.structured_output != '' || steps.opus2.outputs.structured_output != '' || steps.opus3.outputs.structured_output != '' || steps.astra1.outcome == 'success' || steps.astra2.outcome == 'success' || steps.astra3.outcome == 'success' || steps.grok.outcome == 'success' }}
           VERDICT_FILE: ${{ env.REVIEW_DIR }}/verdict.json
           RESULT_FILE: ${{ runner.temp }}/review-jury/${{ matrix.juror }}.json
+          # Only used to redact the keys from the verdict.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
         run: node .foxglove-actions/.github/scripts/review-jury.js record
 
       - name: Upload juror result
@@ -418,6 +422,9 @@ jobs:
         uses: actions/github-script@v7
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Only used to redact the keys from published text.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           RESULTS_DIR: ${{ runner.temp }}/review-jury
         with:
           github-token: ${{ github.token }}
@@ -434,4 +441,9 @@ jobs:
                 apiKey: process.env.ANTHROPIC_API_KEY,
                 model: process.env.OPUS_MODEL,
               }),
+              secrets: [
+                process.env.ANTHROPIC_API_KEY,
+                process.env.OPENAI_API_KEY,
+                process.env.XAI_API_KEY,
+              ],
             });
