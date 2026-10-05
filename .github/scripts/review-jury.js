@@ -154,25 +154,21 @@ const MINIMIZE_MUTATION = `
   }
 `;
 
-const CLERK_TOOL = {
-  name: "report_duplicates",
-  description:
-    "Report the groups of review items that describe the same issue.",
-  input_schema: {
-    type: "object",
-    additionalProperties: false,
-    required: ["groups"],
-    properties: {
-      groups: {
-        type: "array",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["ids", "keep"],
-          properties: {
-            ids: { type: "array", items: { type: "string" } },
-            keep: { type: ["string", "null"] },
-          },
+// Claude Opus 5.5 rejects forced tool use, so the clerk returns structured output instead.
+const CLERK_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["groups"],
+  properties: {
+    groups: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["ids", "keep"],
+        properties: {
+          ids: { type: "array", items: { type: "string" } },
+          keep: { anyOf: [{ type: "string" }, { type: "null" }] },
         },
       },
     },
@@ -185,9 +181,7 @@ Group the items that describe the same issue: the same defect, risk, question, o
 
 Items with "source": "existing" are already on the pull request. Put a new item in the group of an existing item when the existing item already covers the issue.
 
-Put each item id in exactly one group. A group can have one item. For each group, set "keep" to the id of the new item that states the issue most clearly and completely. Set "keep" to null when the group has no new item.
-
-Report the groups with the report_duplicates tool.`;
+Put each item id in exactly one group. A group can have one item. For each group, set "keep" to the id of the new item that states the issue most clearly and completely. Set "keep" to null when the group has no new item.`;
 
 function jurorName(id) {
   return JURORS.find((juror) => juror.id === id)?.name ?? id;
@@ -649,9 +643,12 @@ async function askClerk({
     },
     body: JSON.stringify({
       model,
-      max_tokens: 8192,
-      tools: [CLERK_TOOL],
-      tool_choice: { type: "tool", name: CLERK_TOOL.name },
+      // Thinking cannot be turned off, and it counts against max_tokens.
+      max_tokens: 16000,
+      output_config: {
+        effort: "low",
+        format: { type: "json_schema", schema: CLERK_SCHEMA },
+      },
       messages: [
         {
           role: "user",
@@ -667,13 +664,15 @@ async function askClerk({
     );
   }
   const data = await response.json();
-  const toolUse = data.content?.find(
-    (block) => block.type === "tool_use" && block.name === CLERK_TOOL.name,
-  );
-  if (!Array.isArray(toolUse?.input?.groups)) {
+  if (data.stop_reason !== "end_turn") {
+    throw new Error(`The clerk stopped with ${data.stop_reason}.`);
+  }
+  const text = data.content?.find((block) => block.type === "text")?.text;
+  const groups = parseJson(text)?.groups;
+  if (!Array.isArray(groups)) {
     throw new Error("The clerk response has no groups.");
   }
-  return toolUse.input.groups;
+  return groups;
 }
 
 function createClerk({ apiKey, model, fetchImpl, attempts = 2 }) {

@@ -453,18 +453,19 @@ describe("redactSecrets", () => {
 });
 
 describe("createClerk", () => {
-  it("sends a forced tool call and reads the groups", async () => {
+  it("asks for structured output and reads the text block", async () => {
     let request;
     const fetchImpl = async (url, options) => {
       request = { url, ...options, body: JSON.parse(options.body) };
       return {
         ok: true,
         json: async () => ({
+          stop_reason: "end_turn",
           content: [
+            { type: "thinking", thinking: "Compare the items." },
             {
-              type: "tool_use",
-              name: "report_duplicates",
-              input: { groups: [{ ids: ["c1"], keep: "c1" }] },
+              type: "text",
+              text: JSON.stringify({ groups: [{ ids: ["c1"], keep: "c1" }] }),
             },
           ],
         }),
@@ -481,10 +482,34 @@ describe("createClerk", () => {
     assert.equal(request.url, "https://api.anthropic.com/v1/messages");
     assert.equal(request.headers["x-api-key"], "key");
     assert.equal(request.body.model, "claude-test");
-    assert.deepEqual(request.body.tool_choice, {
-      type: "tool",
-      name: "report_duplicates",
-    });
+    // Claude Opus 5.5 returns 400 for a forced tool_choice.
+    assert.equal(request.body.tool_choice, undefined);
+    assert.equal(request.body.tools, undefined);
+    assert.equal(request.body.output_config.format.type, "json_schema");
+    const visit = (schema) => {
+      if (schema.type === "object") {
+        assert.equal(schema.additionalProperties, false);
+        Object.values(schema.properties).forEach(visit);
+      }
+      if (schema.type === "array") {
+        visit(schema.items);
+      }
+    };
+    visit(request.body.output_config.format.schema);
+  });
+
+  it("fails on a refusal so that the caller falls back", async () => {
+    let calls = 0;
+    const fetchImpl = async () => {
+      calls += 1;
+      return {
+        ok: true,
+        json: async () => ({ stop_reason: "refusal", content: [] }),
+      };
+    };
+    const clerk = createClerk({ apiKey: "key", model: "m", fetchImpl });
+    await assert.rejects(clerk([]), /refusal/);
+    assert.equal(calls, 2);
   });
 
   it("retries once and then fails", async () => {
