@@ -122,7 +122,7 @@ jobs:
 
       - name: Run Checkov (Kubernetes manifests)
         id: checkov
-        uses: bridgecrewio/checkov-action@v12.1347.0
+        uses: bridgecrewio/checkov-action@7b1bd992e2c40a3404e3511944aeb8d014703d9a
         with:
           directory: checkov-rendered
           framework: kubernetes

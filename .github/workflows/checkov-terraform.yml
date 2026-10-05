@@ -108,7 +108,7 @@ jobs:
       - name: Run Checkov (static Terraform)
         if: ${{ inputs.mode == 'static' || inputs.mode == 'both' }}
         id: checkov_static
-        uses: bridgecrewio/checkov-action@v12.1347.0
+        uses: bridgecrewio/checkov-action@7b1bd992e2c40a3404e3511944aeb8d014703d9a
         with:
           directory: ${{ inputs.directory }}
           framework: terraform
@@ -166,7 +166,7 @@ jobs:
           set -euo pipefail
           mkdir -p checkov-plan-results
 
-          # Same image as bridgecrewio/checkov-action@v12.1347.0
+          # Same image as bridgecrewio/checkov-action@7b1bd992e2c40a3404e3511944aeb8d014703d9a
           image="ghcr.io/bridgecrewio/checkov:3.3.23"
           docker pull "${image}"
 
