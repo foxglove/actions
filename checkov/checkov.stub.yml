@@ -1,0 +1,17 @@
+# Per-repo Checkov overrides.
+# Leave commented to use shared defaults from foxglove/actions (checkov/checkov.yml).
+# Docs: https://github.com/foxglove/actions/blob/main/docs/checkov.md
+#
+# skip-check:
+#   - CKV_EXAMPLE_1
+#
+# skip-path:
+#   - path/to/ignore
+#
+# soft-fail-on:
+#   - LOW
+#
+# hard-fail-on:
+#   - CRITICAL
+#
+# baseline: .checkov.baseline

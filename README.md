@@ -56,3 +56,41 @@ jobs:
 >   pull-requests: write
 >   id-token: write
 > ```
+
+## Checkov IaC scanning
+
+Report-only Checkov scans for Terraform and Helm. Soft-fail by default; results go to job logs, the step summary, and workflow artifacts.
+
+**Docs:** [`docs/checkov.md`](docs/checkov.md)
+
+**Workflows:**
+
+- [`checkov-helm.yml`](.github/workflows/checkov-helm.yml)
+- [`checkov-terraform.yml`](.github/workflows/checkov-terraform.yml) — `mode: static | plan | both`; plan mode reuses Terraform Cloud speculative plan JSON via a read-only `TFE_TOKEN`
+
+**Shared config:** [`checkov/checkov.yml`](checkov/checkov.yml) · consumer stub template: [`checkov/checkov.stub.yml`](checkov/checkov.stub.yml)
+
+```yaml
+jobs:
+  checkov-helm:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    uses: foxglove/actions/.github/workflows/checkov-helm.yml@main
+    with:
+      directory: charts
+
+  checkov-terraform:
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      security-events: write
+    uses: foxglove/actions/.github/workflows/checkov-terraform.yml@main
+    with:
+      directory: .
+      mode: both
+    secrets:
+      TFE_TOKEN: ${{ secrets.TFE_TOKEN }}
+```

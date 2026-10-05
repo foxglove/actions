@@ -1,0 +1,111 @@
+name: Checkov Helm
+
+on:
+  workflow_call:
+    inputs:
+      directory:
+        description: Directory (or comma-separated directories) containing Helm charts to scan
+        type: string
+        required: true
+      config_file:
+        description: Optional path to a consumer checkov.yml (overrides shared defaults when present and non-empty)
+        type: string
+        required: false
+        default: ""
+      soft_fail:
+        description: Do not fail the job when Checkov finds issues
+        type: boolean
+        required: false
+        default: true
+      upload_sarif:
+        description: Upload SARIF to GitHub Code Scanning (requires Code Security on private repos)
+        type: boolean
+        required: false
+        default: false
+      skip_path:
+        description: Optional comma-separated paths to skip
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+jobs:
+  checkov-helm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout consumer repository
+        uses: actions/checkout@v6
+
+      - name: Checkout foxglove/actions
+        uses: actions/checkout@v6
+        with:
+          repository: foxglove/actions
+          path: .foxglove-actions
+          ref: ${{ github.repository == 'foxglove/actions' && github.sha || 'main' }}
+
+      - name: Resolve Checkov config
+        id: config
+        shell: bash
+        run: |
+          bash .foxglove-actions/.github/scripts/resolve-checkov-config.sh \
+            "${{ inputs.config_file }}" \
+            ".foxglove-actions/checkov/checkov.yml" \
+            "checkov.yml"
+
+      - name: Run Checkov (Helm)
+        id: checkov
+        uses: bridgecrewio/checkov-action@v12.1347.0
+        with:
+          directory: ${{ inputs.directory }}
+          framework: helm
+          soft_fail: ${{ inputs.soft_fail }}
+          quiet: true
+          skip_results_upload: true
+          skip_download: true
+          config_file: ${{ steps.config.outputs.config_file }}
+          skip_path: ${{ inputs.skip_path }}
+          output_format: cli,sarif,json
+          output_file_path: console,checkov-helm.sarif,checkov-helm.json
+
+      - name: Summarize results
+        if: success() || failure()
+        shell: bash
+        run: |
+          {
+            echo "## Checkov Helm"
+            echo
+            echo "- Directory: \`${{ inputs.directory }}\`"
+            echo "- Soft fail: \`${{ inputs.soft_fail }}\`"
+            if [[ -f checkov-helm.json ]]; then
+              failed="$(jq '[.results.failed_checks // [] | length] | add // 0' checkov-helm.json 2>/dev/null || echo unknown)"
+              passed="$(jq '[.results.passed_checks // [] | length] | add // 0' checkov-helm.json 2>/dev/null || echo unknown)"
+              echo "- Failed checks: **${failed}**"
+              echo "- Passed checks: **${passed}**"
+            else
+              echo "- Result files were not produced; see job logs."
+            fi
+            echo
+            echo "SARIF/JSON are uploaded as workflow artifacts. Code Scanning upload is controlled by \`upload_sarif\`."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload Checkov artifacts
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-helm-${{ github.job }}
+          path: |
+            checkov-helm.sarif
+            checkov-helm.json
+          if-no-files-found: warn
+
+      - name: Upload SARIF to Code Scanning
+        if: ${{ (success() || failure()) && inputs.upload_sarif }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov-helm.sarif
+          category: checkov-helm
