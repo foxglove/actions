@@ -7,10 +7,10 @@ on:
 jobs:
   review:
     permissions:
-      actions: read
       contents: read
       pull-requests: write
-      id-token: write
     uses: ./.github/workflows/review.yml
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}

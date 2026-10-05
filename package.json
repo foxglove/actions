@@ -2,6 +2,9 @@
   "name": "actions",
   "private": true,
   "packageManager": "yarn@4.12.0",
+  "scripts": {
+    "test": "node --test .github/scripts/review-jury.test.js"
+  },
   "devDependencies": {
     "prettier": "3.8.1"
   }

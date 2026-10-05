@@ -1,0 +1,81 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["fixed_threads", "thread_replies", "comments", "lgtm"],
+  "properties": {
+    "fixed_threads": {
+      "description": "Unresolved jury threads that the current code fixes.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["thread_id", "reply"],
+        "properties": {
+          "thread_id": {
+            "description": "The id of the review thread in the PR context file.",
+            "type": "string"
+          },
+          "reply": {
+            "description": "A short reply that states how the code fixes the issue.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "thread_replies": {
+      "description": "Replies to unresolved review threads of other authors.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["thread_id", "body"],
+        "properties": {
+          "thread_id": {
+            "description": "The id of the review thread in the PR context file.",
+            "type": "string"
+          },
+          "body": {
+            "description": "The reply text.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "comments": {
+      "description": "New review comments, one for each issue.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "line", "start_line", "side", "body"],
+        "properties": {
+          "path": {
+            "description": "The file path relative to the repository root.",
+            "type": "string"
+          },
+          "line": {
+            "description": "The diff line for the comment, or the last line of a range. Null for a comment on the whole file.",
+            "type": ["integer", "null"]
+          },
+          "start_line": {
+            "description": "The first line of a range. Null for a comment on one line or on the whole file.",
+            "type": ["integer", "null"]
+          },
+          "side": {
+            "description": "RIGHT for a line in the new version of the file. LEFT for a deleted line.",
+            "type": "string",
+            "enum": ["RIGHT", "LEFT"]
+          },
+          "body": {
+            "description": "The comment text.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "lgtm": {
+      "description": "True only when comments is empty and no unresolved review thread needs more work.",
+      "type": "boolean"
+    }
+  }
+}
