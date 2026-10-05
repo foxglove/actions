@@ -5,29 +5,74 @@ on:
     secrets:
       ANTHROPIC_API_KEY:
         required: true
+      # A juror without its key does not vote. Its absent vote still counts against LGTM.
+      OPENAI_API_KEY:
+        required: false
+      XAI_API_KEY:
+        required: false
 
 concurrency:
-  group: claude-review-${{ github.repository }}-${{ github.head_ref }}-${{ github.event.action }}
+  group: review-jury-${{ github.repository }}-${{ github.head_ref }}-${{ github.event.action }}
   cancel-in-progress: true
 
+env:
+  OPUS_MODEL: claude-opus-5-5
+  ASTRA_MODEL: gpt-6-astra
+  GROK_MODEL: grok-4.7
+  # Change both together. The checksum is the SHA-256 of the decompressed linux-x86_64 binary.
+  GROK_VERSION: 1.0.46
+  GROK_SHA256: 41626a53292324140b92556b9d42ff5542e3dcd04aff85eafb8689dd4adb44fc
+
 jobs:
-  claude:
+  # Each juror reviews the pull request on its own with read-only access and returns a JSON
+  # verdict. The verdict job merges the verdicts and publishes one review.
+  juror:
+    name: ${{ matrix.name }} review
     if: >-
       github.event.pull_request != null &&
       github.actor != 'dependabot[bot]' &&
       !contains(github.event.pull_request.labels.*.name, 'skip-claude-review')
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      CLAUDE_ALLOWED_TOOLS: "Read,Glob,Grep,mcp__github__pull_request_read,mcp__github__pull_request_review_write,mcp__github__add_comment_to_pending_review,mcp__github__get_pull_request,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__get_issue_comments,mcp__github__create_pending_pull_request_review,mcp__github__submit_pending_pull_request_review,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*),Bash(node:*)"
     permissions:
-      actions: read
       contents: read
-      pull-requests: write
-      id-token: write
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      # Keep in sync with JURORS in .github/scripts/review-jury.js.
+      matrix:
+        include:
+          - juror: opus
+            name: Opus
+          - juror: astra
+            name: Astra
+          - juror: grok
+            name: Grok
+    env:
+      REVIEW_DIR: ${{ github.workspace }}/.foxglove-actions/.review
+      CLAUDE_ALLOWED_TOOLS: "Read,Glob,Grep,Bash(yarn:*),Bash(git diff:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*),Bash(node:*)"
 
     steps:
+      - name: Check juror credentials
+        id: credentials
+        shell: bash
+        env:
+          JUROR: ${{ matrix.juror }}
+          HAS_ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          HAS_OPENAI_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+          HAS_XAI_KEY: ${{ secrets.XAI_API_KEY != '' }}
+        run: |
+          case "$JUROR" in
+            opus) secret=ANTHROPIC_API_KEY available=$HAS_ANTHROPIC_KEY ;;
+            astra) secret=OPENAI_API_KEY available=$HAS_OPENAI_KEY ;;
+            grok) secret=XAI_API_KEY available=$HAS_XAI_KEY ;;
+            *) echo "Unknown juror: $JUROR" >&2; exit 1 ;;
+          esac
+          echo "secret=$secret" >> "$GITHUB_OUTPUT"
+          echo "available=$available" >> "$GITHUB_OUTPUT"
+
       - name: Checkout project repository
+        if: steps.credentials.outputs.available == 'true'
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
@@ -41,37 +86,65 @@ jobs:
 
       # Give the reviewer a working JS runtime so it can check claims by running them instead of
       # reasoning from the spec. Dependencies are deliberately not installed: most reviews never
-      # need them, and the reviewer can run `yarn install` itself on the rare one that does.
-      # Both steps are best-effort, because the retry ladder below exists so reviews never go
-      # dark and a setup step must not be able to fail the job before Claude starts. The
-      # tradeoff is that a failed setup leaves the image's Node on PATH with nothing announcing
-      # it, so a version-sensitive claim could be checked against the wrong major.
+      # need them, and the Opus juror can run `yarn install` itself on the rare one that does.
+      # Both steps are best-effort, because a setup step must not be able to fail the job before
+      # the juror starts. The tradeoff is that a failed setup leaves the image's Node on PATH
+      # with nothing announcing it, so a version-sensitive claim could be checked against the
+      # wrong major.
       #
       # Node is set up before Corepack so the shims land in the pinned install rather than the
       # image's. `cache: yarn` is omitted: the restore is a fixed cost on every review to save
       # roughly three times as much on the rare one that installs, and its post-step writes
       # under a lockfile-keyed name CI restores from, which a partial node_modules would poison.
       - name: Set up Node
-        if: hashFiles('.node-version', '.nvmrc') != ''
+        if: steps.credentials.outputs.available == 'true' && hashFiles('.node-version', '.nvmrc') != ''
         continue-on-error: true
         uses: actions/setup-node@v6
         with:
           node-version-file: ${{ hashFiles('.node-version') != '' && '.node-version' || '.nvmrc' }}
 
       - name: Enable Corepack
-        if: hashFiles('yarn.lock') != ''
+        if: steps.credentials.outputs.available == 'true' && hashFiles('yarn.lock') != ''
         continue-on-error: true
         run: corepack enable
 
-      - name: Build Claude inputs
-        id: claude-inputs
+      # The jurors read prior reviews and threads from a file, because Astra and Grok run
+      # without network access.
+      - name: Gather PR context
+        if: steps.credentials.outputs.available == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const { writeJurorContext } = require(
+              `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/review-jury.js`,
+            );
+            await writeJurorContext({
+              github,
+              context,
+              core,
+              file: `${process.env.REVIEW_DIR}/pr-context.json`,
+            });
+
+      - name: Build review prompt
+        id: inputs
+        if: steps.credentials.outputs.available == 'true'
         shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+          JUROR_NAME: ${{ matrix.name }}
         run: |
           prompt_file=".foxglove-actions/prompts/review.md"
-          if [ ! -f "$prompt_file" ]; then
-            echo "Missing required review prompt file: $prompt_file" >&2
-            exit 1
-          fi
+          schema_file=".foxglove-actions/prompts/review-verdict.schema.json"
+          for file in "$prompt_file" "$schema_file"; do
+            if [ ! -f "$file" ]; then
+              echo "Missing required review file: $file" >&2
+              exit 1
+            fi
+          done
 
           # Deterministically discover repo-specific review instruction files.
           # git ls-files only lists tracked, first-party paths.
@@ -82,13 +155,13 @@ jobs:
             ':(icase)REVIEWING.md' ':(icase)*/REVIEWING.md' | sort)"
 
           {
-            echo "prompt<<__CLAUDE_PROMPT__"
             echo "CONTEXT:"
-            echo "  repo: ${{ github.repository }}"
-            echo "  pr_number: ${{ github.event.pull_request.number }}"
-            echo "  base_branch: ${{ github.event.pull_request.base.ref }}"
-            echo "  is_draft: ${{ github.event.pull_request.draft }}"
-            echo "  bot_login: claude[bot]"
+            echo "  repo: $REPOSITORY"
+            echo "  pr_number: $PR_NUMBER"
+            echo "  base_branch: $BASE_BRANCH"
+            echo "  is_draft: $IS_DRAFT"
+            echo "  juror: $JUROR_NAME"
+            echo "  pr_context_file: .foxglove-actions/.review/pr-context.json"
             echo "  repo_instruction_files:"
             if [ -n "$instruction_files" ]; then
               echo "$instruction_files" | sed 's/^/    - /'
@@ -97,93 +170,268 @@ jobs:
             fi
             echo
             cat "$prompt_file"
-            echo "__CLAUDE_PROMPT__"
+          } > "$REVIEW_DIR/prompt.md"
+
+          {
+            echo "prompt<<__REVIEW_PROMPT__"
+            cat "$REVIEW_DIR/prompt.md"
+            echo "__REVIEW_PROMPT__"
 
             echo "claude_args<<__CLAUDE_ARGS__"
-            echo "--model claude-opus-5-5"
+            echo "--model ${OPUS_MODEL}"
             echo "--effort high"
             # Passed as flag settings rather than the action's `settings` input, which writes
             # user settings that a reviewed repo's .claude/settings.json could override.
             echo "--settings '{\"outputStyle\":\"Concise\"}'"
             echo "--allowedTools \"${CLAUDE_ALLOWED_TOOLS}\""
+            echo "--json-schema '$(jq -c . "$schema_file")'"
             echo "__CLAUDE_ARGS__"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Clean up prior reviews (before attempt 1)
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ github.token }}
-          script: |
-            const cleanupPendingReviews = require(
-              `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/cleanup-pending-reviews.js`,
-            );
-            await cleanupPendingReviews({ github, context, core });
-
-      - name: Run Claude review (attempt 1)
-        id: attempt1
+      # Opus: Claude Code. The workflow token is read-only in this job, so the juror cannot
+      # write to the pull request.
+      - name: Run Opus review (attempt 1)
+        id: opus1
+        if: matrix.juror == 'opus' && steps.credentials.outputs.available == 'true'
         continue-on-error: true
         uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280, Agent SDK 0.3.280 (after v1.0.231)
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
           track_progress: false
           use_sticky_comment: false
           allowed_bots: cursor[bot]
 
-          prompt: ${{ steps.claude-inputs.outputs.prompt }}
-          claude_args: ${{ steps.claude-inputs.outputs.claude_args }}
+          prompt: ${{ steps.inputs.outputs.prompt }}
+          claude_args: ${{ steps.inputs.outputs.claude_args }}
 
-      - name: Clean up prior reviews (before attempt 2)
-        if: steps.attempt1.outcome == 'failure'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ github.token }}
-          script: |
-            const cleanupPendingReviews = require(
-              `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/cleanup-pending-reviews.js`,
-            );
-            await cleanupPendingReviews({ github, context, core });
-
-      - name: Run Claude review (attempt 2)
-        id: attempt2
-        if: steps.attempt1.outcome == 'failure'
+      - name: Run Opus review (attempt 2)
+        id: opus2
+        if: matrix.juror == 'opus' && steps.credentials.outputs.available == 'true' && steps.opus1.outputs.structured_output == ''
         continue-on-error: true
         uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280, Agent SDK 0.3.280 (after v1.0.231)
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
           track_progress: false
           use_sticky_comment: false
           allowed_bots: cursor[bot]
 
-          prompt: ${{ steps.claude-inputs.outputs.prompt }}
-          claude_args: ${{ steps.claude-inputs.outputs.claude_args }}
+          prompt: ${{ steps.inputs.outputs.prompt }}
+          claude_args: ${{ steps.inputs.outputs.claude_args }}
 
-      - name: Clean up prior reviews (before attempt 3)
-        if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ github.token }}
-          script: |
-            const cleanupPendingReviews = require(
-              `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/cleanup-pending-reviews.js`,
-            );
-            await cleanupPendingReviews({ github, context, core });
-
-      - name: Run Claude review (attempt 3)
-        id: attempt3
-        if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
+      - name: Run Opus review (attempt 3)
+        id: opus3
+        if: matrix.juror == 'opus' && steps.credentials.outputs.available == 'true' && steps.opus1.outputs.structured_output == '' && steps.opus2.outputs.structured_output == ''
         continue-on-error: true
         uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280, Agent SDK 0.3.280 (after v1.0.231)
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
           track_progress: false
           use_sticky_comment: false
           allowed_bots: cursor[bot]
 
-          prompt: ${{ steps.claude-inputs.outputs.prompt }}
-          claude_args: ${{ steps.claude-inputs.outputs.claude_args }}
+          prompt: ${{ steps.inputs.outputs.prompt }}
+          claude_args: ${{ steps.inputs.outputs.claude_args }}
 
-      - name: Verify success
-        if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure' && steps.attempt3.outcome == 'failure'
+      - name: Save Opus verdict
+        if: matrix.juror == 'opus' && (steps.opus1.outputs.structured_output != '' || steps.opus2.outputs.structured_output != '' || steps.opus3.outputs.structured_output != '')
+        shell: bash
+        env:
+          STRUCTURED_OUTPUT: ${{ steps.opus1.outputs.structured_output || steps.opus2.outputs.structured_output || steps.opus3.outputs.structured_output }}
+        run: printf '%s' "$STRUCTURED_OUTPUT" > "$REVIEW_DIR/verdict.json"
+
+      # Astra: Codex. The action keeps the API key in a proxy that Codex cannot read, removes
+      # sudo, and runs Codex in a read-only sandbox without network access. It also installs
+      # its own Node, which replaces the repository's pinned version for this juror.
+      - name: Run Astra review (attempt 1)
+        id: astra1
+        if: matrix.juror == 'astra' && steps.credentials.outputs.available == 'true'
+        continue-on-error: true
+        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: 0.160.1
+          model: ${{ env.ASTRA_MODEL }}
+          effort: high
+          permission-profile: ":read-only"
+          allow-bot-users: cursor[bot]
+          prompt-file: ${{ env.REVIEW_DIR }}/prompt.md
+          output-schema-file: ${{ github.workspace }}/.foxglove-actions/prompts/review-verdict.schema.json
+          output-file: ${{ env.REVIEW_DIR }}/verdict.json
+
+      - name: Run Astra review (attempt 2)
+        id: astra2
+        if: matrix.juror == 'astra' && steps.credentials.outputs.available == 'true' && steps.astra1.outcome == 'failure'
+        continue-on-error: true
+        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: 0.160.1
+          model: ${{ env.ASTRA_MODEL }}
+          effort: high
+          permission-profile: ":read-only"
+          allow-bot-users: cursor[bot]
+          prompt-file: ${{ env.REVIEW_DIR }}/prompt.md
+          output-schema-file: ${{ github.workspace }}/.foxglove-actions/prompts/review-verdict.schema.json
+          output-file: ${{ env.REVIEW_DIR }}/verdict.json
+
+      - name: Run Astra review (attempt 3)
+        id: astra3
+        if: matrix.juror == 'astra' && steps.credentials.outputs.available == 'true' && steps.astra1.outcome == 'failure' && steps.astra2.outcome == 'failure'
+        continue-on-error: true
+        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: 0.160.1
+          model: ${{ env.ASTRA_MODEL }}
+          effort: high
+          permission-profile: ":read-only"
+          allow-bot-users: cursor[bot]
+          prompt-file: ${{ env.REVIEW_DIR }}/prompt.md
+          output-schema-file: ${{ github.workspace }}/.foxglove-actions/prompts/review-verdict.schema.json
+          output-file: ${{ env.REVIEW_DIR }}/verdict.json
+
+      # Grok: Grok Build. Its read-only sandbox blocks file writes and network access for the
+      # commands that the juror runs, and needs bubblewrap on Linux.
+      - name: Install Grok Build
+        id: grok-install
+        if: matrix.juror == 'grok' && steps.credentials.outputs.available == 'true'
+        shell: bash
         run: |
-          echo "Claude review failed after 3 attempts."
+          for attempt in 1 2 3; do
+            sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends bubblewrap && break
+            echo "apt-get attempt $attempt failed, retrying..."
+            sleep 5
+          done
+          command -v bwrap
+          # Ubuntu 24.04 restricts the unprivileged user namespaces that bubblewrap uses.
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+
+          bin_dir="$RUNNER_TEMP/grok-build"
+          mkdir -p "$bin_dir"
+          curl -fsSL --retry 3 "https://x.ai/cli/grok-${GROK_VERSION}-linux-x86_64.gz" | gzip -dc > "$bin_dir/grok"
+          echo "${GROK_SHA256}  $bin_dir/grok" | sha256sum --check --strict
+          chmod +x "$bin_dir/grok"
+          "$bin_dir/grok" --version
+          echo "$bin_dir" >> "$GITHUB_PATH"
+
+      - name: Run Grok review
+        id: grok
+        if: steps.grok-install.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+        run: |
+          schema="$(jq -c . .foxglove-actions/prompts/review-verdict.schema.json)"
+          output="$REVIEW_DIR/grok-output.json"
+          for attempt in 1 2 3; do
+            # Grok Build falls back to another model, without an error, when it cannot load the
+            # model list. Check the list first so that the juror is always the configured model.
+            if ! grok models | awk -v model="$GROK_MODEL" '($1 == "*" || $1 == "-") && $2 == model { found = 1 } END { exit !found }'; then
+              echo "::warning::Grok Build does not list $GROK_MODEL as available (attempt $attempt)."
+              sleep 10
+              continue
+            fi
+            if grok --prompt-file "$REVIEW_DIR/prompt.md" \
+              --cwd "$GITHUB_WORKSPACE" \
+              --model "$GROK_MODEL" \
+              --effort high \
+              --sandbox read-only \
+              --disable-web-search \
+              --no-subagents \
+              --always-approve \
+              --json-schema "$schema" > "$output" &&
+              node .foxglove-actions/.github/scripts/review-jury.js extract "$output" "$REVIEW_DIR/verdict.json"; then
+              exit 0
+            fi
+            echo "::warning::Grok review attempt $attempt failed."
+            head -c 2000 "$output" >&2 || true
+          done
           exit 1
+
+      - name: Record juror result
+        id: record
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          JUROR: ${{ matrix.juror }}
+          AVAILABLE: ${{ steps.credentials.outputs.available }}
+          MISSING_SECRET: ${{ steps.credentials.outputs.secret }}
+          SUCCEEDED: ${{ steps.opus1.outputs.structured_output != '' || steps.opus2.outputs.structured_output != '' || steps.opus3.outputs.structured_output != '' || steps.astra1.outcome == 'success' || steps.astra2.outcome == 'success' || steps.astra3.outcome == 'success' || steps.grok.outcome == 'success' }}
+          VERDICT_FILE: ${{ env.REVIEW_DIR }}/verdict.json
+          RESULT_FILE: ${{ runner.temp }}/review-jury/${{ matrix.juror }}.json
+        run: node .foxglove-actions/.github/scripts/review-jury.js record
+
+      - name: Upload juror result
+        if: ${{ !cancelled() && steps.record.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: review-juror-${{ matrix.juror }}
+          path: ${{ runner.temp }}/review-jury/${{ matrix.juror }}.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+      - name: Fail when the juror did not vote
+        if: steps.record.outputs.status == 'failed'
+        shell: bash
+        env:
+          JUROR_NAME: ${{ matrix.name }}
+        run: |
+          echo "::error::$JUROR_NAME did not return a valid review."
+          exit 1
+
+  verdict:
+    name: Jury verdict
+    needs: juror
+    if: ${{ !cancelled() && needs.juror.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout workflow repository
+        uses: actions/checkout@v6
+        with:
+          repository: foxglove/actions
+          path: .foxglove-actions
+          ref: ${{ github.repository == 'foxglove/actions' && github.sha || 'main' }}
+
+      # A juror job that crashed uploads nothing. The publish step reports that juror as
+      # absent from the vote.
+      - name: Download juror results
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: review-juror-*
+          path: ${{ runner.temp }}/review-jury
+          merge-multiple: true
+
+      - name: Publish the jury review
+        uses: actions/github-script@v7
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          RESULTS_DIR: ${{ runner.temp }}/review-jury
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const { createClerk, publishJuryReview } = require(
+              `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/review-jury.js`,
+            );
+            await publishJuryReview({
+              github,
+              context,
+              core,
+              resultsDir: process.env.RESULTS_DIR,
+              clerk: createClerk({
+                apiKey: process.env.ANTHROPIC_API_KEY,
+                model: process.env.OPUS_MODEL,
+              }),
+            });
