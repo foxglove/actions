@@ -303,7 +303,7 @@ jobs:
           for attempt in 1 2 3; do
             # Grok Build falls back to another model, without an error, when it cannot load the
             # model list. Check the list first so that the juror is always the configured model.
-            if ! grok models | awk -v model="$GROK_MODEL" '($1 == "*" || $1 == "-") && $2 == model { found = 1 } END { exit !found }'; then
+            if ! grok models | awk -v model="$GROK_MODEL" '{ for (i = 1; i <= NF; i++) if ($i == model) found = 1 } END { exit !found }'; then
               echo "::warning::Grok Build does not list $GROK_MODEL as available (attempt $attempt)."
               sleep 10
               continue
