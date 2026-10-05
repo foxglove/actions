@@ -245,41 +245,12 @@ jobs:
       # Astra: Codex. The action keeps the API key in a proxy that Codex cannot read, removes
       # sudo, and runs Codex in a read-only sandbox without network access. It also installs
       # its own Node, which replaces the repository's pinned version for this juror.
-      - name: Run Astra review (attempt 1)
-        id: astra1
+      #
+      # There is one attempt, because the action cannot run again in a job after it removes
+      # sudo. Codex retries failed API requests itself.
+      - name: Run Astra review
+        id: astra
         if: matrix.juror == 'astra' && steps.credentials.outputs.available == 'true'
-        continue-on-error: true
-        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
-        with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: 0.160.1
-          model: ${{ env.ASTRA_MODEL }}
-          effort: high
-          permission-profile: ":read-only"
-          allow-bot-users: cursor[bot]
-          prompt-file: ${{ env.REVIEW_DIR }}/prompt.md
-          output-schema-file: ${{ github.workspace }}/.foxglove-actions/prompts/review-verdict.schema.json
-          output-file: ${{ env.REVIEW_DIR }}/verdict.json
-
-      - name: Run Astra review (attempt 2)
-        id: astra2
-        if: matrix.juror == 'astra' && steps.credentials.outputs.available == 'true' && steps.astra1.outcome == 'failure'
-        continue-on-error: true
-        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
-        with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: 0.160.1
-          model: ${{ env.ASTRA_MODEL }}
-          effort: high
-          permission-profile: ":read-only"
-          allow-bot-users: cursor[bot]
-          prompt-file: ${{ env.REVIEW_DIR }}/prompt.md
-          output-schema-file: ${{ github.workspace }}/.foxglove-actions/prompts/review-verdict.schema.json
-          output-file: ${{ env.REVIEW_DIR }}/verdict.json
-
-      - name: Run Astra review (attempt 3)
-        id: astra3
-        if: matrix.juror == 'astra' && steps.credentials.outputs.available == 'true' && steps.astra1.outcome == 'failure' && steps.astra2.outcome == 'failure'
         continue-on-error: true
         uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
         with:
@@ -362,7 +333,7 @@ jobs:
           JUROR: ${{ matrix.juror }}
           AVAILABLE: ${{ steps.credentials.outputs.available }}
           MISSING_SECRET: ${{ steps.credentials.outputs.secret }}
-          SUCCEEDED: ${{ steps.opus1.outputs.structured_output != '' || steps.opus2.outputs.structured_output != '' || steps.opus3.outputs.structured_output != '' || steps.astra1.outcome == 'success' || steps.astra2.outcome == 'success' || steps.astra3.outcome == 'success' || steps.grok.outcome == 'success' }}
+          SUCCEEDED: ${{ steps.opus1.outputs.structured_output != '' || steps.opus2.outputs.structured_output != '' || steps.opus3.outputs.structured_output != '' || steps.astra.outcome == 'success' || steps.grok.outcome == 'success' }}
           VERDICT_FILE: ${{ env.REVIEW_DIR }}/verdict.json
           RESULT_FILE: ${{ runner.temp }}/review-jury/${{ matrix.juror }}.json
           # Only used to redact the keys from the verdict.
