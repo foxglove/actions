@@ -9,12 +9,17 @@ on:
         required: false
         default: .
       mode:
-        description: "Scan mode: static | plan | both"
+        description: "Scan mode: static | plan | both. Prefer static until plan-mode security (see docs/checkov.md) is resolved."
         type: string
         required: false
-        default: both
+        default: static
+      actions_ref:
+        description: foxglove/actions git ref to check out for scripts/config (use the same full SHA as uses:)
+        type: string
+        required: false
+        default: main
       config_file:
-        description: Optional path to a consumer checkov.yml
+        description: Optional path to a consumer checkov.yml (replaces shared defaults when non-comment content exists)
         type: string
         required: false
         default: ""
@@ -37,7 +42,7 @@ on:
         description: How long to wait for TFC speculative plans before soft-skipping plan mode
         type: number
         required: false
-        default: 600
+        default: 120
       tfc_hostname:
         description: Terraform Cloud / HCP Terraform hostname
         type: string
@@ -45,13 +50,14 @@ on:
         default: app.terraform.io
     secrets:
       TFE_TOKEN:
-        description: Read-only Terraform Cloud API token for downloading plan JSON
+        description: TFC token for plan JSON download (see docs — full json-output needs workspace admin)
         required: false
 
 permissions:
   contents: read
   actions: read
   checks: read
+  statuses: read
   security-events: write
 
 jobs:
@@ -67,7 +73,7 @@ jobs:
         with:
           repository: foxglove/actions
           path: .foxglove-actions
-          ref: ${{ github.repository == 'foxglove/actions' && github.sha || 'main' }}
+          ref: ${{ github.repository == 'foxglove/actions' && github.sha || inputs.actions_ref }}
 
       - name: Resolve Checkov config
         id: config
@@ -196,7 +202,8 @@ jobs:
             echo
             echo "### Plan scans"
             echo
-            echo "Scanned **${idx}** plan file(s). Per-plan SARIF/JSON are under \`checkov-plan-results/\`."
+            echo "Scanned **${idx}** plan file(s). Per-plan Checkov SARIF/JSON are under \`checkov-plan-results/\`."
+            echo "Raw TFC plan JSON is **not** uploaded as an artifact."
           } >> "${GITHUB_STEP_SUMMARY}"
 
           if [[ "${SOFT_FAIL}" != "true" && "${scan_failed}" -ne 0 ]]; then
@@ -212,7 +219,6 @@ jobs:
             checkov-terraform-static.sarif
             checkov-terraform-static.json
             checkov-plan-results/
-            tfc-plans/
           if-no-files-found: warn
 
       - name: Upload static SARIF to Code Scanning

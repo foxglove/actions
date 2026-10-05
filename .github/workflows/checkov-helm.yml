@@ -3,12 +3,32 @@ name: Checkov Helm
 on:
   workflow_call:
     inputs:
-      directory:
-        description: Directory (or comma-separated directories) containing Helm charts to scan
+      layout:
+        description: "Helm target layout: sibling (charts/*/chart + charts/*/targets) or shared (chart_dirs + targets_dir)"
         type: string
         required: true
+      charts_root:
+        description: Root directory for sibling layout (e.g. charts)
+        type: string
+        required: false
+        default: charts
+      chart_dirs:
+        description: Comma-separated chart directories for shared layout (e.g. deploy/api,deploy/billing)
+        type: string
+        required: false
+        default: ""
+      targets_dir:
+        description: Shared values directory for shared layout (e.g. deploy/targets)
+        type: string
+        required: false
+        default: ""
+      actions_ref:
+        description: foxglove/actions git ref to check out for scripts/config (use the same full SHA as uses:)
+        type: string
+        required: false
+        default: main
       config_file:
-        description: Optional path to a consumer checkov.yml (overrides shared defaults when present and non-empty)
+        description: Optional path to a consumer checkov.yml (replaces shared defaults when non-comment content exists)
         type: string
         required: false
         default: ""
@@ -36,7 +56,7 @@ permissions:
 jobs:
   checkov-helm:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Checkout consumer repository
         uses: actions/checkout@v6
@@ -46,7 +66,12 @@ jobs:
         with:
           repository: foxglove/actions
           path: .foxglove-actions
-          ref: ${{ github.repository == 'foxglove/actions' && github.sha || 'main' }}
+          ref: ${{ github.repository == 'foxglove/actions' && github.sha || inputs.actions_ref }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
 
       - name: Resolve Checkov config
         id: config
@@ -57,12 +82,32 @@ jobs:
             ".foxglove-actions/checkov/checkov.yml" \
             "checkov.yml"
 
-      - name: Run Checkov (Helm)
+      - name: Render Helm charts with target values
+        id: render
+        shell: bash
+        run: |
+          if [[ "${{ inputs.layout }}" == "sibling" ]]; then
+            bash .foxglove-actions/.github/scripts/render-helm-targets.sh \
+              sibling \
+              checkov-rendered \
+              "${{ inputs.charts_root }}"
+          elif [[ "${{ inputs.layout }}" == "shared" ]]; then
+            bash .foxglove-actions/.github/scripts/render-helm-targets.sh \
+              shared \
+              checkov-rendered \
+              "${{ inputs.chart_dirs }}" \
+              "${{ inputs.targets_dir }}"
+          else
+            echo "Invalid layout '${{ inputs.layout }}' (expected sibling or shared)" >&2
+            exit 1
+          fi
+
+      - name: Run Checkov (Kubernetes manifests)
         id: checkov
         uses: bridgecrewio/checkov-action@v12.1347.0
         with:
-          directory: ${{ inputs.directory }}
-          framework: helm
+          directory: checkov-rendered
+          framework: kubernetes
           soft_fail: ${{ inputs.soft_fail }}
           quiet: true
           skip_results_upload: true
@@ -77,20 +122,20 @@ jobs:
         shell: bash
         run: |
           {
-            echo "## Checkov Helm"
+            echo "## Checkov Helm (rendered targets → kubernetes)"
             echo
-            echo "- Directory: \`${{ inputs.directory }}\`"
+            echo "- Layout: \`${{ inputs.layout }}\`"
             echo "- Soft fail: \`${{ inputs.soft_fail }}\`"
             if [[ -f checkov-helm.json ]]; then
-              failed="$(jq '[.results.failed_checks // [] | length] | add // 0' checkov-helm.json 2>/dev/null || echo unknown)"
-              passed="$(jq '[.results.passed_checks // [] | length] | add // 0' checkov-helm.json 2>/dev/null || echo unknown)"
+              failed="$(jq '[.. | .failed_checks? // empty | length] | add // 0' checkov-helm.json 2>/dev/null || echo unknown)"
+              passed="$(jq '[.. | .passed_checks? // empty | length] | add // 0' checkov-helm.json 2>/dev/null || echo unknown)"
               echo "- Failed checks: **${failed}**"
               echo "- Passed checks: **${passed}**"
             else
               echo "- Result files were not produced; see job logs."
             fi
             echo
-            echo "SARIF/JSON are uploaded as workflow artifacts. Code Scanning upload is controlled by \`upload_sarif\`."
+            echo "SARIF/JSON are workflow artifacts only. Code Scanning upload requires \`upload_sarif: true\` and Code Security."
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload Checkov artifacts

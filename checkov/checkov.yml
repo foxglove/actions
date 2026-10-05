@@ -1,10 +1,9 @@
 # Shared Checkov defaults for Foxglove reusable workflows.
-# Consumers may commit a root checkov.yml to override paths/skips per repo.
-#
-# Docs: docs/checkov.md
+# Consumers may commit a root checkov.yml; if it has non-comment keys it
+# REPLACES this file entirely (no merge). See docs/checkov.md.
 #
 # soft-fail is also set on the GitHub Action inputs so CI stays green while
-# findings are reported. Flip that only when you are ready to enforce.
+# findings are reported.
 
 framework:
   - terraform
@@ -12,13 +11,12 @@ framework:
   - helm
   - kubernetes
 
-# Download public Terraform modules so graph checks see real resources.
 download-external-modules: true
 
 # --- Noise tuning (leave commented for a full-open first pass) ---
 #
 # skip-check:
-#   - CKV_AWS_144   # example: skip a specific check ID
+#   - CKV_AWS_144
 #
 # skip-path:
 #   - .*/\.terraform/.*
@@ -32,5 +30,3 @@ download-external-modules: true
 #   - CRITICAL
 #
 # baseline: .checkov.baseline
-#   # Generate with: checkov -d . --create-baseline
-#   # Then only NEW failures (vs baseline) are reported.

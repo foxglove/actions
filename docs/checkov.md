@@ -6,84 +6,79 @@ Local OSS only — no Bridgecrew / Prisma API key, and `skip_results_upload` / `
 
 ## Workflows
 
-| Workflow                                                              | Frameworks                                          | Typical callers                                     |
-| --------------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------- |
-| [`checkov-helm.yml`](../.github/workflows/checkov-helm.yml)           | Helm                                                | Repos with charts under `deploy/` or `charts/`      |
-| [`checkov-terraform.yml`](../.github/workflows/checkov-terraform.yml) | Terraform (static) and/or Terraform Cloud plan JSON | Repos with `.tf` and optional TFC speculative plans |
+| Workflow                                                              | What it scans                                                       |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| [`checkov-helm.yml`](../.github/workflows/checkov-helm.yml)           | Renders charts with env target values, then scans as **kubernetes** |
+| [`checkov-terraform.yml`](../.github/workflows/checkov-terraform.yml) | Static Terraform HCL; optional TFC plan mode (see caveats below)    |
 
-## Usage
+## Pinning `foxglove/actions`
 
-### Helm
+`uses: foxglove/actions/.github/workflows/….yml@<ref>` only pins the workflow YAML. Scripts and shared config are loaded from a second checkout. Pass the **same full commit SHA** as `actions_ref`:
 
 ```yaml
 jobs:
   checkov-helm:
-    permissions:
-      contents: read
-      actions: read
-      security-events: write
-    uses: foxglove/actions/.github/workflows/checkov-helm.yml@main
+    uses: foxglove/actions/.github/workflows/checkov-helm.yml@e7cb50b44827f5d73eccbbc59b2b3a1c8a9632dc
     with:
-      directory: deploy
-      # upload_sarif: false   # default; needs GitHub Code Security on private repos
+      actions_ref: e7cb50b44827f5d73eccbbc59b2b3a1c8a9632dc
+      layout: shared
+      chart_dirs: deploy/api,deploy/billing
+      targets_dir: deploy/targets
 ```
 
-### Terraform
+After this repo’s Checkov PR merges, callers can use `@main` for both `uses` and `actions_ref`.
 
-```yaml
-jobs:
-  checkov-terraform:
-    permissions:
-      contents: read
-      actions: read
-      checks: read
-      security-events: write
-    uses: foxglove/actions/.github/workflows/checkov-terraform.yml@main
-    with:
-      directory: .
-      mode: both # static | plan | both
-    secrets:
-      TFE_TOKEN: ${{ secrets.TFE_TOKEN }} # optional until plan mode is wired
-```
+## Helm layouts
 
-`mode`:
+| `layout`  | Inputs                           | Used by                                                                  |
+| --------- | -------------------------------- | ------------------------------------------------------------------------ |
+| `sibling` | `charts_root` (default `charts`) | `infra` — each `charts/<name>/chart` + `charts/<name>/targets/**/*.yaml` |
+| `shared`  | `chart_dirs`, `targets_dir`      | `app`, `data-platform` — each chart × each file in `targets_dir`         |
 
-- `static` — scan `.tf` in `directory` (full inventory; no TFC required)
-- `plan` — download speculative plan JSON from Terraform Cloud for the commit and scan it
-- `both` — run static then plan (default)
+Rendered manifests land in `checkov-rendered/` and are scanned with `framework: kubernetes`.
+
+## Terraform modes
+
+| `mode`             | Behavior                                             |
+| ------------------ | ---------------------------------------------------- |
+| `static` (default) | Scan `.tf` under `directory`. No TFC credentials.    |
+| `plan`             | Download speculative plan JSON from TFC and scan it. |
+| `both`             | Static then plan.                                    |
+
+**Recommended for now: `static` only.** Plan mode is implemented but not wired in consumers until the security model below is accepted.
+
+### Plan mode spike findings
+
+Verified against Foxglove’s TFC + GitHub integration:
+
+1. **TFC reports via commit statuses**, not check runs (`Terraform Cloud/foxglove/<workspace>`). Discovery must use the Statuses API; check-runs alone will never find plans.
+2. **`GET /runs/:id/plan/json-output` requires workspace admin** (user or team token). Organization tokens cannot call it ([HashiCorp docs](https://developer.hashicorp.com/terraform/cloud-docs/api-docs/plans)).
+3. **Unredacted plan JSON can contain Terraform `sensitive` values in plaintext.** Uploading those files as Actions artifacts would expose them to anyone with repo read access.
+4. There is an undocumented/redacted plan endpoint (`json-output-redacted`) that may work with lower privileges, but it is not a full security boundary and needs a dedicated follow-up before we enable plan mode in CI.
+
+Until that follow-up: do not set `TFE_TOKEN` on consumers; keep `mode: static`. Raw plan JSON is never uploaded as a workflow artifact even if plan mode is used.
 
 ## Config resolution
 
 1. `config_file` workflow input, if the path exists
 2. Consumer repo root `checkov.yml`, if it contains non-comment settings
-3. Shared defaults from this repo: [`checkov/checkov.yml`](../checkov/checkov.yml)
+3. Shared defaults: [`checkov/checkov.yml`](../checkov/checkov.yml)
 
-Commit a commented stub `checkov.yml` in consumers so per-repo skips can be added later without inventing a new file.
+**Replace, do not merge.** When a consumer `checkov.yml` has any non-comment key, Checkov uses **only** that file. Shared defaults are ignored. Copy needed keys from the shared file when you start customizing.
 
-## Terraform Cloud plan mode
-
-PR speculative plans already run in Terraform Cloud via the GitHub App. Plan mode **reuses** that JSON; it does not run `terraform plan` in Actions.
-
-Requirements:
-
-1. Read-only TFC API token stored as Actions secret `TFE_TOKEN` (plan/run read; no apply)
-2. TFC check runs on the commit (used to discover `run-…` IDs)
-3. Patience: the workflow polls until plans are ready or `plan_timeout_seconds` elapses, then soft-skips
-
-If `TFE_TOKEN` is missing or no plans appear, plan mode logs a skip in the step summary and exits successfully. Static mode (when enabled) still runs.
+Stub template: [`checkov/checkov.stub.yml`](../checkov/checkov.stub.yml).
 
 ## Reporting
 
-| Channel                               | Default                                                            |
-| ------------------------------------- | ------------------------------------------------------------------ |
-| Job logs                              | Yes                                                                |
-| `$GITHUB_STEP_SUMMARY`                | Yes                                                                |
-| Workflow artifacts (SARIF + JSON)     | Yes                                                                |
-| GitHub Code Scanning (`upload_sarif`) | Off — enable after Code Security is turned on for the private repo |
+| Channel                                   | Default   |
+| ----------------------------------------- | --------- |
+| Job logs                                  | Yes       |
+| `$GITHUB_STEP_SUMMARY`                    | Yes       |
+| Workflow artifacts (Checkov SARIF + JSON) | Yes       |
+| Raw TFC plan JSON artifacts               | **Never** |
+| GitHub Code Scanning (`upload_sarif`)     | Off       |
 
 ## Noise tuning (later)
-
-Full-open first: no skip lists. When ready to reduce noise, prefer consumer `checkov.yml`:
 
 ```yaml
 skip-check:
@@ -97,13 +92,8 @@ soft-fail-on:
 
 hard-fail-on:
   - CRITICAL
-
-# baseline: .checkov.baseline
-#   checkov -d . --create-baseline
 ```
 
-Or pass `skip_path` / flip `soft_fail` on the workflow inputs when you move from report-only to enforcement.
-
-## Pinning
+## Pinning Checkov
 
 Workflows pin `bridgecrewio/checkov-action@v12.1347.0` (Checkov image `3.3.23`). Bump deliberately in this repo when upgrading.
