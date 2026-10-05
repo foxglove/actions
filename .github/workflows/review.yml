@@ -184,7 +184,7 @@ jobs:
             # user settings that a reviewed repo's .claude/settings.json could override.
             echo "--settings '{\"outputStyle\":\"Concise\"}'"
             echo "--allowedTools \"${CLAUDE_ALLOWED_TOOLS}\""
-            echo "--json-schema '$(jq -c . "$schema_file")'"
+            echo "--json-schema $(jq -c . "$schema_file" | jq -Rr @sh)"
             echo "__CLAUDE_ARGS__"
           } >> "$GITHUB_OUTPUT"
 

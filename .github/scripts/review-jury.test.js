@@ -1083,8 +1083,6 @@ describe("configuration", () => {
       path.join(REPO_ROOT, "prompts/review-verdict.schema.json"),
       "utf8",
     );
-    // The workflow passes the schema to Claude Code inside single quotes.
-    assert.doesNotMatch(text, /'/);
     const visit = (schema) => {
       if (schema.type === "object") {
         assert.equal(schema.additionalProperties, false);

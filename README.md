@@ -70,7 +70,7 @@ jobs:
       XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
 ```
 
-`ANTHROPIC_API_KEY` is required. `OPENAI_API_KEY` and `XAI_API_KEY` are optional so that existing callers keep working, but a juror without its key does not vote: LGTM then needs both of the other jurors, and it is not possible when two keys are missing. The review body names each juror that did not vote and the missing secret.
+`ANTHROPIC_API_KEY` is required. `OPENAI_API_KEY` and `XAI_API_KEY` are optional so that existing callers keep working, but a juror without its key does not vote: LGTM and thread resolution then need both of the other jurors, and neither is possible when two keys are missing. The review body names each juror that did not vote and the missing secret.
 
 > **Note:** If your repository restricts the default `GITHUB_TOKEN` permissions, you may also need to add a top-level `permissions` block to explicitly grant the required access at the workflow level.
 >
