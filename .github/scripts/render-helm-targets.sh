@@ -27,6 +27,16 @@ fi
 # Optional bash ERE; the cap applies per directory per matched substring of the
 # target basename. Non-matching targets share one "other" group.
 target_group_pattern="${TARGET_GROUP_PATTERN:-}"
+if [[ -n "${target_group_pattern}" ]]; then
+  regex_rc=0
+  # [[ =~ ]] returns 2 for an invalid regex.
+  # shellcheck disable=SC2319
+  [[ "" =~ ${target_group_pattern} ]] || regex_rc=$?
+  if [[ "${regex_rc}" -eq 2 ]]; then
+    echo "::error::target_group_pattern is not a valid bash regex: '${target_group_pattern}'"
+    exit 1
+  fi
+fi
 
 mkdir -p "${out_dir}"
 render_count=0
