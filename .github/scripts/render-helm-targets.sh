@@ -16,10 +16,66 @@ shift 2
 soft_fail="${SOFT_FAIL:-true}"
 # Optional comma-separated helm --set pairs (e.g. key=placeholder).
 helm_set="${HELM_SET:-}"
+# Optional comma-separated globs matched against target file basenames.
+exclude_targets="${EXCLUDE_TARGETS:-}"
+# Render at most N targets per directory (sorted); 0 renders all.
+max_targets_per_dir="${MAX_TARGETS_PER_DIR:-0}"
+if ! [[ "${max_targets_per_dir}" =~ ^[0-9]+$ ]]; then
+  echo "::error::max_targets_per_dir must be a non-negative integer, got '${max_targets_per_dir}'"
+  exit 1
+fi
 
 mkdir -p "${out_dir}"
 render_count=0
 fail_count=0
+excluded_count=0
+capped_count=0
+
+exclude_globs=()
+if [[ -n "${exclude_targets}" ]]; then
+  IFS=',' read -r -a raw_globs <<< "${exclude_targets}"
+  for glob in "${raw_globs[@]}"; do
+    glob="$(echo "${glob}" | xargs)"
+    [[ -n "${glob}" ]] && exclude_globs+=("${glob}")
+  done
+fi
+
+is_excluded() {
+  local name
+  name="$(basename "$1")"
+  local glob
+  for glob in "${exclude_globs[@]+"${exclude_globs[@]}"}"; do
+    # shellcheck disable=SC2053 # glob match is intended
+    if [[ "${name}" == ${glob} ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Sets selected_targets to the sorted target files under $1 (searched to depth
+# $2, empty for unlimited), applying exclude_targets and max_targets_per_dir.
+select_targets() {
+  local root="$1"
+  local depth_args=()
+  [[ -n "${2:-}" ]] && depth_args=(-maxdepth "$2")
+  local -A per_dir=()
+  local values_file dir
+  selected_targets=()
+  while IFS= read -r -d '' values_file; do
+    if is_excluded "${values_file}"; then
+      excluded_count=$((excluded_count + 1))
+      continue
+    fi
+    dir="$(dirname "${values_file}")"
+    per_dir["${dir}"]=$(( ${per_dir["${dir}"]:-0} + 1 ))
+    if [[ "${max_targets_per_dir}" -gt 0 && "${per_dir["${dir}"]}" -gt "${max_targets_per_dir}" ]]; then
+      capped_count=$((capped_count + 1))
+      continue
+    fi
+    selected_targets+=("${values_file}")
+  done < <(find "${root}" "${depth_args[@]+"${depth_args[@]}"}" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 | sort -z)
+}
 
 helm_set_args=()
 if [[ -n "${helm_set}" ]]; then
@@ -82,13 +138,14 @@ case "${layout}" in
       targets_root="$(dirname "${chart_dir}")/targets"
       [[ -d "${targets_root}" ]] || continue
       build_deps "${chart_dir}"
-      while IFS= read -r -d '' values_file; do
+      select_targets "${targets_root}" ""
+      for values_file in "${selected_targets[@]+"${selected_targets[@]}"}"; do
         rel="${values_file#"${targets_root}/"}"
         safe_rel="${rel//\//__}"
         safe_rel="${safe_rel%.yaml}"
         dest="${out_dir}/${chart_name}/${safe_rel}"
         render_one "${chart_dir}" "${values_file}" "${chart_name}" "${dest}"
-      done < <(find "${targets_root}" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 | sort -z)
+      done
     done < <(find "${charts_root}" -mindepth 2 -maxdepth 2 -type d -name chart -print0 | sort -z)
     ;;
   shared)
@@ -100,7 +157,8 @@ case "${layout}" in
       [[ -n "${chart_dir}" && -d "${chart_dir}" ]] || continue
       build_deps "${chart_dir}"
     done
-    while IFS= read -r -d '' values_file; do
+    select_targets "${targets_dir}" 1
+    for values_file in "${selected_targets[@]+"${selected_targets[@]}"}"; do
       target_name="$(basename "${values_file}")"
       target_name="${target_name%.yaml}"
       target_name="${target_name%.yml}"
@@ -111,7 +169,7 @@ case "${layout}" in
         dest="${out_dir}/${chart_name}/${target_name}"
         render_one "${chart_dir}" "${values_file}" "${chart_name}" "${dest}"
       done
-    done < <(find "${targets_dir}" -maxdepth 1 -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 | sort -z)
+    done
     ;;
   *)
     echo "Unknown layout '${layout}'" >&2
@@ -129,6 +187,8 @@ echo "out_dir=${out_dir}" >> "${GITHUB_OUTPUT:-/dev/null}"
   echo "- Layout: \`${layout}\`"
   echo "- Rendered successfully: **${render_count}**"
   echo "- Render failures: **${fail_count}**"
+  echo "- Targets excluded by \`exclude_targets\`: ${excluded_count}"
+  echo "- Targets skipped by \`max_targets_per_dir\`: ${capped_count}"
 } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 
 if [[ "${soft_fail}" == "true" ]]; then

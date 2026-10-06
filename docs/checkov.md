@@ -40,7 +40,16 @@ Use the same ref for `uses` and `actions_ref`. After merge, `@main` is fine for 
 
 Rendered manifests land in `checkov-rendered/` and are scanned with `framework: kubernetes`.
 
-`helm_set` is an optional comma-separated list of `key=value` pairs passed as `helm --set` on every render. Use it for values that deploy workflows inject with `--set` and that `required` rejects when empty (for example `indexedBucketDlqReplay.imageHash=checkov-placeholder`).
+`helm_set` is an optional comma-separated list of `key=value` pairs passed as `helm --set` on every render. Use it for values that deploy workflows inject with `--set` and that `required` rejects or that render invalid YAML when empty (for example `siteController.imageHash=checkov-placeholder`). Give full image placeholders a tag (`checkov-placeholder:checkov`) so `CKV_K8S_14` does not report a blank tag.
+
+Target selection:
+
+| Input                 | Effect                                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `exclude_targets`     | Comma-separated globs matched against target basenames. Use for overlay files that only render on top of another target.                   |
+| `max_targets_per_dir` | Render the first N targets (sorted) in each target directory. `0` (default) renders all. Trades coverage of per-target values for runtime. |
+
+The step summary reports how many targets each input skipped.
 
 With `soft_fail: true` (default), a failed or empty render is a warning and the job continues. With `soft_fail: false`, any render failure fails the job.
 

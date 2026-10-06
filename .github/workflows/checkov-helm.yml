@@ -52,6 +52,16 @@ on:
         type: string
         required: false
         default: ""
+      exclude_targets:
+        description: Optional comma-separated globs matched against target file basenames to skip (e.g. preview.yaml,*-overlay.yaml)
+        type: string
+        required: false
+        default: ""
+      max_targets_per_dir:
+        description: Render at most this many targets per directory, in sorted order (0 renders all)
+        type: number
+        required: false
+        default: 0
       artifact_suffix:
         description: Suffix for the uploaded artifact name (required to be unique if this workflow is called more than once)
         type: string
@@ -103,6 +113,8 @@ jobs:
           CHART_DIRS: ${{ inputs.chart_dirs }}
           TARGETS_DIR: ${{ inputs.targets_dir }}
           HELM_SET: ${{ inputs.helm_set }}
+          EXCLUDE_TARGETS: ${{ inputs.exclude_targets }}
+          MAX_TARGETS_PER_DIR: ${{ inputs.max_targets_per_dir }}
           SOFT_FAIL: ${{ inputs.soft_fail }}
         run: |
           case "${LAYOUT}" in
