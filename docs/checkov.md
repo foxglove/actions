@@ -71,7 +71,7 @@ Until that follow-up: do not set `TFE_TOKEN` on consumers; keep `mode: static`. 
 
 ## Config resolution
 
-1. `config_file` workflow input, if the path exists
+1. `config_file` workflow input. The job fails if the path does not exist.
 2. Consumer repo root `checkov.yml`, if it contains non-comment settings
 3. Shared defaults: [`checkov/checkov.yml`](../checkov/checkov.yml)
 

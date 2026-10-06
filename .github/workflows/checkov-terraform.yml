@@ -125,12 +125,15 @@ jobs:
       - name: Summarize static results
         if: ${{ (success() || failure()) && (inputs.mode == 'static' || inputs.mode == 'both') }}
         shell: bash
+        env:
+          DIRECTORY: ${{ inputs.directory }}
+          SOFT_FAIL: ${{ inputs.soft_fail }}
         run: |
           {
             echo "## Checkov Terraform (static)"
             echo
-            echo "- Directory: \`${{ inputs.directory }}\`"
-            echo "- Soft fail: \`${{ inputs.soft_fail }}\`"
+            echo "- Directory: \`${DIRECTORY}\`"
+            echo "- Soft fail: \`${SOFT_FAIL}\`"
             if [[ -f checkov-terraform-static.json ]]; then
               failed="$(jq '[.. | .failed_checks? // empty | length] | add // 0' checkov-terraform-static.json 2>/dev/null || echo unknown)"
               passed="$(jq '[.. | .passed_checks? // empty | length] | add // 0' checkov-terraform-static.json 2>/dev/null || echo unknown)"
@@ -148,12 +151,14 @@ jobs:
           TFE_TOKEN: ${{ secrets.TFE_TOKEN }}
           TFC_HOSTNAME: ${{ inputs.tfc_hostname }}
           GITHUB_TOKEN: ${{ github.token }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PLAN_TIMEOUT_SECONDS: ${{ inputs.plan_timeout_seconds }}
         shell: bash
         run: |
           bash .foxglove-actions/.github/scripts/fetch-tfc-plans.sh \
             "tfc-plans" \
-            "${{ github.event.pull_request.head.sha || github.sha }}" \
-            "${{ inputs.plan_timeout_seconds }}"
+            "${COMMIT_SHA}" \
+            "${PLAN_TIMEOUT_SECONDS}"
 
       - name: Run Checkov (TFC plans)
         if: ${{ (inputs.mode == 'plan' || inputs.mode == 'both') && steps.tfc_plans.outputs.plan_count > 0 }}
