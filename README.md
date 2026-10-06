@@ -56,3 +56,44 @@ jobs:
 >   pull-requests: write
 >   id-token: write
 > ```
+
+## Checkov IaC scanning
+
+Report-only Checkov scans for Terraform and Helm. Soft-fail by default; results go to job logs, the step summary, and workflow artifacts.
+
+**Docs:** [`docs/checkov.md`](docs/checkov.md)
+
+**Workflows:**
+
+- [`checkov-helm.yml`](.github/workflows/checkov-helm.yml) — renders charts with env target values, then scans as kubernetes
+- [`checkov-terraform.yml`](.github/workflows/checkov-terraform.yml) — prefer `mode: static`; plan mode has open security/privilege caveats (see docs)
+
+Pass the same full SHA as `uses:` and `actions_ref` so scripts/config match the workflow revision.
+
+**Shared config:** [`checkov/checkov.yml`](checkov/checkov.yml) · consumer stub: [`checkov/checkov.stub.yml`](checkov/checkov.stub.yml)
+
+```yaml
+jobs:
+  checkov-helm:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    # Keep uses: and actions_ref on the same ref.
+    uses: foxglove/actions/.github/workflows/checkov-helm.yml@main
+    with:
+      actions_ref: main
+      layout: sibling
+      charts_root: charts
+
+  checkov-terraform:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    uses: foxglove/actions/.github/workflows/checkov-terraform.yml@main
+    with:
+      actions_ref: main
+      directory: .
+      mode: static
+```

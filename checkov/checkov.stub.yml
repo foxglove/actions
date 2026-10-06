@@ -1,0 +1,20 @@
+# Per-repo Checkov config.
+# When any non-comment key is set, this file REPLACES the shared defaults from
+# foxglove/actions (checkov/checkov.yml). Keys are not merged — copy any shared
+# settings you still want into this file.
+#
+# Docs: https://github.com/foxglove/actions/blob/main/docs/checkov.md
+#
+# skip-check:
+#   - CKV_EXAMPLE_1
+#
+# skip-path:
+#   - path/to/ignore
+#
+# soft-fail-on:
+#   - LOW
+#
+# hard-fail-on:
+#   - CRITICAL
+#
+# baseline: .checkov.baseline

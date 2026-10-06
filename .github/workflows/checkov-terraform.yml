@@ -1,0 +1,246 @@
+name: Checkov Terraform
+
+on:
+  workflow_call:
+    inputs:
+      directory:
+        description: Single directory for static Terraform scans (checkov-action takes one path)
+        type: string
+        required: false
+        default: .
+      mode:
+        description: "Scan mode: static | plan | both. Prefer static until plan-mode security (see docs/checkov.md) is resolved."
+        type: string
+        required: false
+        default: static
+      actions_ref:
+        description: foxglove/actions git ref to check out for scripts/config (use the same full SHA as uses:)
+        type: string
+        required: false
+        default: main
+      config_file:
+        description: Optional path to a consumer checkov.yml (replaces shared defaults when non-comment content exists)
+        type: string
+        required: false
+        default: ""
+      soft_fail:
+        description: Do not fail the job when Checkov finds issues
+        type: boolean
+        required: false
+        default: true
+      upload_sarif:
+        description: Upload SARIF to GitHub Code Scanning (requires Code Security on private repos)
+        type: boolean
+        required: false
+        default: false
+      skip_path:
+        description: Optional comma-separated paths to skip for static scans
+        type: string
+        required: false
+        default: ""
+      plan_timeout_seconds:
+        description: How long to wait for TFC speculative plans before soft-skipping plan mode
+        type: number
+        required: false
+        default: 120
+      tfc_hostname:
+        description: Terraform Cloud / HCP Terraform hostname
+        type: string
+        required: false
+        default: app.terraform.io
+      artifact_suffix:
+        description: Suffix for the uploaded artifact name (unique if this workflow is called more than once)
+        type: string
+        required: false
+        default: default
+    secrets:
+      TFE_TOKEN:
+        description: TFC token for plan JSON download (see docs — full json-output needs workspace admin)
+        required: false
+
+# checks/statuses are not requested while plan mode is parked (default mode is static).
+# Re-enable statuses: read on this workflow and on callers when plan mode is turned on.
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+jobs:
+  checkov-terraform:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout consumer repository
+        uses: actions/checkout@v6
+
+      - name: Checkout foxglove/actions
+        uses: actions/checkout@v6
+        with:
+          repository: foxglove/actions
+          path: .foxglove-actions
+          ref: ${{ github.repository == 'foxglove/actions' && github.sha || inputs.actions_ref }}
+
+      - name: Resolve Checkov config
+        id: config
+        shell: bash
+        env:
+          CONFIG_FILE: ${{ inputs.config_file }}
+        run: |
+          bash .foxglove-actions/.github/scripts/resolve-checkov-config.sh \
+            "${CONFIG_FILE}" \
+            ".foxglove-actions/checkov/checkov.yml" \
+            "checkov.yml"
+
+      - name: Validate mode
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          mode="${MODE}"
+          case "${mode}" in
+            static|plan|both) ;;
+            *)
+              echo "Invalid mode '${mode}'. Expected static, plan, or both." >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Run Checkov (static Terraform)
+        if: ${{ inputs.mode == 'static' || inputs.mode == 'both' }}
+        id: checkov_static
+        uses: bridgecrewio/checkov-action@7b1bd992e2c40a3404e3511944aeb8d014703d9a
+        with:
+          directory: ${{ inputs.directory }}
+          framework: terraform
+          soft_fail: ${{ inputs.soft_fail }}
+          quiet: true
+          skip_results_upload: true
+          skip_download: true
+          download_external_modules: true
+          config_file: ${{ steps.config.outputs.config_file }}
+          skip_path: ${{ inputs.skip_path }}
+          output_format: cli,sarif,json
+          output_file_path: console,checkov-terraform-static.sarif,checkov-terraform-static.json
+
+      - name: Summarize static results
+        if: ${{ (success() || failure()) && (inputs.mode == 'static' || inputs.mode == 'both') }}
+        shell: bash
+        env:
+          DIRECTORY: ${{ inputs.directory }}
+          SOFT_FAIL: ${{ inputs.soft_fail }}
+        run: |
+          {
+            echo "## Checkov Terraform (static)"
+            echo
+            echo "- Directory: \`${DIRECTORY}\`"
+            echo "- Soft fail: \`${SOFT_FAIL}\`"
+            if [[ -f checkov-terraform-static.json ]]; then
+              failed="$(jq '[.. | .failed_checks? // empty | length] | add // 0' checkov-terraform-static.json 2>/dev/null || echo unknown)"
+              passed="$(jq '[.. | .passed_checks? // empty | length] | add // 0' checkov-terraform-static.json 2>/dev/null || echo unknown)"
+              echo "- Failed checks: **${failed}**"
+              echo "- Passed checks: **${passed}**"
+            else
+              echo "- Result files were not produced; see job logs."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Fetch TFC plan JSON
+        if: ${{ inputs.mode == 'plan' || inputs.mode == 'both' }}
+        id: tfc_plans
+        env:
+          TFE_TOKEN: ${{ secrets.TFE_TOKEN }}
+          TFC_HOSTNAME: ${{ inputs.tfc_hostname }}
+          GITHUB_TOKEN: ${{ github.token }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PLAN_TIMEOUT_SECONDS: ${{ inputs.plan_timeout_seconds }}
+        shell: bash
+        run: |
+          bash .foxglove-actions/.github/scripts/fetch-tfc-plans.sh \
+            "tfc-plans" \
+            "${COMMIT_SHA}" \
+            "${PLAN_TIMEOUT_SECONDS}"
+
+      - name: Run Checkov (TFC plans)
+        if: ${{ (inputs.mode == 'plan' || inputs.mode == 'both') && steps.tfc_plans.outputs.plan_count > 0 }}
+        shell: bash
+        env:
+          SOFT_FAIL: ${{ inputs.soft_fail }}
+          CONFIG_FILE: ${{ steps.config.outputs.config_file }}
+          MANIFEST: ${{ steps.tfc_plans.outputs.manifest }}
+        run: |
+          set -euo pipefail
+          mkdir -p checkov-plan-results
+
+          # Same image as bridgecrewio/checkov-action@7b1bd992e2c40a3404e3511944aeb8d014703d9a
+          image="ghcr.io/bridgecrewio/checkov:3.3.23"
+          docker pull "${image}"
+
+          idx=0
+          scan_failed=0
+          while IFS='|' read -r run_id plan_path workspace_dir; do
+            [[ -z "${run_id}" ]] && continue
+            idx=$((idx + 1))
+            sarif="checkov-plan-results/${run_id}.sarif"
+            json="checkov-plan-results/${run_id}.json"
+            echo "Scanning plan ${run_id} (enrichment root: ${workspace_dir})"
+
+            cmd=(
+              docker run --rm
+              -v "${PWD}:/tf"
+              -w /tf
+              "${image}"
+              -f "${plan_path}"
+              --framework terraform_plan
+              --repo-root-for-plan-enrichment "${workspace_dir}"
+              --skip-results-upload
+              --skip-download
+              --quiet
+              --output cli
+              --output sarif
+              --output json
+              --output-file-path "console,${sarif},${json}"
+            )
+            if [[ "${SOFT_FAIL}" == "true" ]]; then
+              cmd+=(--soft-fail)
+            fi
+            if [[ -n "${CONFIG_FILE}" ]]; then
+              cmd+=(--config-file "${CONFIG_FILE}")
+            fi
+
+            if ! "${cmd[@]}"; then
+              scan_failed=1
+            fi
+          done < "${MANIFEST}"
+
+          {
+            echo
+            echo "### Plan scans"
+            echo
+            echo "Scanned **${idx}** plan file(s). Per-plan Checkov SARIF/JSON are under \`checkov-plan-results/\`."
+            echo "Raw TFC plan JSON is **not** uploaded as an artifact."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [[ "${SOFT_FAIL}" != "true" && "${scan_failed}" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload Checkov artifacts
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-terraform-${{ inputs.artifact_suffix }}
+          path: |
+            checkov-terraform-static.sarif
+            checkov-terraform-static.json
+            checkov-plan-results/
+          if-no-files-found: warn
+
+      - name: Upload static SARIF to Code Scanning
+        if: ${{ (success() || failure()) && inputs.upload_sarif && (inputs.mode == 'static' || inputs.mode == 'both') }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov-terraform-static.sarif
+          category: checkov-terraform-static
+
+      # Plan SARIF is kept as an artifact only. upload-sarif rejects multiple files
+      # that share one tool+category, and the directory is absent when plan mode skips.

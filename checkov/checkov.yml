@@ -1,0 +1,32 @@
+# Shared Checkov defaults for Foxglove reusable workflows.
+# Consumers may commit a root checkov.yml; if it has non-comment keys it
+# REPLACES this file entirely (no merge). See docs/checkov.md.
+#
+# soft-fail is also set on the GitHub Action inputs so CI stays green while
+# findings are reported.
+
+framework:
+  - terraform
+  - terraform_plan
+  - helm
+  - kubernetes
+
+download-external-modules: true
+
+# --- Noise tuning (leave commented for a full-open first pass) ---
+#
+# skip-check:
+#   - CKV_AWS_144
+#
+# skip-path:
+#   - .*/\.terraform/.*
+#   - charts/.*/targets/.*
+#
+# soft-fail-on:
+#   - LOW
+#   - MEDIUM
+#
+# hard-fail-on:
+#   - CRITICAL
+#
+# baseline: .checkov.baseline
