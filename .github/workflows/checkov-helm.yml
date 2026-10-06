@@ -62,6 +62,11 @@ on:
         type: number
         required: false
         default: 0
+      target_group_pattern:
+        description: Optional bash regex matched against target basenames; max_targets_per_dir applies per directory per match (e.g. aws|gcp|azure)
+        type: string
+        required: false
+        default: ""
       artifact_suffix:
         description: Suffix for the uploaded artifact name (required to be unique if this workflow is called more than once)
         type: string
@@ -115,6 +120,7 @@ jobs:
           HELM_SET: ${{ inputs.helm_set }}
           EXCLUDE_TARGETS: ${{ inputs.exclude_targets }}
           MAX_TARGETS_PER_DIR: ${{ inputs.max_targets_per_dir }}
+          TARGET_GROUP_PATTERN: ${{ inputs.target_group_pattern }}
           SOFT_FAIL: ${{ inputs.soft_fail }}
         run: |
           case "${LAYOUT}" in

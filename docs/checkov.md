@@ -44,12 +44,13 @@ Rendered manifests land in `checkov-rendered/` and are scanned with `framework: 
 
 Target selection:
 
-| Input                 | Effect                                                                                                                                     |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `exclude_targets`     | Comma-separated globs matched against target basenames. Use for overlay files that only render on top of another target.                   |
-| `max_targets_per_dir` | Render the first N targets (sorted) in each target directory. `0` (default) renders all. Trades coverage of per-target values for runtime. |
+| Input                  | Effect                                                                                                                                                                                                                             |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `exclude_targets`      | Comma-separated globs matched against target basenames. Use for overlay files that only render on top of another target.                                                                                                           |
+| `max_targets_per_dir`  | Render the first N targets (sorted) in each target directory. `0` (default) renders all. Trades coverage of per-target values for runtime.                                                                                         |
+| `target_group_pattern` | Bash regex matched against target basenames. With `max_targets_per_dir`, the cap applies per directory per matched substring, so `aws\|gcp\|azure` keeps the first N targets for each cloud. Non-matching targets share one group. |
 
-The step summary reports how many targets each input skipped.
+The step summary lists every skipped target and the input that skipped it.
 
 With `soft_fail: true` (default), a failed or empty render is a warning and the job continues. With `soft_fail: false`, any render failure fails the job.
 

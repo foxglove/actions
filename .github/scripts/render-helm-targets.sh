@@ -24,12 +24,16 @@ if ! [[ "${max_targets_per_dir}" =~ ^[0-9]+$ ]]; then
   echo "::error::max_targets_per_dir must be a non-negative integer, got '${max_targets_per_dir}'"
   exit 1
 fi
+# Optional bash ERE; the cap applies per directory per matched substring of the
+# target basename. Non-matching targets share one "other" group.
+target_group_pattern="${TARGET_GROUP_PATTERN:-}"
 
 mkdir -p "${out_dir}"
 render_count=0
 fail_count=0
 excluded_count=0
 capped_count=0
+skipped_targets=()
 
 exclude_globs=()
 if [[ -n "${exclude_targets}" ]]; then
@@ -60,17 +64,28 @@ select_targets() {
   local depth_args=()
   [[ -n "${2:-}" ]] && depth_args=(-maxdepth "$2")
   local -A per_dir=()
-  local values_file dir
+  local values_file group
   selected_targets=()
   while IFS= read -r -d '' values_file; do
     if is_excluded "${values_file}"; then
       excluded_count=$((excluded_count + 1))
+      skipped_targets+=("${values_file} (exclude_targets)")
+      echo "Skipping ${values_file} (exclude_targets)"
       continue
     fi
-    dir="$(dirname "${values_file}")"
-    per_dir["${dir}"]=$(( ${per_dir["${dir}"]:-0} + 1 ))
-    if [[ "${max_targets_per_dir}" -gt 0 && "${per_dir["${dir}"]}" -gt "${max_targets_per_dir}" ]]; then
+    group="$(dirname "${values_file}")"
+    if [[ -n "${target_group_pattern}" ]]; then
+      if [[ "$(basename "${values_file}")" =~ ${target_group_pattern} ]]; then
+        group="${group}|${BASH_REMATCH[0]}"
+      else
+        group="${group}|other"
+      fi
+    fi
+    per_dir["${group}"]=$(( ${per_dir["${group}"]:-0} + 1 ))
+    if [[ "${max_targets_per_dir}" -gt 0 && "${per_dir["${group}"]}" -gt "${max_targets_per_dir}" ]]; then
       capped_count=$((capped_count + 1))
+      skipped_targets+=("${values_file} (max_targets_per_dir)")
+      echo "Skipping ${values_file} (max_targets_per_dir=${max_targets_per_dir})"
       continue
     fi
     selected_targets+=("${values_file}")
@@ -189,16 +204,30 @@ echo "out_dir=${out_dir}" >> "${GITHUB_OUTPUT:-/dev/null}"
   echo "- Render failures: **${fail_count}**"
   echo "- Targets excluded by \`exclude_targets\`: ${excluded_count}"
   echo "- Targets skipped by \`max_targets_per_dir\`: ${capped_count}"
+  if [[ "${#skipped_targets[@]}" -gt 0 ]]; then
+    echo
+    echo "<details><summary>Skipped targets</summary>"
+    echo
+    # shellcheck disable=SC2016 # literal Markdown backticks
+    printf -- '- `%s`\n' "${skipped_targets[@]}"
+    echo
+    echo "</details>"
+  fi
 } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+
+counts="ok=${render_count}, failed=${fail_count}, excluded=${excluded_count}, capped=${capped_count}"
+if [[ "${render_count}" -eq 0 && "${fail_count}" -eq 0 ]]; then
+  counts="${counts}; no targets selected, check exclude_targets and the target paths"
+fi
 
 if [[ "${soft_fail}" == "true" ]]; then
   if [[ "${render_count}" -eq 0 || "${fail_count}" -gt 0 ]]; then
-    echo "::warning::Helm render incomplete (ok=${render_count}, failed=${fail_count}). soft_fail=true, continuing."
+    echo "::warning::Helm render incomplete (${counts}). soft_fail=true, continuing."
   fi
   exit 0
 fi
 
 if [[ "${render_count}" -eq 0 || "${fail_count}" -gt 0 ]]; then
-  echo "Helm render failed (ok=${render_count}, failed=${fail_count})." >&2
+  echo "Helm render failed (${counts})." >&2
   exit 1
 fi
