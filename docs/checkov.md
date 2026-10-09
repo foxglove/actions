@@ -1,6 +1,6 @@
 # Checkov IaC scanning
 
-Reusable GitHub Actions workflows that run [Checkov](https://www.checkov.io/) against Terraform and Helm. Default posture is **report-only** (`soft_fail: true`): findings are printed and uploaded as artifacts, but the job stays green.
+Reusable GitHub Actions workflows that run [Checkov](https://www.checkov.io/) against Terraform and Helm. Default posture is **report-only** (`soft_fail: true`): findings are printed and uploaded as artifacts and do not fail the job. A chart that does not render still fails the Helm job.
 
 Local OSS only — no Bridgecrew / Prisma API key, and `skip_results_upload` / `skip_download` are set so results stay in GitHub Actions.
 
@@ -49,10 +49,11 @@ Target selection:
 | `exclude_targets`      | Comma-separated globs matched against target basenames. Use for overlay files that only render on top of another target.                                                                                                           |
 | `max_targets_per_dir`  | Render the first N targets (sorted) in each target directory. `0` (default) renders all. Trades coverage of per-target values for runtime.                                                                                         |
 | `target_group_pattern` | Bash regex matched against target basenames. With `max_targets_per_dir`, the cap applies per directory per matched substring, so `aws\|gcp\|azure` keeps the first N targets for each cloud. Non-matching targets share one group. |
+| `helm_namespaces`      | Comma-separated `chart=namespace` pairs. The chart key is the directory basename. Unlisted charts use the basename, which is the namespace infra passes as `--namespace "$APP"`.                                                   |
 
 The step summary lists every skipped target and the input that skipped it.
 
-With `soft_fail: true` (default), a failed or empty render is a warning and the job continues. With `soft_fail: false`, any render failure fails the job.
+`exclude_targets` and `max_targets_per_dir` skip targets on purpose. A missing chart directory, a failed `helm template`, or a run that renders nothing fails the job. `soft_fail` applies only to Checkov findings: with `soft_fail: true` (default) findings are reported and the Checkov step stays green.
 
 ### Known Helm gaps
 

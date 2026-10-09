@@ -11,11 +11,11 @@ layout="${1:?layout required (sibling|shared)}"
 out_dir="${2:?output directory required}"
 shift 2
 
-# SOFT_FAIL=true (default): render failures are warnings and the script exits 0.
-# SOFT_FAIL=false: any render failure or zero successful renders exits 1.
-soft_fail="${SOFT_FAIL:-true}"
 # Optional comma-separated helm --set pairs (e.g. key=placeholder).
 helm_set="${HELM_SET:-}"
+# Optional comma-separated chart=namespace pairs. The chart key is the directory
+# basename. Unlisted charts render into a namespace of that name.
+helm_namespaces="${HELM_NAMESPACES:-}"
 # Optional comma-separated globs matched against target file basenames.
 exclude_targets="${EXCLUDE_TARGETS:-}"
 # Render at most N targets per directory (sorted); 0 renders all.
@@ -38,9 +38,35 @@ if [[ -n "${target_group_pattern}" ]]; then
   fi
 fi
 
+declare -A namespace_by_chart=()
+if [[ -n "${helm_namespaces}" ]]; then
+  IFS=',' read -r -a namespace_pairs <<< "${helm_namespaces}"
+  for pair in "${namespace_pairs[@]}"; do
+    pair="$(echo "${pair}" | xargs)"
+    [[ -n "${pair}" ]] || continue
+    chart_key="${pair%%=*}"
+    namespace_value="${pair#*=}"
+    if [[ "${pair}" != *=* || -z "${chart_key}" || -z "${namespace_value}" || "${chart_key}" == "${pair}" ]]; then
+      echo "::error::helm_namespaces entry '${pair}' must be chart=namespace"
+      exit 1
+    fi
+    namespace_by_chart["${chart_key}"]="${namespace_value}"
+  done
+fi
+
+namespace_for() {
+  local chart_name="$1"
+  if [[ -n "${namespace_by_chart[${chart_name}]+x}" ]]; then
+    printf '%s' "${namespace_by_chart[${chart_name}]}"
+  else
+    printf '%s' "${chart_name}"
+  fi
+}
+
 mkdir -p "${out_dir}"
 render_count=0
 fail_count=0
+missing_count=0
 excluded_count=0
 capped_count=0
 skipped_targets=()
@@ -140,8 +166,12 @@ render_one() {
   local release_name="$3"
   local dest="$4"
 
+  local namespace
+  namespace="$(namespace_for "${release_name}")"
+
   mkdir -p "${dest}"
   if helm template "${release_name}" "${chart_dir}" \
+    --namespace "${namespace}" \
     --values "${values_file}" \
     "${helm_set_args[@]}" \
     --output-dir "${dest}" \
@@ -150,7 +180,7 @@ render_one() {
     rm -f "${dest}/.helm-stderr"
   else
     fail_count=$((fail_count + 1))
-    echo "::warning::helm template failed for ${chart_dir} + ${values_file}"
+    echo "::error::helm template failed for ${chart_dir} + ${values_file} (namespace ${namespace})"
     cat "${dest}/.helm-stderr" >&2 || true
   fi
 }
@@ -177,9 +207,16 @@ case "${layout}" in
     chart_dirs_csv="${1:?chart_dirs required for shared layout}"
     targets_dir="${2:?targets_dir required for shared layout}"
     IFS=',' read -r -a chart_dirs <<< "${chart_dirs_csv}"
+    valid_chart_dirs=()
     for chart_dir in "${chart_dirs[@]}"; do
       chart_dir="$(echo "${chart_dir}" | xargs)"
-      [[ -n "${chart_dir}" && -d "${chart_dir}" ]] || continue
+      [[ -n "${chart_dir}" ]] || continue
+      if [[ ! -d "${chart_dir}" ]]; then
+        echo "::error::Chart directory does not exist: ${chart_dir}"
+        missing_count=$((missing_count + 1))
+        continue
+      fi
+      valid_chart_dirs+=("${chart_dir}")
       build_deps "${chart_dir}"
     done
     select_targets "${targets_dir}" 1
@@ -187,9 +224,7 @@ case "${layout}" in
       target_name="$(basename "${values_file}")"
       target_name="${target_name%.yaml}"
       target_name="${target_name%.yml}"
-      for chart_dir in "${chart_dirs[@]}"; do
-        chart_dir="$(echo "${chart_dir}" | xargs)"
-        [[ -n "${chart_dir}" && -d "${chart_dir}" ]] || continue
+      for chart_dir in "${valid_chart_dirs[@]+"${valid_chart_dirs[@]}"}"; do
         chart_name="$(basename "${chart_dir}")"
         dest="${out_dir}/${chart_name}/${target_name}"
         render_one "${chart_dir}" "${values_file}" "${chart_name}" "${dest}"
@@ -212,6 +247,7 @@ echo "out_dir=${out_dir}" >> "${GITHUB_OUTPUT:-/dev/null}"
   echo "- Layout: \`${layout}\`"
   echo "- Rendered successfully: **${render_count}**"
   echo "- Render failures: **${fail_count}**"
+  echo "- Missing chart directories: **${missing_count}**"
   echo "- Targets excluded by \`exclude_targets\`: ${excluded_count}"
   echo "- Targets skipped by \`max_targets_per_dir\`: ${capped_count}"
   if [[ "${#skipped_targets[@]}" -gt 0 ]]; then
@@ -225,19 +261,12 @@ echo "out_dir=${out_dir}" >> "${GITHUB_OUTPUT:-/dev/null}"
   fi
 } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 
-counts="ok=${render_count}, failed=${fail_count}, excluded=${excluded_count}, capped=${capped_count}"
-if [[ "${render_count}" -eq 0 && "${fail_count}" -eq 0 ]]; then
+counts="ok=${render_count}, failed=${fail_count}, missing=${missing_count}, excluded=${excluded_count}, capped=${capped_count}"
+if [[ "${render_count}" -eq 0 && "${fail_count}" -eq 0 && "${missing_count}" -eq 0 ]]; then
   counts="${counts}; no targets selected, check exclude_targets and the target paths"
 fi
 
-if [[ "${soft_fail}" == "true" ]]; then
-  if [[ "${render_count}" -eq 0 || "${fail_count}" -gt 0 ]]; then
-    echo "::warning::Helm render incomplete (${counts}). soft_fail=true, continuing."
-  fi
-  exit 0
-fi
-
-if [[ "${render_count}" -eq 0 || "${fail_count}" -gt 0 ]]; then
-  echo "Helm render failed (${counts})." >&2
+if [[ "${missing_count}" -gt 0 || "${render_count}" -eq 0 || "${fail_count}" -gt 0 ]]; then
+  echo "::error::Helm render failed (${counts})."
   exit 1
 fi
