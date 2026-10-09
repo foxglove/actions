@@ -1,3 +1,11 @@
 .DS_Store
 .yarn/
 node_modules/
+__pycache__/
+*.pyc
+
+# foxglove/app is private. Do not publish PR bodies, review comments,
+# org membership, or Linear ticket titles from this public repository.
+data/raw/
+data/interim/
+out/
