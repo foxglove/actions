@@ -52,6 +52,11 @@ on:
         type: string
         required: false
         default: ""
+      helm_namespaces:
+        description: Optional comma-separated release=namespace pairs. The key is the Helm release name, which is the chart directory basename (shared) or the charts/<name> directory (sibling). Unlisted charts use that name.
+        type: string
+        required: false
+        default: ""
       exclude_targets:
         description: Optional comma-separated globs matched against target file basenames to skip (e.g. preview.yaml,*-overlay.yaml)
         type: string
@@ -84,17 +89,17 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout consumer repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Checkout foxglove/actions
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: foxglove/actions
           path: .foxglove-actions
           ref: ${{ github.repository == 'foxglove/actions' && github.sha || inputs.actions_ref }}
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
         with:
           version: v3.16.4
 
@@ -118,10 +123,10 @@ jobs:
           CHART_DIRS: ${{ inputs.chart_dirs }}
           TARGETS_DIR: ${{ inputs.targets_dir }}
           HELM_SET: ${{ inputs.helm_set }}
+          HELM_NAMESPACES: ${{ inputs.helm_namespaces }}
           EXCLUDE_TARGETS: ${{ inputs.exclude_targets }}
           MAX_TARGETS_PER_DIR: ${{ inputs.max_targets_per_dir }}
           TARGET_GROUP_PATTERN: ${{ inputs.target_group_pattern }}
-          SOFT_FAIL: ${{ inputs.soft_fail }}
         run: |
           case "${LAYOUT}" in
             sibling)
@@ -140,6 +145,7 @@ jobs:
 
       - name: Run Checkov (Kubernetes manifests)
         id: checkov
+        if: ${{ (success() || failure()) && steps.render.outputs.render_count > 0 }}
         uses: bridgecrewio/checkov-action@7b1bd992e2c40a3404e3511944aeb8d014703d9a
         with:
           directory: checkov-rendered
@@ -179,7 +185,7 @@ jobs:
 
       - name: Upload Checkov artifacts
         if: success() || failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: checkov-helm-${{ inputs.artifact_suffix }}
           path: |
@@ -189,7 +195,7 @@ jobs:
 
       - name: Upload SARIF to Code Scanning
         if: ${{ (success() || failure()) && inputs.upload_sarif }}
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@9f759ee644a3e7c15c1390abf49868036c00067b # v3.38.3
         with:
           sarif_file: checkov-helm.sarif
           category: checkov-helm

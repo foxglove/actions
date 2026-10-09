@@ -71,10 +71,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout consumer repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Checkout foxglove/actions
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: foxglove/actions
           path: .foxglove-actions
@@ -171,8 +171,8 @@ jobs:
           set -euo pipefail
           mkdir -p checkov-plan-results
 
-          # Same image as bridgecrewio/checkov-action@7b1bd992e2c40a3404e3511944aeb8d014703d9a
-          image="ghcr.io/bridgecrewio/checkov:3.3.23"
+          # Same Checkov release as bridgecrewio/checkov-action@7b1bd992e2c40a3404e3511944aeb8d014703d9a
+          image="ghcr.io/bridgecrewio/checkov@sha256:e6e825ba7e2e1e7ea5a831d55dc826a1f7c78edc80ed3ccf30979080843b28a5" # 3.3.23
           docker pull "${image}"
 
           idx=0
@@ -226,7 +226,7 @@ jobs:
 
       - name: Upload Checkov artifacts
         if: success() || failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: checkov-terraform-${{ inputs.artifact_suffix }}
           path: |
@@ -237,7 +237,7 @@ jobs:
 
       - name: Upload static SARIF to Code Scanning
         if: ${{ (success() || failure()) && inputs.upload_sarif && (inputs.mode == 'static' || inputs.mode == 'both') }}
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@9f759ee644a3e7c15c1390abf49868036c00067b # v3.38.3
         with:
           sarif_file: checkov-terraform-static.sarif
           category: checkov-terraform-static
