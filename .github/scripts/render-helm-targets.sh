@@ -13,8 +13,9 @@ shift 2
 
 # Optional comma-separated helm --set pairs (e.g. key=placeholder).
 helm_set="${HELM_SET:-}"
-# Optional comma-separated chart=namespace pairs. The chart key is the directory
-# basename. Unlisted charts render into a namespace of that name.
+# Optional comma-separated release=namespace pairs. The key is the Helm release
+# name: chart directory basename (shared) or the charts/<name> directory (sibling).
+# Unlisted charts render into a namespace of that name.
 helm_namespaces="${HELM_NAMESPACES:-}"
 # Optional comma-separated globs matched against target file basenames.
 exclude_targets="${EXCLUDE_TARGETS:-}"
@@ -46,8 +47,8 @@ if [[ -n "${helm_namespaces}" ]]; then
     [[ -n "${pair}" ]] || continue
     chart_key="${pair%%=*}"
     namespace_value="${pair#*=}"
-    if [[ "${pair}" != *=* || -z "${chart_key}" || -z "${namespace_value}" || "${chart_key}" == "${pair}" ]]; then
-      echo "::error::helm_namespaces entry '${pair}' must be chart=namespace"
+    if [[ "${pair}" != *=* || -z "${chart_key}" || -z "${namespace_value}" ]]; then
+      echo "::error::helm_namespaces entry '${pair}' must be release=namespace"
       exit 1
     fi
     namespace_by_chart["${chart_key}"]="${namespace_value}"

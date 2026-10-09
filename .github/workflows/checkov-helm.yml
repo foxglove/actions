@@ -53,7 +53,7 @@ on:
         required: false
         default: ""
       helm_namespaces:
-        description: Optional comma-separated chart=namespace pairs. The chart key is the directory basename. Unlisted charts use the basename.
+        description: Optional comma-separated release=namespace pairs. The key is the Helm release name, which is the chart directory basename (shared) or the charts/<name> directory (sibling). Unlisted charts use that name.
         type: string
         required: false
         default: ""
@@ -145,6 +145,7 @@ jobs:
 
       - name: Run Checkov (Kubernetes manifests)
         id: checkov
+        if: ${{ (success() || failure()) && steps.render.outputs.render_count > 0 }}
         uses: bridgecrewio/checkov-action@7b1bd992e2c40a3404e3511944aeb8d014703d9a
         with:
           directory: checkov-rendered

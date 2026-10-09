@@ -1,4 +1,5 @@
 # Checkov reusable workflows and the scripts they run.
+/.github/CODEOWNERS @foxglove/foundations
 /.github/workflows/checkov-helm.yml @foxglove/foundations
 /.github/workflows/checkov-terraform.yml @foxglove/foundations
 /.github/scripts/render-helm-targets.sh @foxglove/foundations
