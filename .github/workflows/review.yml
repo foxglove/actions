@@ -40,16 +40,24 @@ jobs:
     steps:
       # With `beefcake-dispatch-url` set, beefcake gets the first chance to review: it starts a
       # Claude Code cloud session and posts the review itself. Beefcake declines when its Claude
-      # plan usage is high or when its review of this commit already failed. A decline, a failed
-      # connection, or any other error falls through to the review below in this same job. When a
-      # review that beefcake took fails later, beefcake re-runs this workflow run, and declines
-      # that second request.
+      # plan usage is high, when the commit is no longer the PR head, or when its review of this
+      # commit already failed. A decline, a failed connection, a reply after 10 seconds, or any
+      # other error falls through to the review below in this same job. Beefcake cancels a
+      # session when the job stops waiting before the reply.
+      #
+      # Beefcake reviews with its own prompt and posts as its own GitHub account, not claude[bot].
+      # It treats as its own only the threads it marked, and it sees claude[bot] threads as other
+      # authors' threads, the same way this job sees its threads.
+      #
+      # A newer commit supersedes beefcake's review of an older one, which then posts nothing. When
+      # a review that beefcake took fails later and its commit is still the PR head, beefcake
+      # re-runs this workflow run and declines that second request.
       - name: Join the tailnet
         id: tailnet
         if: inputs.beefcake-dispatch-url != '' && github.event.pull_request.head.repo.full_name == github.repository
         continue-on-error: true
         timeout-minutes: 2
-        uses: tailscale/github-action@v4.2.0
+        uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -72,7 +80,11 @@ jobs:
         run: |
           id_token="$(curl -sS --fail --max-time 10 \
             -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=beefcake-review" | jq -r .value)"
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=beefcake-review" | jq -r '.value // empty')"
+          if [ -z "$id_token" ]; then
+            echo "::notice::Could not get an OIDC token for beefcake, so the review runs here."
+            exit 0
+          fi
           request="$(jq -n --argjson pr "$PR_NUMBER" --arg headRef "$HEAD_REF" --arg headSha "$HEAD_SHA" \
             --arg baseRef "$BASE_REF" --argjson isDraft "$IS_DRAFT" \
             '{pr: $pr, headRef: $headRef, headSha: $headSha, baseRef: $baseRef, isDraft: $isDraft}')"
@@ -82,8 +94,19 @@ jobs:
             echo "::notice::Beefcake did not take this review, so it runs here. $response"
             exit 0
           fi
-          echo "Beefcake is reviewing this commit: $(jq -r .url <<< "$response")" | tee -a "$GITHUB_STEP_SUMMARY"
+          url="$(jq -r '.url // empty' <<< "$response" 2>/dev/null || true)"
+          if [ -z "$url" ]; then
+            echo "::notice::Beefcake gave no session URL, so the review runs here. $response"
+            exit 0
+          fi
+          echo "Beefcake is reviewing this commit: $url" | tee -a "$GITHUB_STEP_SUMMARY"
           echo "accepted=true" >> "$GITHUB_OUTPUT"
+
+      # The review below runs PR content, which does not need the tailnet.
+      - name: Leave the tailnet
+        if: steps.tailnet.outcome == 'success' && steps.beefcake.outputs.accepted != 'true'
+        continue-on-error: true
+        run: sudo tailscale logout
 
       - name: Checkout project repository
         if: steps.beefcake.outputs.accepted != 'true'
