@@ -5,8 +5,8 @@ on:
     inputs:
       beefcake-dispatch-url:
         description: >-
-          Opt-in. The URL of a local reviewer to offer the review to first. Requires the
-          TS_OAUTH_* secrets.
+          Opt-in. The dispatch URL of beefcake, a local reviewer to offer the review to first.
+          Requires the TS_OAUTH_* secrets.
         type: string
         default: ""
     secrets:
@@ -28,7 +28,7 @@ jobs:
       github.actor != 'dependabot[bot]' &&
       !contains(github.event.pull_request.labels.*.name, 'skip-claude-review')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     env:
       CLAUDE_ALLOWED_TOOLS: "Read,Glob,Grep,mcp__github__pull_request_read,mcp__github__pull_request_review_write,mcp__github__add_comment_to_pending_review,mcp__github__get_pull_request,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__get_issue_comments,mcp__github__create_pending_pull_request_review,mcp__github__submit_pending_pull_request_review,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*),Bash(node:*)"
     permissions:
@@ -82,12 +82,13 @@ jobs:
             exit 0
           fi
           url="$(jq -r '.url // empty' <<< "$response" 2>/dev/null || true)"
-          if [ -z "$url" ]; then
+          review_path="$(jq -r '.reviewPath // empty' <<< "$response" 2>/dev/null || true)"
+          if [ -z "$url" ] || [ -z "$review_path" ]; then
             echo "::notice::Beefcake gave no session URL, so the review runs here. $response"
             exit 0
           fi
           echo "Beefcake is reviewing this commit: $url" | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "review_url=${DISPATCH_URL%/dispatch}/reviews/$(jq -r .sessionId <<< "$response")" >> "$GITHUB_OUTPUT"
+          echo "review_url=$(sed -E 's#^(https?://[^/]+).*#\1#' <<< "$DISPATCH_URL")$review_path" >> "$GITHUB_OUTPUT"
           echo "accepted=true" >> "$GITHUB_OUTPUT"
 
       - name: Follow the beefcake review
@@ -98,43 +99,62 @@ jobs:
         env:
           REVIEW_URL: ${{ steps.beefcake.outputs.review_url }}
           FOLLOW_SECONDS: 900
+          SILENCE_SECONDS: 180
         run: |
-          id_token() {
-            curl -sS --fail --max-time 10 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=beefcake-review" | jq -r '.value // empty'
+          token=""
+          token_at=-1000
+          refresh_token() {
+            if [ $((SECONDS - token_at)) -ge 120 ]; then
+              fresh="$(curl -sS --fail --max-time 10 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=beefcake-review" | jq -r '.value // empty' || true)"
+              if [ -n "$fresh" ]; then
+                token="$fresh"
+                token_at=$SECONDS
+              fi
+            fi
+            [ -n "$token" ]
           }
+          finished=false
+          trap '[ "$finished" = true ] || curl -sS --max-time 10 -X POST -H "Authorization: Bearer $token" "$REVIEW_URL/cancel" > /dev/null || true' EXIT
           seen=0
-          misses=0
+          last_ok=$SECONDS
           deadline=$((SECONDS + FOLLOW_SECONDS))
           while [ "$SECONDS" -lt "$deadline" ]; do
-            if progress="$(curl -sS --fail --max-time 10 -H "Authorization: Bearer $(id_token)" "$REVIEW_URL?after=$seen")"; then
-              misses=0
-              jq -r '.lines[]' <<< "$progress"
-              seen="$(jq -r .total <<< "$progress")"
-              case "$(jq -r .status <<< "$progress")" in
+            if ! refresh_token; then
+              echo "::warning::Could not get an OIDC token for beefcake, so the review runs here."
+              exit 0
+            fi
+            if progress="$(curl -sS --fail --max-time 10 -H "Authorization: Bearer $token" "$REVIEW_URL?after=$seen")" &&
+              status="$(jq -r '.status // empty' <<< "$progress" 2>/dev/null)" && [ -n "$status" ]; then
+              last_ok=$SECONDS
+              jq -r '.lines[]?' <<< "$progress" || true
+              seen="$(jq -r '.total // 0' <<< "$progress")"
+              case "$status" in
                 posted)
                   jq -r '.posted | "Posted the review: \(.comments) comments, \(.replies) replies, \(.resolved) resolved threads."' \
-                    <<< "$progress" | tee -a "$GITHUB_STEP_SUMMARY"
+                    <<< "$progress" | tee -a "$GITHUB_STEP_SUMMARY" || true
                   echo "done=true" >> "$GITHUB_OUTPUT"
+                  finished=true
                   exit 0
                   ;;
                 superseded)
                   echo "A newer commit replaced this review." | tee -a "$GITHUB_STEP_SUMMARY"
                   echo "done=true" >> "$GITHUB_OUTPUT"
+                  finished=true
                   exit 0
                   ;;
                 failed | cancelled)
                   echo "::warning::The beefcake review ended as $(jq -r '"\(.status) (\(.error // .note // "no reason"))"' <<< "$progress"), so it runs here."
+                  finished=true
                   exit 0
                   ;;
               esac
-            elif [ "$((misses += 1))" -ge 12 ]; then
+            elif [ $((SECONDS - last_ok)) -ge "$SILENCE_SECONDS" ]; then
               echo "::warning::Lost contact with beefcake, so the review runs here."
               exit 0
             fi
             sleep 5
           done
-          curl -sS --max-time 10 -X POST -H "Authorization: Bearer $(id_token)" "$REVIEW_URL/cancel" > /dev/null || true
           echo "::warning::The beefcake review took longer than $((FOLLOW_SECONDS / 60)) minutes, so it runs here."
 
       - name: Leave the tailnet

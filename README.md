@@ -14,9 +14,9 @@ An AI-powered PR review that combines technical and product perspectives in a si
 
 Dependencies are not installed. On Yarn repos the reviewer can install them itself when a finding turns on running the repo's own code. `node` and `yarn` are the only JS tooling in the allowlist, so npm and pnpm repos get the pinned runtime but no install path.
 
-### Local review hand-off (optional)
+### Beefcake hand-off (optional)
 
-A caller can set the `beefcake-dispatch-url` input and pass the `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET` secrets to offer each review to a local reviewer first. When the local reviewer takes the review, the job prints its progress until it posts. When the local reviewer declines, fails, or takes longer than 15 minutes, the job runs the review as usual.
+A caller can set the `beefcake-dispatch-url` input and pass the `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET` secrets to offer each review to beefcake, a local reviewer, first. When beefcake takes the review, the job prints its progress until it posts. When beefcake declines, fails, or takes longer than 15 minutes, the job runs the review as usual.
 
 ### Repository-specific review instructions
 
