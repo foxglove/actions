@@ -16,7 +16,7 @@ Dependencies are not installed. On Yarn repos the reviewer can install them itse
 
 ### Local review hand-off (optional)
 
-A caller can set the `beefcake-dispatch-url` input and pass the `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET` secrets to offer each review to a local reviewer first. When the local reviewer takes the review, it posts the review and the job ends. Otherwise, the job runs the review as usual.
+A caller can set the `beefcake-dispatch-url` input and pass the `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET` secrets to offer each review to a local reviewer first. When the local reviewer takes the review, the job prints its progress until it posts. When the local reviewer declines, fails, or takes longer than 15 minutes, the job runs the review as usual.
 
 ### Repository-specific review instructions
 
