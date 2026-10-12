@@ -56,6 +56,7 @@ function comment(overrides = {}) {
     line: 2,
     start_line: null,
     side: "RIGHT",
+    severity: "blocking",
     body: "Handle the null case.",
     ...overrides,
   };
@@ -217,6 +218,20 @@ describe("extractVerdict", () => {
 });
 
 describe("validateVerdict", () => {
+  it("treats a comment without a severity as blocking", () => {
+    const { severity, ...rest } = comment();
+    const result = validateVerdict(verdict({ comments: [rest] }));
+    assert.equal(result.verdict.comments[0].severity, "blocking");
+  });
+
+  it("rejects an unknown severity", () => {
+    const result = validateVerdict(
+      verdict({ comments: [comment({ severity: "major" })] }),
+    );
+    assert.equal(result.ok, false);
+    assert.match(result.error, /comments\[0\]\.severity/);
+  });
+
   it("clears start_line on a file comment", () => {
     const result = validateVerdict(
       verdict({ comments: [comment({ line: null, start_line: 3 })] }),
@@ -233,6 +248,38 @@ describe("validateVerdict", () => {
 });
 
 describe("tallyVotes and formatReviewBody", () => {
+  it("counts an LGTM vote that raises only non-blocking comments", () => {
+    const tally = tallyVotes(
+      resultsMap({
+        opus: {
+          status: "voted",
+          verdict: verdict({
+            comments: [
+              comment({ severity: "suggestion" }),
+              comment({ severity: "nit" }),
+            ],
+          }),
+        },
+        astra: { status: "voted", verdict: verdict() },
+        grok: {
+          status: "voted",
+          verdict: verdict({
+            lgtm: false,
+            comments: [comment(), comment({ severity: "nit" })],
+          }),
+        },
+      }),
+    );
+    assert.equal(tally.approvals, 2);
+    assert.equal(tally.lgtm, true);
+    const body = formatReviewBody({ tally });
+    assert.match(body, /- Opus: approves \(2 non-blocking comments\)\./);
+    assert.match(
+      body,
+      /- Grok: does not approve \(1 blocking, 1 non-blocking comment\)\./,
+    );
+  });
+
   it("posts LGTM with two of three approvals", () => {
     const tally = tallyVotes(
       resultsMap({
@@ -248,7 +295,10 @@ describe("tallyVotes and formatReviewBody", () => {
     assert.equal(tally.lgtm, true);
     const body = formatReviewBody({ tally });
     assert.match(body, /^LGTM\n\nJury vote: 2 of 3 approve\.\n/);
-    assert.match(body, /- Grok: does not approve \(1 comment\)\./);
+    assert.match(
+      body,
+      /- Grok: does not approve \(1 blocking, 0 non-blocking comments\)\./,
+    );
     assert.ok(body.endsWith(MARKER));
   });
 
@@ -322,12 +372,36 @@ describe("tallyVotes and formatReviewBody", () => {
     });
     assert.match(
       body,
-      /### Findings on files that this pull request does not change\n\n#### `src\/other\.ts` line 4\n\nUpdate this caller\.\n\n<sub>Juror: Grok<\/sub>/,
+      /### Findings on files that this pull request does not change\n\n#### `src\/other\.ts` line 4\n\n\*\*Blocking:\*\* Update this caller\.\n\n<sub>Juror: Grok<\/sub>/,
     );
   });
 });
 
 describe("dedupeFindings", () => {
+  it("keeps the most severe label of merged comments", async () => {
+    const item = (id, juror, severity, order) => ({
+      id,
+      juror,
+      key: "file:a",
+      kind: "comment",
+      severity,
+      body: `Finding ${id}.`,
+      order,
+    });
+    const { findings: result } = await dedupeFindings({
+      findings: [
+        item("c1", "opus", "nit", 0),
+        item("c2", "astra", "blocking", 1),
+        item("c3", "grok", "suggestion", 2),
+      ],
+      clerk: async () => [{ ids: ["c1", "c2", "c3"], keep: "c1" }],
+    });
+    assert.deepEqual(
+      result.map((finding) => [finding.id, finding.severity]),
+      [["c1", "blocking"]],
+    );
+  });
+
   const finding = (id, juror, key, body, order) => ({
     id,
     juror,
@@ -620,6 +694,46 @@ describe("recordJurorResult and readJurorResults", () => {
 });
 
 describe("buildJurorContext", () => {
+  it("reads the severity label of a jury thread", () => {
+    const thread = (id, jury, body) => ({
+      id,
+      jury,
+      isResolved: false,
+      isOutdated: false,
+      path: "src/a.ts",
+      line: 1,
+      startLine: null,
+      side: "RIGHT",
+      comments: [{ author: "x", jury, createdAt: "t", body }],
+    });
+    const result = buildJurorContext({
+      pullRequest: {
+        number: 7,
+        title: "Title",
+        body: null,
+        user: { login: "alice" },
+        base: { ref: "main" },
+        head: { sha: "head" },
+        draft: false,
+      },
+      state: {
+        reviews: [],
+        threads: [
+          thread("T1", true, `**Nit:** Rename this.${MARKER}`),
+          thread("T2", true, `**Line 2**\n\n**Suggestion:** Split this.`),
+          thread("T3", true, "Fix this."),
+          thread("T4", false, "**Blocking:** Not a jury thread."),
+          thread("T5", true, "Fix this.\n\n**Nit:** Not a label."),
+        ],
+        issueComments: [],
+      },
+    });
+    assert.deepEqual(
+      result.review_threads.map((entry) => entry.severity),
+      ["nit", "suggestion", null, null, null],
+    );
+  });
+
   it("marks jury items and finds the last jury review commit", () => {
     const state = {
       reviews: [
@@ -949,7 +1063,7 @@ describe("publishJuryReview", () => {
     assert.match(submit.args.body, /^LGTM\n\nJury vote: 2 of 3 approve\./);
     assert.match(
       submit.args.body,
-      /#### `src\/other\.ts` line 2\n\nUpdate the caller\./,
+      /#### `src\/other\.ts` line 2\n\n\*\*Blocking:\*\* Update the caller\./,
     );
 
     assert.deepEqual(
@@ -991,7 +1105,38 @@ describe("publishJuryReview", () => {
     const [added] = fake.named("addPullRequestReviewThread");
     assert.match(
       added.args.input.body,
-      /^Leaked \[redacted\] and \[redacted\]\./,
+      /^\*\*Blocking:\*\* Leaked \[redacted\] and \[redacted\]\./,
+    );
+  });
+
+  it("labels each published comment with its own severity", async () => {
+    const fake = fakeGitHub({ files });
+    const resultsDir = writeResults({
+      opus: {
+        status: "voted",
+        verdict: verdict({
+          comments: [
+            comment({ severity: "nit", body: "Rename this." }),
+            comment({ line: 7, severity: "suggestion", body: "Split this." }),
+          ],
+        }),
+      },
+    });
+    await publishJuryReview({
+      github: fake.github,
+      context: CONTEXT,
+      core: quietCore(),
+      resultsDir,
+      clerk: null,
+    });
+    const bodies = fake
+      .named("addPullRequestReviewThread")
+      .map((call) => call.args.input.body);
+    assert.ok(bodies.some((body) => body.startsWith("**Nit:** Rename this.")));
+    assert.ok(
+      bodies.some((body) =>
+        body.startsWith("**Line 7**\n\n**Suggestion:** Split this."),
+      ),
     );
   });
 
@@ -1030,7 +1175,10 @@ describe("publishJuryReview", () => {
           !call.args.input.body.includes("Second"),
       );
     assert.equal(accepted.length, 1);
-    assert.match(accepted[0].args.input.body, /^\*\*Line 2\*\*\n\nFirst\./);
+    assert.match(
+      accepted[0].args.input.body,
+      /^\*\*Line 2\*\*\n\n\*\*Blocking:\*\* First\./,
+    );
     const [submit] = fake.named("submitPullRequestReview");
     assert.match(
       submit.args.body,

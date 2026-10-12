@@ -47,7 +47,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["path", "line", "start_line", "side", "body"],
+        "required": ["path", "line", "start_line", "side", "severity", "body"],
         "properties": {
           "path": {
             "description": "The file path relative to the repository root.",
@@ -66,6 +66,11 @@
             "type": "string",
             "enum": ["RIGHT", "LEFT"]
           },
+          "severity": {
+            "description": "blocking: the PR must not merge until this is fixed. suggestion: a change that makes the PR better, but the PR can merge without it. nit: a small issue of style or wording.",
+            "type": "string",
+            "enum": ["blocking", "suggestion", "nit"]
+          },
           "body": {
             "description": "The comment text.",
             "type": "string"
@@ -74,7 +79,7 @@
       }
     },
     "lgtm": {
-      "description": "True only when comments is empty and no unresolved review thread needs more work.",
+      "description": "True only when comments has no blocking item and no unresolved review thread has a blocking issue that needs more work.",
       "type": "boolean"
     }
   }

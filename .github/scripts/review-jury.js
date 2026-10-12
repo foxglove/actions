@@ -209,6 +209,33 @@ function truncate(text, limit) {
     : `${text.slice(0, limit)}\n\n(Truncated.)`;
 }
 
+const SEVERITIES = ["blocking", "suggestion", "nit"];
+const SEVERITY_LABELS = {
+  blocking: "Blocking",
+  suggestion: "Suggestion",
+  nit: "Nit",
+};
+// A file comment that names its line starts with the line label, then the severity label.
+const LINE_LABEL = /^\*\*Lines? [^\n]*\*\*\n\n/;
+const SEVERITY_PREFIX =
+  /^(?:\*\*Lines? [^\n]*\*\*\n\n)?\*\*(Blocking|Suggestion|Nit):\*\* /;
+
+// The most severe of the given severities. A missing severity counts as blocking.
+function highestSeverity(severities) {
+  const ranks = severities.map((severity) =>
+    SEVERITIES.includes(severity) ? SEVERITIES.indexOf(severity) : 0,
+  );
+  return SEVERITIES[Math.min(...ranks)];
+}
+
+// The severity of a published jury comment, or null for a comment without a severity label.
+function severityOf(body) {
+  const match = SEVERITY_PREFIX.exec(body ?? "");
+  return match
+    ? SEVERITIES.find((severity) => SEVERITY_LABELS[severity] === match[1])
+    : null;
+}
+
 function stripMarker(body) {
   return (body ?? "").split(MARKER).join("").trim();
 }
@@ -464,11 +491,20 @@ function validateVerdict(value) {
     ) {
       return { ok: false, error: `${where}.side is not RIGHT or LEFT.` };
     }
+    // A juror that leaves out the severity blocks, so a missing field cannot approve a PR.
+    const severity = comment.severity ?? "blocking";
+    if (!SEVERITIES.includes(severity)) {
+      return {
+        ok: false,
+        error: `${where}.severity is not ${SEVERITIES.join(", ")}.`,
+      };
+    }
     comments.push({
       path: comment.path,
       line: comment.line ?? null,
       start_line: comment.line == null ? null : (comment.start_line ?? null),
       side: comment.side ?? "RIGHT",
+      severity,
       body: comment.body,
     });
   }
@@ -610,15 +646,20 @@ function tallyVotes(results) {
   const entries = JURORS.map((juror) => {
     const result = results.get(juror.id) ?? { status: "failed" };
     const comments = result.verdict?.comments.length ?? 0;
+    const blocking =
+      result.verdict?.comments.filter(
+        (comment) => (comment.severity ?? "blocking") === "blocking",
+      ).length ?? 0;
     return {
       juror: juror.id,
       name: juror.name,
       status: result.status,
       reason: result.reason ?? null,
       comments,
-      // A vote for LGTM that still raises comments contradicts itself, so it does not count.
+      blocking,
+      // A vote for LGTM that still raises a blocker contradicts itself, so it does not count.
       approves:
-        result.status === "voted" && result.verdict.lgtm && comments === 0,
+        result.status === "voted" && result.verdict.lgtm && blocking === 0,
     };
   });
   const approvals = entries.filter((entry) => entry.approves).length;
@@ -784,7 +825,12 @@ async function dedupeFindings({ findings, existing = [], clerk, core }) {
     const jurors = [...new Set(fresh.map((item) => item.juror))].sort(
       (a, b) => jurorOrder(a) - jurorOrder(b),
     );
-    deduped.push({ ...representative, jurors });
+    // A merged finding keeps the most severe label that any juror gave it.
+    const severity =
+      representative.kind === "comment"
+        ? { severity: highestSeverity(fresh.map((item) => item.severity)) }
+        : {};
+    deduped.push({ ...representative, ...severity, jurors });
   }
   deduped.sort((a, b) => a.order - b.order);
   return {
@@ -805,14 +851,29 @@ function attributedBody(body, jurors) {
   return `${truncate(body.trim(), MAX_BODY_LENGTH)}\n\n${jurorLabel(jurors)}\n${MARKER}`;
 }
 
+// The body of a comment finding with its severity label in front, after a line label if
+// the body starts with one.
+function labeledBody(finding) {
+  const label = `**${SEVERITY_LABELS[finding.severity ?? "blocking"]}:** `;
+  const body = finding.body.trim();
+  const lineLabel = LINE_LABEL.exec(body)?.[0] ?? "";
+  return `${lineLabel}${label}${body.slice(lineLabel.length)}`;
+}
+
+function countLabel(count, noun) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 function describeVote(entry) {
   switch (entry.status) {
     case "voted":
       if (entry.approves) {
-        return "approves.";
+        return entry.comments > 0
+          ? `approves (${countLabel(entry.comments, "non-blocking comment")}).`
+          : "approves.";
       }
       return entry.comments > 0
-        ? `does not approve (${entry.comments} ${entry.comments === 1 ? "comment" : "comments"}).`
+        ? `does not approve (${entry.blocking} blocking, ${countLabel(entry.comments - entry.blocking, "non-blocking comment")}).`
         : "does not approve.";
     case "absent":
       return `did not vote. ${entry.reason}`;
@@ -823,7 +884,7 @@ function describeVote(entry) {
 
 function formatFindingSection(finding) {
   const where = finding.line != null ? ` line ${finding.line}` : "";
-  const body = withoutLgtm(truncate(finding.body.trim(), MAX_BODY_LENGTH));
+  const body = withoutLgtm(truncate(labeledBody(finding), MAX_BODY_LENGTH));
   return `#### \`${withoutLgtm(finding.path)}\`${where}\n\n${body}\n\n${jurorLabel(finding.jurors)}`;
 }
 
@@ -869,11 +930,11 @@ function threadInputs(finding) {
     subjectType: "FILE",
   });
   if (finding.subjectType === "FILE") {
-    return [fileThread(finding.body)];
+    return [fileThread(labeledBody(finding))];
   }
   const lineThread = {
     path: finding.path,
-    body: attributedBody(finding.body, finding.jurors),
+    body: attributedBody(labeledBody(finding), finding.jurors),
     subjectType: "LINE",
     line: finding.line,
     side: finding.side,
@@ -882,7 +943,10 @@ function threadInputs(finding) {
     lineThread.startLine = finding.startLine;
     lineThread.startSide = finding.side;
   }
-  return [lineThread, fileThread(`${lineLabel(finding)}\n\n${finding.body}`)];
+  return [
+    lineThread,
+    fileThread(`${lineLabel(finding)}\n\n${labeledBody(finding)}`),
+  ];
 }
 
 // GitHub state
@@ -1005,6 +1069,9 @@ function buildJurorContext({ pullRequest, state }) {
       line: thread.line,
       start_line: thread.startLine,
       side: thread.side,
+      // The severity label of a jury thread. Null for a thread of another author, or for a
+      // jury thread from before the labels.
+      severity: thread.jury ? severityOf(thread.comments[0]?.body) : null,
       comments: thread.comments.map((comment) => ({
         author: comment.author,
         jury: comment.jury,
@@ -1176,6 +1243,7 @@ function commentFindings({ results, files, threads, resolved }) {
       const placed = placeComment(comment, filesByPath);
       findings.push({
         ...placed,
+        severity: comment.severity,
         id: `c${findings.length + 1}`,
         kind: "comment",
         key: `${placed.placement === "thread" ? "file" : "outside"}:${placed.path}`,
@@ -1420,6 +1488,7 @@ module.exports = {
   JURORS,
   MAJORITY,
   MARKER,
+  SEVERITIES,
   attributedBody,
   buildJurorContext,
   createClerk,
