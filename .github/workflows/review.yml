@@ -76,7 +76,7 @@ jobs:
           request="$(jq -n --argjson pr "$PR_NUMBER" --arg headRef "$HEAD_REF" --arg headSha "$HEAD_SHA" \
             --arg baseRef "$BASE_REF" --argjson isDraft "$IS_DRAFT" \
             '{pr: $pr, headRef: $headRef, headSha: $headSha, baseRef: $baseRef, isDraft: $isDraft}')"
-          if ! response="$(curl -sS --fail-with-body --max-time 90 \
+          if ! response="$(curl -sS --fail-with-body --connect-timeout 10 --max-time 90 \
             -H "Authorization: Bearer $id_token" -H 'Content-Type: application/json' \
             --data "$request" "$DISPATCH_URL")"; then
             echo "::notice::Beefcake did not take this review, so it runs here. $response"
