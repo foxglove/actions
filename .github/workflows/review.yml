@@ -5,8 +5,8 @@ on:
     inputs:
       beefcake-dispatch-url:
         description: >-
-          Opt-in. The review dispatch URL of beefcake, a machine on the Foxglove tailnet that runs
-          reviews as Claude Code cloud sessions. Requires the TS_OAUTH_* secrets.
+          Opt-in. The URL of a local reviewer to offer the review to first. Requires the
+          TS_OAUTH_* secrets.
         type: string
         default: ""
     secrets:
