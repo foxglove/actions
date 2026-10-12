@@ -14,6 +14,10 @@ An AI-powered PR review that combines technical and product perspectives in a si
 
 Dependencies are not installed. On Yarn repos the reviewer can install them itself when a finding turns on running the repo's own code. `node` and `yarn` are the only JS tooling in the allowlist, so npm and pnpm repos get the pinned runtime but no install path.
 
+### Beefcake hand-off (optional)
+
+A caller can set the `beefcake-dispatch-url` input and pass the `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET` secrets (a Tailscale OAuth client for `tag:ci`). The job then joins the tailnet and offers the review to beefcake, which runs it as a Claude Code cloud session and posts it. Beefcake checks the job's GitHub OIDC token (audience `beefcake-review`) and declines when its Claude plan usage is high. When beefcake declines or cannot be reached, the job runs the review as usual. When a review that beefcake took fails later, beefcake re-runs the workflow run, and the job then runs the review as usual.
+
 ### Repository-specific review instructions
 
 The shared prompt stays general-purpose. To add conventions or review policies specific to a repo (or a subtree within it), commit instruction files alongside the code — no workflow changes needed:
