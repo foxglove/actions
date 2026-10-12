@@ -215,8 +215,10 @@ const SEVERITY_LABELS = {
   suggestion: "Suggestion",
   nit: "Nit",
 };
-// A file comment that names its line puts the label on the line after the line label.
-const SEVERITY_PREFIX = /^\*\*(Blocking|Suggestion|Nit):\*\* /m;
+// A file comment that names its line starts with the line label, then the severity label.
+const LINE_LABEL = /^\*\*Lines? [^\n]*\*\*\n\n/;
+const SEVERITY_PREFIX =
+  /^(?:\*\*Lines? [^\n]*\*\*\n\n)?\*\*(Blocking|Suggestion|Nit):\*\* /;
 
 // The most severe of the given severities. A missing severity counts as blocking.
 function highestSeverity(severities) {
@@ -849,9 +851,13 @@ function attributedBody(body, jurors) {
   return `${truncate(body.trim(), MAX_BODY_LENGTH)}\n\n${jurorLabel(jurors)}\n${MARKER}`;
 }
 
-// The body of a comment finding with its severity label in front.
+// The body of a comment finding with its severity label in front, after a line label if
+// the body starts with one.
 function labeledBody(finding) {
-  return `**${SEVERITY_LABELS[finding.severity ?? "blocking"]}:** ${finding.body.trim()}`;
+  const label = `**${SEVERITY_LABELS[finding.severity ?? "blocking"]}:** `;
+  const body = finding.body.trim();
+  const lineLabel = LINE_LABEL.exec(body)?.[0] ?? "";
+  return `${lineLabel}${label}${body.slice(lineLabel.length)}`;
 }
 
 function countLabel(count, noun) {
@@ -1237,6 +1243,7 @@ function commentFindings({ results, files, threads, resolved }) {
       const placed = placeComment(comment, filesByPath);
       findings.push({
         ...placed,
+        severity: comment.severity,
         id: `c${findings.length + 1}`,
         kind: "comment",
         key: `${placed.placement === "thread" ? "file" : "outside"}:${placed.path}`,

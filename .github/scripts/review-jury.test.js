@@ -723,13 +723,14 @@ describe("buildJurorContext", () => {
           thread("T2", true, `**Line 2**\n\n**Suggestion:** Split this.`),
           thread("T3", true, "Fix this."),
           thread("T4", false, "**Blocking:** Not a jury thread."),
+          thread("T5", true, "Fix this.\n\n**Nit:** Not a label."),
         ],
         issueComments: [],
       },
     });
     assert.deepEqual(
       result.review_threads.map((entry) => entry.severity),
-      ["nit", "suggestion", null, null],
+      ["nit", "suggestion", null, null, null],
     );
   });
 
@@ -1105,6 +1106,37 @@ describe("publishJuryReview", () => {
     assert.match(
       added.args.input.body,
       /^\*\*Blocking:\*\* Leaked \[redacted\] and \[redacted\]\./,
+    );
+  });
+
+  it("labels each published comment with its own severity", async () => {
+    const fake = fakeGitHub({ files });
+    const resultsDir = writeResults({
+      opus: {
+        status: "voted",
+        verdict: verdict({
+          comments: [
+            comment({ severity: "nit", body: "Rename this." }),
+            comment({ line: 7, severity: "suggestion", body: "Split this." }),
+          ],
+        }),
+      },
+    });
+    await publishJuryReview({
+      github: fake.github,
+      context: CONTEXT,
+      core: quietCore(),
+      resultsDir,
+      clerk: null,
+    });
+    const bodies = fake
+      .named("addPullRequestReviewThread")
+      .map((call) => call.args.input.body);
+    assert.ok(bodies.some((body) => body.startsWith("**Nit:** Rename this.")));
+    assert.ok(
+      bodies.some((body) =>
+        body.startsWith("**Line 7**\n\n**Suggestion:** Split this."),
+      ),
     );
   });
 
