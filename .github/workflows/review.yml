@@ -90,7 +90,7 @@ jobs:
           echo "accepted=true" >> "$GITHUB_OUTPUT"
 
       - name: Leave the tailnet
-        if: steps.tailnet.outcome == 'success' && steps.beefcake.outputs.accepted != 'true'
+        if: steps.tailnet.outcome != 'skipped' && steps.beefcake.outputs.accepted != 'true'
         continue-on-error: true
         run: sudo tailscale logout
 
