@@ -61,7 +61,7 @@ jobs:
         id: beefcake
         if: steps.tailnet.outcome == 'success'
         continue-on-error: true
-        timeout-minutes: 2
+        timeout-minutes: 1
         env:
           DISPATCH_URL: ${{ inputs.beefcake-dispatch-url }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -76,7 +76,7 @@ jobs:
           request="$(jq -n --argjson pr "$PR_NUMBER" --arg headRef "$HEAD_REF" --arg headSha "$HEAD_SHA" \
             --arg baseRef "$BASE_REF" --argjson isDraft "$IS_DRAFT" \
             '{pr: $pr, headRef: $headRef, headSha: $headSha, baseRef: $baseRef, isDraft: $isDraft}')"
-          if ! response="$(curl -sS --fail-with-body --connect-timeout 10 --max-time 90 \
+          if ! response="$(curl -sS --fail-with-body --max-time 10 \
             -H "Authorization: Bearer $id_token" -H 'Content-Type: application/json' \
             --data "$request" "$DISPATCH_URL")"; then
             echo "::notice::Beefcake did not take this review, so it runs here. $response"
