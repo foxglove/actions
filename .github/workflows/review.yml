@@ -6,15 +6,15 @@ on:
       beefcake-dispatch-url:
         description: >-
           Opt-in. The dispatch URL of beefcake, a local reviewer to offer the review to first.
-          Requires the TS_OAUTH_* secrets.
+          Requires the TAILSCALE_OAUTH_* secrets.
         type: string
         default: ""
     secrets:
       ANTHROPIC_API_KEY:
         required: true
-      TS_OAUTH_CLIENT_ID:
+      TAILSCALE_OAUTH_CLIENT_ID:
         required: false
-      TS_OAUTH_SECRET:
+      TAILSCALE_OAUTH_SECRET:
         required: false
 
 concurrency:
@@ -28,7 +28,7 @@ jobs:
       github.actor != 'dependabot[bot]' &&
       !contains(github.event.pull_request.labels.*.name, 'skip-claude-review')
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.beefcake-dispatch-url != '' && 50 || 30 }}
+    timeout-minutes: ${{ inputs.beefcake-dispatch-url != '' && github.event.pull_request.head.repo.full_name == github.repository && 50 || 30 }}
     env:
       CLAUDE_ALLOWED_TOOLS: "Read,Glob,Grep,mcp__github__pull_request_read,mcp__github__pull_request_review_write,mcp__github__add_comment_to_pending_review,mcp__github__get_pull_request,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__get_issue_comments,mcp__github__create_pending_pull_request_review,mcp__github__submit_pending_pull_request_review,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*),Bash(node:*)"
     permissions:
@@ -46,8 +46,8 @@ jobs:
         timeout-minutes: 2
         uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
         with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
           tags: tag:ci
           timeout: 30s
           retry: 1
