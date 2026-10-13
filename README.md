@@ -18,7 +18,7 @@ Dependencies are not installed. On Yarn repos the reviewer can install them itse
 
 ### Beefcake hand-off (optional)
 
-A caller can set the `beefcake-dispatch-url` input and pass the `TAILSCALE_OAUTH_CLIENT_ID` and `TAILSCALE_OAUTH_SECRET` secrets to offer each review to beefcake, a local reviewer, first. When beefcake takes the review, the job prints its progress until it posts. When beefcake declines, fails, or takes longer than 15 minutes, the job runs the review as usual.
+A caller can set the `beefcake-dispatch-url` input and pass the `TAILSCALE_OAUTH_CLIENT_ID` and `TAILSCALE_OAUTH_SECRET` secrets to offer each review to beefcake, a local reviewer, first. When beefcake takes the review, the job prints its progress until it posts. When beefcake declines, fails, or takes longer than 15 minutes, the job runs the review as usual. When the job is cancelled, for example by a newer run for the same pull request, the review keeps running on beefcake, and the newer run follows it.
 
 ### Repository-specific review instructions
 

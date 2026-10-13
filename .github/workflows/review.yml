@@ -115,6 +115,8 @@ jobs:
             [ -n "$token" ]
           }
           finished=false
+          # A cancelled job leaves the review running for the run that replaces it.
+          trap 'finished=true; exit 1' INT TERM
           trap '[ "$finished" = true ] || curl -sS --max-time 10 -X POST -H "Authorization: Bearer $token" "$REVIEW_URL/cancel" > /dev/null || true' EXIT
           seen=0
           last_ok=$SECONDS
