@@ -118,4 +118,4 @@ hard-fail-on:
 
 ## Pinning Checkov
 
-Workflows pin `bridgecrewio/checkov-action@7b1bd992e2c40a3404e3511944aeb8d014703d9a` (Checkov image `3.3.23`). The `v12.*` tags on that repo are from 2022 and must not be used. Bump the commit SHA deliberately when upgrading.
+Workflows run `ghcr.io/bridgecrewio/checkov` pinned by digest (Checkov `3.3.23`) through the `CHECKOV_IMAGE` env at the top of `checkov-helm.yml` and `checkov-terraform.yml`. To upgrade, resolve the new tag to its digest and update both files. `bridgecrewio/checkov-action` is not used; it pulls a moving tag.

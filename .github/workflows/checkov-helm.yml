@@ -83,6 +83,10 @@ permissions:
   actions: read
   security-events: write
 
+env:
+  # Checkov 3.3.23 by digest. Keep in step with checkov-terraform.yml.
+  CHECKOV_IMAGE: ghcr.io/bridgecrewio/checkov@sha256:e6e825ba7e2e1e7ea5a831d55dc826a1f7c78edc80ed3ccf30979080843b28a5
+
 jobs:
   checkov-helm:
     runs-on: ubuntu-24.04
@@ -153,14 +157,12 @@ jobs:
           SKIP_PATH: ${{ inputs.skip_path }}
         run: |
           set -euo pipefail
-          # checkov-action pulls :3.3.23. Run the digest directly so the tag cannot move.
-          image="ghcr.io/bridgecrewio/checkov@sha256:e6e825ba7e2e1e7ea5a831d55dc826a1f7c78edc80ed3ccf30979080843b28a5" # 3.3.23
-          docker pull "${image}"
+          docker pull "${CHECKOV_IMAGE}"
           cmd=(
             docker run --rm
             -v "${PWD}:/tf"
             -w /tf
-            "${image}"
+            "${CHECKOV_IMAGE}"
             -d checkov-rendered
             --framework kubernetes
             --skip-results-upload

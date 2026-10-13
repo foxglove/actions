@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       directory:
-        description: Single directory for static Terraform scans (checkov-action takes one path)
+        description: Single directory for static Terraform scans (passed to checkov -d)
         type: string
         required: false
         default: .
@@ -65,6 +65,10 @@ permissions:
   actions: read
   security-events: write
 
+env:
+  # Checkov 3.3.23 by digest. Keep in step with checkov-helm.yml.
+  CHECKOV_IMAGE: ghcr.io/bridgecrewio/checkov@sha256:e6e825ba7e2e1e7ea5a831d55dc826a1f7c78edc80ed3ccf30979080843b28a5
+
 jobs:
   checkov-terraform:
     runs-on: ubuntu-24.04
@@ -116,14 +120,12 @@ jobs:
           SKIP_PATH: ${{ inputs.skip_path }}
         run: |
           set -euo pipefail
-          # checkov-action pulls :3.3.23. Run the digest directly so the tag cannot move.
-          image="ghcr.io/bridgecrewio/checkov@sha256:e6e825ba7e2e1e7ea5a831d55dc826a1f7c78edc80ed3ccf30979080843b28a5" # 3.3.23
-          docker pull "${image}"
+          docker pull "${CHECKOV_IMAGE}"
           cmd=(
             docker run --rm
             -v "${PWD}:/tf"
             -w /tf
-            "${image}"
+            "${CHECKOV_IMAGE}"
             -d "${DIRECTORY}"
             --framework terraform
             --download-external-modules true
@@ -157,7 +159,7 @@ jobs:
             -e DIR="${DIRECTORY}" \
             -v "${PWD}:/tf" \
             -w /tf \
-            "${image}" \
+            "${CHECKOV_IMAGE}" \
             -c 'rm -rf -- "${DIR}/.external_modules"'
           exit "${scan_rc}"
 
@@ -210,9 +212,7 @@ jobs:
           set -euo pipefail
           mkdir -p checkov-plan-results
 
-          # Same digest as the Helm and static scans.
-          image="ghcr.io/bridgecrewio/checkov@sha256:e6e825ba7e2e1e7ea5a831d55dc826a1f7c78edc80ed3ccf30979080843b28a5" # 3.3.23
-          docker pull "${image}"
+          docker pull "${CHECKOV_IMAGE}"
 
           idx=0
           scan_failed=0
@@ -227,7 +227,7 @@ jobs:
               docker run --rm
               -v "${PWD}:/tf"
               -w /tf
-              "${image}"
+              "${CHECKOV_IMAGE}"
               -f "${plan_path}"
               --framework terraform_plan
               --repo-root-for-plan-enrichment "${workspace_dir}"
