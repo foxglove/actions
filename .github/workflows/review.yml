@@ -172,7 +172,14 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           current="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha || true)"
-          if [ -n "$current" ] && [ "$current" != "$HEAD_SHA" ]; then
+          if [ -z "$current" ] || [ "$current" = "$HEAD_SHA" ]; then
+            exit 0
+          fi
+          # Some pushes start no run, for example a push with GITHUB_TOKEN or with [skip ci].
+          workflow="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .workflow_id || true)"
+          runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$current&event=pull_request" \
+            --jq .total_count || echo 0)"
+          if [ -n "$workflow" ] && [ "${runs:-0}" -gt 0 ]; then
             echo "::notice::The PR head is now ${current:0:7}, and the run for that commit reviews it."
             echo "stale=true" >> "$GITHUB_OUTPUT"
           fi
