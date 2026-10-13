@@ -2,9 +2,20 @@ name: PR Review
 
 on:
   workflow_call:
+    inputs:
+      beefcake-dispatch-url:
+        description: >-
+          Opt-in. The dispatch URL of beefcake, a local reviewer to offer the review to first.
+          Requires the TAILSCALE_OAUTH_* secrets.
+        type: string
+        default: ""
     secrets:
       ANTHROPIC_API_KEY:
         required: true
+      TAILSCALE_OAUTH_CLIENT_ID:
+        required: false
+      TAILSCALE_OAUTH_SECRET:
+        required: false
 
 concurrency:
   group: claude-review-${{ github.repository }}-${{ github.head_ref }}-${{ github.event.action }}
@@ -17,7 +28,7 @@ jobs:
       github.actor != 'dependabot[bot]' &&
       !contains(github.event.pull_request.labels.*.name, 'skip-claude-review')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: ${{ inputs.beefcake-dispatch-url != '' && github.event.pull_request.head.repo.full_name == github.repository && 50 || 30 }}
     env:
       CLAUDE_ALLOWED_TOOLS: "Read,Glob,Grep,mcp__github__pull_request_read,mcp__github__pull_request_review_write,mcp__github__add_comment_to_pending_review,mcp__github__get_pull_request,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__get_issue_comments,mcp__github__create_pending_pull_request_review,mcp__github__submit_pending_pull_request_review,Bash(yarn:*),Bash(git diff:*),Bash(git fetch:*),Bash(git lfs:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(python3:*),Bash(python:*),Bash(node:*)"
     permissions:
@@ -27,12 +38,138 @@ jobs:
       id-token: write
 
     steps:
+      # Offer the review to beefcake first. A decline or failure falls through to the review below.
+      - name: Join the tailnet
+        id: tailnet
+        if: inputs.beefcake-dispatch-url != '' && github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+          tags: tag:ci
+          timeout: 30s
+          retry: 1
+
+      - name: Hand the review to beefcake
+        id: beefcake
+        if: steps.tailnet.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          DISPATCH_URL: ${{ inputs.beefcake-dispatch-url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          id_token="$(curl -sS --fail --max-time 10 \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=beefcake-review" | jq -r '.value // empty')"
+          if [ -z "$id_token" ]; then
+            echo "::notice::Could not get an OIDC token for beefcake, so the review runs here."
+            exit 0
+          fi
+          request="$(jq -n --argjson pr "$PR_NUMBER" --arg headRef "$HEAD_REF" --arg headSha "$HEAD_SHA" \
+            --arg baseRef "$BASE_REF" --argjson isDraft "$IS_DRAFT" \
+            '{pr: $pr, headRef: $headRef, headSha: $headSha, baseRef: $baseRef, isDraft: $isDraft}')"
+          if ! response="$(curl -sS --fail-with-body --max-time 10 \
+            -H "Authorization: Bearer $id_token" -H 'Content-Type: application/json' \
+            --data "$request" "$DISPATCH_URL")"; then
+            echo "::notice::Beefcake did not take this review, so it runs here. $response"
+            exit 0
+          fi
+          url="$(jq -r '.url // empty' <<< "$response" 2>/dev/null || true)"
+          review_path="$(jq -r '.reviewPath // empty' <<< "$response" 2>/dev/null || true)"
+          if [ -z "$url" ] || [ -z "$review_path" ]; then
+            echo "::notice::Beefcake gave no session URL, so the review runs here. $response"
+            exit 0
+          fi
+          echo "Beefcake is reviewing this commit: $url" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "review_url=$(sed -E 's#^(https?://[^/]+).*#\1#' <<< "$DISPATCH_URL")$review_path" >> "$GITHUB_OUTPUT"
+          echo "accepted=true" >> "$GITHUB_OUTPUT"
+
+      - name: Follow the beefcake review
+        id: follow
+        if: steps.beefcake.outputs.accepted == 'true'
+        continue-on-error: true
+        timeout-minutes: 20
+        env:
+          REVIEW_URL: ${{ steps.beefcake.outputs.review_url }}
+          FOLLOW_SECONDS: 900
+          SILENCE_SECONDS: 180
+        run: |
+          token=""
+          token_at=-1000
+          refresh_token() {
+            if [ $((SECONDS - token_at)) -ge 120 ]; then
+              fresh="$(curl -sS --fail --max-time 10 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=beefcake-review" | jq -r '.value // empty' || true)"
+              if [ -n "$fresh" ]; then
+                token="$fresh"
+                token_at=$SECONDS
+              fi
+            fi
+            [ -n "$token" ]
+          }
+          finished=false
+          trap '[ "$finished" = true ] || curl -sS --max-time 10 -X POST -H "Authorization: Bearer $token" "$REVIEW_URL/cancel" > /dev/null || true' EXIT
+          seen=0
+          last_ok=$SECONDS
+          deadline=$((SECONDS + FOLLOW_SECONDS))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            if ! refresh_token; then
+              echo "::warning::Could not get an OIDC token for beefcake, so the review runs here."
+              exit 0
+            fi
+            if progress="$(curl -sS --fail --max-time 10 -H "Authorization: Bearer $token" "$REVIEW_URL?after=$seen")" &&
+              status="$(jq -r '.status // empty' <<< "$progress" 2>/dev/null)" && [ -n "$status" ]; then
+              last_ok=$SECONDS
+              jq -r '.lines[]?' <<< "$progress" || true
+              seen="$(jq -r '.total // 0' <<< "$progress")"
+              case "$status" in
+                posted)
+                  jq -r '.posted | "Posted the review: \(.comments) comments, \(.replies) replies, \(.resolved) resolved threads."' \
+                    <<< "$progress" | tee -a "$GITHUB_STEP_SUMMARY" || true
+                  echo "done=true" >> "$GITHUB_OUTPUT"
+                  finished=true
+                  exit 0
+                  ;;
+                superseded)
+                  echo "A newer commit replaced this review." | tee -a "$GITHUB_STEP_SUMMARY"
+                  echo "done=true" >> "$GITHUB_OUTPUT"
+                  finished=true
+                  exit 0
+                  ;;
+                failed | cancelled)
+                  echo "::warning::The beefcake review ended as $(jq -r '"\(.status) (\(.error // .note // "no reason"))"' <<< "$progress"), so it runs here."
+                  finished=true
+                  exit 0
+                  ;;
+              esac
+            elif [ $((SECONDS - last_ok)) -ge "$SILENCE_SECONDS" ]; then
+              echo "::warning::Lost contact with beefcake, so the review runs here."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::warning::The beefcake review took longer than $((FOLLOW_SECONDS / 60)) minutes, so it runs here."
+
+      - name: Leave the tailnet
+        if: steps.tailnet.outcome != 'skipped' && steps.follow.outputs.done != 'true'
+        continue-on-error: true
+        run: sudo tailscale logout
+
       - name: Checkout project repository
+        if: steps.follow.outputs.done != 'true'
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Checkout workflow repository
+        if: steps.follow.outputs.done != 'true'
         uses: actions/checkout@v6
         with:
           repository: foxglove/actions
@@ -52,19 +189,20 @@ jobs:
       # roughly three times as much on the rare one that installs, and its post-step writes
       # under a lockfile-keyed name CI restores from, which a partial node_modules would poison.
       - name: Set up Node
-        if: hashFiles('.node-version', '.nvmrc') != ''
+        if: steps.follow.outputs.done != 'true' && hashFiles('.node-version', '.nvmrc') != ''
         continue-on-error: true
         uses: actions/setup-node@v6
         with:
           node-version-file: ${{ hashFiles('.node-version') != '' && '.node-version' || '.nvmrc' }}
 
       - name: Enable Corepack
-        if: hashFiles('yarn.lock') != ''
+        if: steps.follow.outputs.done != 'true' && hashFiles('yarn.lock') != ''
         continue-on-error: true
         run: corepack enable
 
       - name: Build Claude inputs
         id: claude-inputs
+        if: steps.follow.outputs.done != 'true'
         shell: bash
         run: |
           prompt_file=".foxglove-actions/prompts/review.md"
@@ -110,6 +248,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Clean up prior reviews (before attempt 1)
+        if: steps.follow.outputs.done != 'true'
         uses: actions/github-script@v7
         with:
           github-token: ${{ github.token }}
@@ -121,6 +260,7 @@ jobs:
 
       - name: Run Claude review (attempt 1)
         id: attempt1
+        if: steps.follow.outputs.done != 'true'
         continue-on-error: true
         uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280, Agent SDK 0.3.280 (after v1.0.231)
         with:
