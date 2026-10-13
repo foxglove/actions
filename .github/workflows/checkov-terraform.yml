@@ -108,19 +108,58 @@ jobs:
       - name: Run Checkov (static Terraform)
         if: ${{ inputs.mode == 'static' || inputs.mode == 'both' }}
         id: checkov_static
-        uses: bridgecrewio/checkov-action@7b1bd992e2c40a3404e3511944aeb8d014703d9a
-        with:
-          directory: ${{ inputs.directory }}
-          framework: terraform
-          soft_fail: ${{ inputs.soft_fail }}
-          quiet: true
-          skip_results_upload: true
-          skip_download: true
-          download_external_modules: true
-          config_file: ${{ steps.config.outputs.config_file }}
-          skip_path: ${{ inputs.skip_path }}
-          output_format: cli,sarif,json
-          output_file_path: console,checkov-terraform-static.sarif,checkov-terraform-static.json
+        shell: bash
+        env:
+          DIRECTORY: ${{ inputs.directory }}
+          SOFT_FAIL: ${{ inputs.soft_fail }}
+          CONFIG_FILE: ${{ steps.config.outputs.config_file }}
+          SKIP_PATH: ${{ inputs.skip_path }}
+        run: |
+          set -euo pipefail
+          # checkov-action pulls :3.3.23. Run the digest directly so the tag cannot move.
+          image="ghcr.io/bridgecrewio/checkov@sha256:e6e825ba7e2e1e7ea5a831d55dc826a1f7c78edc80ed3ccf30979080843b28a5" # 3.3.23
+          docker pull "${image}"
+          cmd=(
+            docker run --rm
+            -v "${PWD}:/tf"
+            -w /tf
+            "${image}"
+            -d "${DIRECTORY}"
+            --framework terraform
+            --download-external-modules true
+            --skip-results-upload
+            --skip-download
+            --quiet
+            --output cli
+            --output sarif
+            --output json
+            --output-file-path console,checkov-terraform-static.sarif,checkov-terraform-static.json
+          )
+          if [[ "${SOFT_FAIL}" == "true" ]]; then
+            cmd+=(--soft-fail)
+          fi
+          if [[ -n "${CONFIG_FILE}" ]]; then
+            cmd+=(--config-file "${CONFIG_FILE}")
+          fi
+          if [[ -n "${SKIP_PATH}" ]]; then
+            IFS=',' read -r -a skip_paths <<< "${SKIP_PATH}"
+            for skip_path in "${skip_paths[@]}"; do
+              skip_path="$(echo "${skip_path}" | xargs)"
+              [[ -n "${skip_path}" ]] && cmd+=(--skip-path "${skip_path}")
+            done
+          fi
+          set +e
+          "${cmd[@]}"
+          scan_rc=$?
+          set -e
+          # Modules are written as root on the mounted workspace. Remove them in the image.
+          docker run --rm --entrypoint bash \
+            -e DIR="${DIRECTORY}" \
+            -v "${PWD}:/tf" \
+            -w /tf \
+            "${image}" \
+            -c 'rm -rf -- "${DIR}/.external_modules"'
+          exit "${scan_rc}"
 
       - name: Summarize static results
         if: ${{ (success() || failure()) && (inputs.mode == 'static' || inputs.mode == 'both') }}
@@ -171,7 +210,7 @@ jobs:
           set -euo pipefail
           mkdir -p checkov-plan-results
 
-          # Same Checkov release as bridgecrewio/checkov-action@7b1bd992e2c40a3404e3511944aeb8d014703d9a
+          # Same digest as the Helm and static scans.
           image="ghcr.io/bridgecrewio/checkov@sha256:e6e825ba7e2e1e7ea5a831d55dc826a1f7c78edc80ed3ccf30979080843b28a5" # 3.3.23
           docker pull "${image}"
 

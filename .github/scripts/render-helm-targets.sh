@@ -54,6 +54,7 @@ if [[ -n "${helm_namespaces}" ]]; then
     namespace_by_chart["${chart_key}"]="${namespace_value}"
   done
 fi
+declare -A used_namespace_keys=()
 
 namespace_for() {
   local chart_name="$1"
@@ -68,6 +69,7 @@ mkdir -p "${out_dir}"
 render_count=0
 fail_count=0
 missing_count=0
+unmatched_count=0
 excluded_count=0
 capped_count=0
 skipped_targets=()
@@ -167,6 +169,10 @@ render_one() {
   local release_name="$3"
   local dest="$4"
 
+  # namespace_for runs in a command substitution, so record the match here.
+  if [[ -n "${namespace_by_chart[${release_name}]+x}" ]]; then
+    used_namespace_keys["${release_name}"]=1
+  fi
   local namespace
   namespace="$(namespace_for "${release_name}")"
 
@@ -238,6 +244,15 @@ case "${layout}" in
     ;;
 esac
 
+if [[ "${#namespace_by_chart[@]}" -gt 0 ]]; then
+  for key in "${!namespace_by_chart[@]}"; do
+    if [[ -z "${used_namespace_keys[${key}]+x}" ]]; then
+      echo "::error::helm_namespaces key '${key}' did not match a rendered release"
+      unmatched_count=$((unmatched_count + 1))
+    fi
+  done
+fi
+
 echo "render_count=${render_count}" >> "${GITHUB_OUTPUT:-/dev/null}"
 echo "fail_count=${fail_count}" >> "${GITHUB_OUTPUT:-/dev/null}"
 echo "out_dir=${out_dir}" >> "${GITHUB_OUTPUT:-/dev/null}"
@@ -249,6 +264,7 @@ echo "out_dir=${out_dir}" >> "${GITHUB_OUTPUT:-/dev/null}"
   echo "- Rendered successfully: **${render_count}**"
   echo "- Render failures: **${fail_count}**"
   echo "- Missing chart directories: **${missing_count}**"
+  echo "- Unmatched \`helm_namespaces\` keys: **${unmatched_count}**"
   echo "- Targets excluded by \`exclude_targets\`: ${excluded_count}"
   echo "- Targets skipped by \`max_targets_per_dir\`: ${capped_count}"
   if [[ "${#skipped_targets[@]}" -gt 0 ]]; then
@@ -262,12 +278,12 @@ echo "out_dir=${out_dir}" >> "${GITHUB_OUTPUT:-/dev/null}"
   fi
 } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 
-counts="ok=${render_count}, failed=${fail_count}, missing=${missing_count}, excluded=${excluded_count}, capped=${capped_count}"
-if [[ "${render_count}" -eq 0 && "${fail_count}" -eq 0 && "${missing_count}" -eq 0 ]]; then
+counts="ok=${render_count}, failed=${fail_count}, missing=${missing_count}, unmatched=${unmatched_count}, excluded=${excluded_count}, capped=${capped_count}"
+if [[ "${render_count}" -eq 0 && "${fail_count}" -eq 0 && "${missing_count}" -eq 0 && "${unmatched_count}" -eq 0 ]]; then
   counts="${counts}; no targets selected, check exclude_targets and the target paths"
 fi
 
-if [[ "${missing_count}" -gt 0 || "${render_count}" -eq 0 || "${fail_count}" -gt 0 ]]; then
+if [[ "${missing_count}" -gt 0 || "${unmatched_count}" -gt 0 || "${render_count}" -eq 0 || "${fail_count}" -gt 0 ]]; then
   echo "::error::Helm render failed (${counts})."
   exit 1
 fi

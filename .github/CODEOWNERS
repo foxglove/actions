@@ -1,9 +1,3 @@
-# Checkov reusable workflows and the scripts they run.
-/.github/CODEOWNERS @foxglove/foundations
-/.github/workflows/checkov-helm.yml @foxglove/foundations
-/.github/workflows/checkov-terraform.yml @foxglove/foundations
-/.github/scripts/render-helm-targets.sh @foxglove/foundations
-/.github/scripts/fetch-tfc-plans.sh @foxglove/foundations
-/.github/scripts/resolve-checkov-config.sh @foxglove/foundations
-/checkov/ @foxglove/foundations
-/docs/checkov.md @foxglove/foundations
+# @foxglove/foundations owns the repository, including review.yml.
+# require_code_owner_review on the main ruleset can be turned on at any time.
+* @foxglove/foundations
