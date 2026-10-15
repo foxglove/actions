@@ -147,7 +147,8 @@ jobs:
           }
 
           # Extend path is resolved against the worktree, which is the PR head.
-          # Viper ignores key case, so [Extend] / Path matches too.
+          # Viper folds case variants of one key, so every extend table and every path is checked.
+          # A quoted top-level "extend.path" is that path too.
           reject_extend_path() {
             local config_path="$1"
             if ! command -v python3 >/dev/null; then
@@ -156,25 +157,29 @@ jobs:
             fi
             python3 -c 'import textwrap, sys; exec(textwrap.dedent("""
             import tomllib
-            def get_ci(table, key):
+            def get_all_ci(table, key):
                 if not isinstance(table, dict):
-                    return None
-                for found, value in table.items():
-                    if isinstance(found, str) and found.lower() == key:
-                        return value
-                return None
+                    return []
+                return [
+                    value
+                    for found, value in table.items()
+                    if isinstance(found, str) and found.lower() == key
+                ]
+            def fail_if_path(value):
+                if isinstance(value, str) and value.strip():
+                    print("base gitleaks config sets [extend] path; Gitleaks resolves that path against the pull request head", file=sys.stderr)
+                    sys.exit(1)
             with open(sys.argv[1], "rb") as handle:
                 try:
                     data = tomllib.load(handle)
                 except tomllib.TOMLDecodeError as err:
                     print("gitleaks config is not valid TOML: %s" % err, file=sys.stderr)
                     sys.exit(1)
-            extend = get_ci(data, "extend")
-            if isinstance(extend, dict):
-                path = get_ci(extend, "path")
-                if isinstance(path, str) and path.strip():
-                    print("base gitleaks config sets [extend] path; Gitleaks resolves that path against the pull request head", file=sys.stderr)
-                    sys.exit(1)
+            for extend in get_all_ci(data, "extend"):
+                for path in get_all_ci(extend, "path"):
+                    fail_if_path(path)
+            for path in get_all_ci(data, "extend.path"):
+                fail_if_path(path)
             """))' "${config_path}"
           }
 

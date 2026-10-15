@@ -42,7 +42,7 @@ On `pull_request`, `.gitleaks.toml`, `.gitleaksignore`, and `config_file` are re
 
 The same runs pass `--ignore-gitleaks-allow`. A `gitleaks:allow` comment in the scanned diff cannot hide a finding. `push` and `workflow_dispatch` keep the default, which honors that comment.
 
-The job fails on `pull_request` when the loaded base config has an extend table with a path. The table and key are matched without case, because Gitleaks reads the file through viper: `[Extend]` and `Path` still fail. Gitleaks resolves that path against the working tree, which is the PR head, so the pull request can change the extended file. `useDefault = true` does not use a path. No caller has a config today.
+The job fails on `pull_request` when any extend path in the loaded base config is a non-empty string. Every case-insensitive `extend` table is checked, and every `path` inside it, because viper folds `extend` with `Extend`. A quoted top-level `"extend.path"` fails too, because viper reads that key as the extend path. Gitleaks resolves that path against the working tree, which is the PR head, so the pull request can change the extended file. `useDefault = true` does not use a path. No caller has a config today.
 
 On `push` and `workflow_dispatch`, the checked-out commit is the one that was pushed or dispatched, and those files are read from that tree.
 
