@@ -14,7 +14,7 @@ on:
         required: false
         default: false
       config_file:
-        description: Optional path passed as --config. Empty uses Gitleaks' own lookup.
+        description: Optional path passed as --config. On pull_request, read from the base commit. Empty uses Gitleaks' own lookup.
         type: string
         required: false
         default: ""
@@ -115,6 +115,68 @@ jobs:
             fi
           }
 
+          blob_exists() {
+            local kind
+            kind="$(git cat-file -t "$1" 2>/dev/null || true)"
+            [[ "${kind}" == "blob" ]]
+          }
+
+          # Reject absolute paths and '..' so the spec stays inside the base tree.
+          repo_blob_path() {
+            local path="$1"
+            local rest part
+            path="${path#./}"
+            if [[ -z "${path}" || "${path}" == /* || "${path}" == *:* ]]; then
+              echo "config_file must be a relative path in the repository: ${1}" >&2
+              return 1
+            fi
+            rest="${path}"
+            while [[ -n "${rest}" ]]; do
+              part="${rest%%/*}"
+              if [[ -z "${part}" || "${part}" == "." || "${part}" == ".." ]]; then
+                echo "config_file must be a relative path in the repository: ${1}" >&2
+                return 1
+              fi
+              if [[ "${rest}" == */* ]]; then
+                rest="${rest#*/}"
+              else
+                rest=""
+              fi
+            done
+            printf '%s\n' "${path}"
+          }
+
+          # Worktree files are the PR head. Read config from the base commit.
+          # The CLI also loads <source>/.gitleaksignore when --gitleaks-ignore-path is set.
+          load_pull_request_config() {
+            local cfg_dir="${RUNNER_TEMP}/gitleaks-config"
+            local spec
+            rm -rf "${cfg_dir}"
+            mkdir -p "${cfg_dir}"
+            unset GITLEAKS_CONFIG GITLEAKS_CONFIG_TOML
+
+            if blob_exists "${BASE_SHA}:.gitleaksignore"; then
+              git cat-file -p "${BASE_SHA}:.gitleaksignore" > "${cfg_dir}/.gitleaksignore"
+            fi
+            rm -f .gitleaksignore
+            cmd+=(--gitleaks-ignore-path="${cfg_dir}")
+
+            if [[ -n "${CONFIG_FILE}" ]]; then
+              spec="$(repo_blob_path "${CONFIG_FILE}")" || exit 1
+              if ! blob_exists "${BASE_SHA}:${spec}"; then
+                echo "config_file does not exist on the base commit: ${CONFIG_FILE}" >&2
+                exit 1
+              fi
+              git cat-file -p "${BASE_SHA}:${spec}" > "${cfg_dir}/config.toml"
+              cmd+=(--config="${cfg_dir}/config.toml")
+            elif blob_exists "${BASE_SHA}:.gitleaks.toml"; then
+              git cat-file -p "${BASE_SHA}:.gitleaks.toml" > "${cfg_dir}/.gitleaks.toml"
+              cmd+=(--config="${cfg_dir}/.gitleaks.toml")
+            else
+              rm -f .gitleaks.toml
+            fi
+          }
+
           publish_artifact() {
             if [[ ! -f gitleaks-report.json ]]; then
               return 0
@@ -133,10 +195,8 @@ jobs:
           case "${EVENT_NAME}" in
             pull_request)
               assert_head "${HEAD_SHA}"
-              if [[ "${INVENTORY}" == "true" ]]; then
-                log_opts=""
-              else
-                require_commit "pull_request base" "${BASE_SHA}"
+              require_commit "pull_request base" "${BASE_SHA}"
+              if [[ "${INVENTORY}" != "true" ]]; then
                 log_opts="${BASE_SHA}..${HEAD_SHA}"
               fi
               ;;
@@ -175,7 +235,9 @@ jobs:
             --report-format json
             --report-path gitleaks-report.json
           )
-          if [[ -n "${CONFIG_FILE}" ]]; then
+          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+            load_pull_request_config
+          elif [[ -n "${CONFIG_FILE}" ]]; then
             if [[ ! -f "${CONFIG_FILE}" ]]; then
               echo "config_file does not exist: ${CONFIG_FILE}" >&2
               exit 1

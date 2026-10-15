@@ -4,7 +4,7 @@ Reusable workflow that runs the MIT [Gitleaks](https://github.com/gitleaks/gitle
 
 The workflow shells out to the CLI. It does not use `gitleaks/gitleaks-action` and it does not read `GITLEAKS_LICENSE`.
 
-The check name is `Gitleaks / gitleaks` when the caller workflow is named `Gitleaks` and the job id is `gitleaks`. It is not a required check.
+The check run is `gitleaks / gitleaks` (caller job id `gitleaks`, called job `gitleaks`). It is not a required check.
 
 ## Workflow
 
@@ -34,11 +34,15 @@ A failed download, a checksum mismatch, a tarball without the binary, or a versi
 | --- | --- | --- | --- |
 | `soft_fail` | boolean | `true` | Exit code 2 (leaks found) leaves the job green. Callers pass `true` explicitly. |
 | `inventory` | boolean | `false` | Full history. Honored on `pull_request` only. Any other event with `inventory: true` fails the job. |
-| `config_file` | string | `""` | Passed as `--config` when set. Empty uses Gitleaks' own lookup. A path that does not exist fails the job. |
+| `config_file` | string | `""` | Passed as `--config` when set. On `pull_request`, the file is taken from the base commit. A path that is not a blob there fails the job. On other events, the path is the working tree, and a missing file fails the job. |
 
 `soft_fail` applies only to exit 2. Exit 1 still fails the job.
 
-First callers omit `config_file`. The CLI auto-loads a root `.gitleaks.toml` or a `.gitleaksignore` if a consumer adds one later. This workflow does not add either, and it has no `baseline-path` input.
+On `pull_request`, `.gitleaks.toml`, `.gitleaksignore`, and `config_file` are read from the base commit. The PR head is checked out for the scan range, and Gitleaks would otherwise load those files from that tree. A pull request could add a secret and an allowlist or an ignore entry in the same diff, and the summary would show no findings. `config_file`, when set, is the config. If it is empty and the base commit has no `.gitleaks.toml`, the built-in rules are used. The head's copies are not loaded. `GITLEAKS_CONFIG` and `GITLEAKS_CONFIG_TOML` are unset for that run.
+
+On `push` and `workflow_dispatch`, the checked-out commit is the one that was pushed or dispatched, and those files are read from that tree.
+
+First callers omit `config_file`. None of the caller repos has a `.gitleaks.toml` today, so those runs use the built-in rules. This workflow does not add a config file, a `.gitleaksignore`, or a `baseline-path` input.
 
 ## Caller
 
@@ -150,7 +154,7 @@ One inventory per caller, on the pull request that adds the caller. It does not 
 
 1. Merge this workflow to `main` first. Callers use `@main`.
 2. On the caller PR, set `inventory: true` and push.
-3. Wait for `Gitleaks / gitleaks` to finish. Concurrency cancels an in-progress run, so do not push the follow-up commit while the inventory is still running.
+3. Wait for `gitleaks / gitleaks` to finish. Concurrency cancels an in-progress run, so do not push the follow-up commit while the inventory is still running.
 4. Copy the step summary into the PR body under `## Gitleaks history inventory`. Include the commit SHA, the finding count, the count by rule, and the capped row list. Leave match text out.
 5. Set `inventory: false` and push.
 6. The reviewer checks that section and the `false` before merge.

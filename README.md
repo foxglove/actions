@@ -101,3 +101,40 @@ jobs:
       directory: .
       mode: static
 ```
+
+## Gitleaks secret scanning
+
+Report-only Gitleaks scans of git history. Soft-fail by default; findings go to the job summary and the `gitleaks` artifact.
+
+**Docs:** [`docs/gitleaks.md`](docs/gitleaks.md)
+
+**Workflows:**
+
+- [`gitleaks.yml`](.github/workflows/gitleaks.yml) — MIT CLI 8.30.1, pinned by sha256
+
+On `pull_request`, `.gitleaks.toml`, `.gitleaksignore`, and `config_file` are read from the base commit.
+
+```yaml
+name: Gitleaks
+
+on:
+  push:
+    branches: [main] # infra and infra-admin also list release/*
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # @main is intentional. Consumers follow foxglove/actions without a pin bump.
+  gitleaks:
+    uses: foxglove/actions/.github/workflows/gitleaks.yml@main
+    with:
+      soft_fail: true
+      inventory: false
+```
