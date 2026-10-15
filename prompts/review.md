@@ -117,7 +117,7 @@ For any PR that touches user-facing behavior, apply the full product lens:
 - If the PR introduces a new feature or changes existing behavior, does it update the documentation?
 - Does the PR document new configuration options, settings, or preferences?
 - If a public-facing API or integration point changed, does the PR update docs or examples?
-- Flag documentation that is missing or factually wrong. Do not suggest rewording documentation that is accurate.
+- Flag documentation that is missing or factually wrong.
 
 **Backwards compatibility (user perspective):**
 
