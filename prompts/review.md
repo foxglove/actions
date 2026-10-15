@@ -150,7 +150,6 @@ For any PR that touches user-facing behavior, apply the full product lens:
   - `Blocker:` for correctness, security, data integrity, or contract violations, and for any issue a repo instruction file marks as a blocker.
   - `Should fix:` for a concrete problem that is not a blocker.
   - `Nit (optional):` for anything else. The author can ignore it.
-- Post at most three `Nit (optional):` comments in one review. Keep the three with the most value.
 - Leave the review body empty except the text Review Workflow step 5 allows.
 - Always submit a review on every run so it's never ambiguous whether the bot ran; never go dark.
 
