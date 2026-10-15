@@ -68,7 +68,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -82,7 +82,7 @@ jobs:
       inventory: false
 ```
 
-A new commit cancels the previous scan of the same PR, or of the same ref. Other PRs are separate groups. Concurrency stays on the caller, same as Checkov.
+A new commit cancels the previous scan of the same pull request. Push and `workflow_dispatch` runs are not cancelled: a push scan is only `before..sha`, so a cancelled run would skip those commits. Other PRs are separate groups. Concurrency stays on the caller.
 
 ## Checkout and scan range
 
