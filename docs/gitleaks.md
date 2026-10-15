@@ -34,11 +34,15 @@ A failed download, a checksum mismatch, a tarball without the binary, or a versi
 | --- | --- | --- | --- |
 | `soft_fail` | boolean | `true` | Exit code 2 (leaks found) leaves the job green. Callers pass `true` explicitly. |
 | `inventory` | boolean | `false` | Full history. Honored on `pull_request` only. Any other event with `inventory: true` fails the job. |
-| `config_file` | string | `""` | Passed as `--config` when set. On `pull_request`, the file is taken from the base commit. A path that is not a blob there fails the job. On other events, the path is the working tree, and a missing file fails the job. |
+| `config_file` | string | `""` | Passed as `--config` when set. On `pull_request`, read from the base commit, and empty uses the base `.gitleaks.toml` or the built-in rules. A path that is not a blob on the base commit fails the job. On other events, empty uses Gitleaks' own lookup, and a missing file fails the job. |
 
 `soft_fail` applies only to exit 2. Exit 1 still fails the job.
 
 On `pull_request`, `.gitleaks.toml`, `.gitleaksignore`, and `config_file` are read from the base commit. The PR head is checked out for the scan range, and Gitleaks would otherwise load those files from that tree. A pull request could add a secret and an allowlist or an ignore entry in the same diff, and the summary would show no findings. `config_file`, when set, is the config. If it is empty and the base commit has no `.gitleaks.toml`, the built-in rules are used. The head's copies are not loaded. `GITLEAKS_CONFIG` and `GITLEAKS_CONFIG_TOML` are unset for that run.
+
+The same runs pass `--ignore-gitleaks-allow`. A `gitleaks:allow` comment in the scanned diff cannot hide a finding. `push` and `workflow_dispatch` keep the default, which honors that comment.
+
+The job fails on `pull_request` when the loaded base config has `[extend]` with `path`. Gitleaks resolves that path against the working tree, which is the PR head, so the pull request can change the extended file. `useDefault = true` does not use a path. No caller has a config today.
 
 On `push` and `workflow_dispatch`, the checked-out commit is the one that was pushed or dispatched, and those files are read from that tree.
 
@@ -67,8 +71,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -82,7 +86,7 @@ jobs:
       inventory: false
 ```
 
-A new commit cancels the previous scan of the same pull request. Push and `workflow_dispatch` runs are not cancelled: a push scan is only `before..sha`, so a cancelled run would skip those commits. Other PRs are separate groups. Concurrency stays on the caller.
+Pull request runs share a group, so a new commit cancels the previous scan of that PR. Push and `workflow_dispatch` use `github.run_id`, so each run has its own group and always completes. A push scan is only `before..sha`. `cancel-in-progress: false` on a shared ref group still skips a queued push. Other PRs are separate groups. Concurrency stays on the caller.
 
 ## Checkout and scan range
 
