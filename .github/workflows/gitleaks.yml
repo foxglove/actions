@@ -146,7 +146,8 @@ jobs:
             printf '%s\n' "${path}"
           }
 
-          # [extend] path is resolved against the worktree, which is the PR head.
+          # Extend path is resolved against the worktree, which is the PR head.
+          # Viper ignores key case, so [Extend] / Path matches too.
           reject_extend_path() {
             local config_path="$1"
             if ! command -v python3 >/dev/null; then
@@ -155,15 +156,22 @@ jobs:
             fi
             python3 -c 'import textwrap, sys; exec(textwrap.dedent("""
             import tomllib
+            def get_ci(table, key):
+                if not isinstance(table, dict):
+                    return None
+                for found, value in table.items():
+                    if isinstance(found, str) and found.lower() == key:
+                        return value
+                return None
             with open(sys.argv[1], "rb") as handle:
                 try:
                     data = tomllib.load(handle)
                 except tomllib.TOMLDecodeError as err:
                     print("gitleaks config is not valid TOML: %s" % err, file=sys.stderr)
                     sys.exit(1)
-            extend = data.get("extend")
+            extend = get_ci(data, "extend")
             if isinstance(extend, dict):
-                path = extend.get("path")
+                path = get_ci(extend, "path")
                 if isinstance(path, str) and path.strip():
                     print("base gitleaks config sets [extend] path; Gitleaks resolves that path against the pull request head", file=sys.stderr)
                     sys.exit(1)
