@@ -1,0 +1,20 @@
+# Shared Trivy defaults for Foxglove reusable workflows.
+# Consumers may commit a root trivy.yaml. If it has non-comment keys it
+# REPLACES this file entirely (no merge). See docs/trivy-image.md.
+#
+# The workflow also passes --scanners vuln, --severity, --ignore-unfixed,
+# and --exit-code. Those flags override this file. Secret scanning is off.
+
+scan:
+  scanners:
+    - vuln
+
+vulnerability:
+  ignore-unfixed: false
+
+severity:
+  - UNKNOWN
+  - LOW
+  - MEDIUM
+  - HIGH
+  - CRITICAL

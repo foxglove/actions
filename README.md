@@ -101,3 +101,31 @@ jobs:
       directory: .
       mode: static
 ```
+
+## Trivy image scanning
+
+Report-only Trivy scans of local container images. Soft-fail by default: vulnerability findings go to job logs, the step summary, and workflow artifacts. A missing image or a Trivy failure still fails the job. Vulnerability scanner only.
+
+**Docs:** [`docs/trivy-image.md`](docs/trivy-image.md)
+
+**Workflow:** [`trivy-image.yml`](.github/workflows/trivy-image.yml)
+
+Pass the same full SHA as `uses:` and `actions_ref` so scripts and shared config match the workflow revision. Image tags must already be on that job's Docker daemon.
+
+**Shared config:** [`trivy/trivy.yaml`](trivy/trivy.yaml) · consumer stub: [`trivy/trivy.stub.yaml`](trivy/trivy.stub.yaml)
+
+```yaml
+jobs:
+  trivy:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    # Keep uses: and actions_ref on the same ref.
+    uses: foxglove/actions/.github/workflows/trivy-image.yml@main
+    with:
+      actions_ref: main
+      images: api:latest
+      soft_fail: true
+      upload_sarif: false
+```

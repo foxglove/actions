@@ -1,0 +1,206 @@
+name: Trivy image
+
+on:
+  workflow_call:
+    inputs:
+      images:
+        description: Comma-separated local image references to scan (e.g. api:latest,billing:latest)
+        type: string
+        required: true
+      actions_ref:
+        description: foxglove/actions git ref to check out for scripts/config (use the same full SHA as uses:)
+        type: string
+        required: false
+        default: main
+      soft_fail:
+        description: Do not fail the job when Trivy reports vulnerabilities
+        type: boolean
+        required: false
+        default: true
+      severity:
+        description: Comma-separated severities passed to trivy image --severity
+        type: string
+        required: false
+        default: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+      ignore_unfixed:
+        description: Pass --ignore-unfixed (report only vulnerabilities that have a fix)
+        type: boolean
+        required: false
+        default: false
+      config_file:
+        description: Optional path to a consumer trivy.yaml (replaces shared defaults when non-comment content exists)
+        type: string
+        required: false
+        default: ""
+      ignore_file:
+        description: Optional .trivyignore path. Empty uses Trivy's default lookup.
+        type: string
+        required: false
+        default: ""
+      upload_sarif:
+        description: Upload SARIF to GitHub Code Scanning (requires Code Security on private repos)
+        type: boolean
+        required: false
+        default: false
+      artifact_suffix:
+        description: Suffix for the uploaded artifact name (unique if this workflow is called more than once)
+        type: string
+        required: false
+        default: default
+      timeout_minutes:
+        description: Job timeout in minutes
+        type: number
+        required: false
+        default: 30
+    outputs:
+      finding_count:
+        description: Total vulnerabilities reported across scanned images
+        value: ${{ jobs.trivy-image.outputs.finding_count }}
+      critical_count:
+        description: CRITICAL vulnerabilities reported
+        value: ${{ jobs.trivy-image.outputs.critical_count }}
+      high_count:
+        description: HIGH vulnerabilities reported
+        value: ${{ jobs.trivy-image.outputs.high_count }}
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+env:
+  # Trivy 0.76.0 multi-arch index (linux/amd64 and linux/arm64). Pin the index
+  # digest, not a single-platform manifest.
+  TRIVY_IMAGE: aquasec/trivy@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222
+  # Per trivy invocation. timeout_minutes caps the whole job.
+  TRIVY_TIMEOUT: 15m
+
+jobs:
+  trivy-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    outputs:
+      finding_count: ${{ steps.summary.outputs.finding_count }}
+      critical_count: ${{ steps.summary.outputs.critical_count }}
+      high_count: ${{ steps.summary.outputs.high_count }}
+    steps:
+      - name: Checkout consumer repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Checkout foxglove/actions
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: foxglove/actions
+          path: .foxglove-actions
+          ref: ${{ github.repository == 'foxglove/actions' && github.sha || inputs.actions_ref }}
+
+      - name: Resolve Trivy config
+        id: config
+        shell: bash
+        env:
+          CONFIG_FILE: ${{ inputs.config_file }}
+        run: |
+          bash .foxglove-actions/.github/scripts/resolve-trivy-config.sh \
+            "${CONFIG_FILE}" \
+            ".foxglove-actions/trivy/trivy.yaml" \
+            "trivy.yaml"
+
+      - name: Pull Trivy image
+        shell: bash
+        run: docker pull "${TRIVY_IMAGE}"
+
+      - name: Scan images
+        shell: bash
+        env:
+          IMAGES: ${{ inputs.images }}
+          SOFT_FAIL: ${{ inputs.soft_fail }}
+          SEVERITY: ${{ inputs.severity }}
+          IGNORE_UNFIXED: ${{ inputs.ignore_unfixed }}
+          CONFIG_FILE: ${{ steps.config.outputs.config_file }}
+          IGNORE_FILE: ${{ inputs.ignore_file }}
+        run: bash .foxglove-actions/.github/scripts/scan-trivy-images.sh
+
+      - name: Summarize results
+        id: summary
+        if: success() || failure()
+        shell: bash
+        env:
+          IMAGES: ${{ inputs.images }}
+          SOFT_FAIL: ${{ inputs.soft_fail }}
+          SEVERITY: ${{ inputs.severity }}
+          IGNORE_UNFIXED: ${{ inputs.ignore_unfixed }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(trivy-results/*.json)
+          finding_count=0
+          critical_count=0
+          high_count=0
+          medium_count=0
+          low_count=0
+          unknown_count=0
+          per_image=""
+          if [[ ${#files[@]} -gt 0 ]]; then
+            if counts="$(jq -s -r '
+              def vulns: [.[].Results[]?.Vulnerabilities[]?];
+              def n(s): [vulns[] | select(.Severity == s)] | length;
+              [
+                (vulns | length),
+                n("CRITICAL"),
+                n("HIGH"),
+                n("MEDIUM"),
+                n("LOW"),
+                n("UNKNOWN")
+              ] | @tsv
+            ' "${files[@]}")"; then
+              IFS=$'\t' read -r finding_count critical_count high_count medium_count low_count unknown_count <<< "${counts}"
+            else
+              echo "Trivy JSON was not parseable; counts left at 0." >&2
+            fi
+            per_image="$(jq -s -r '
+              def n(s): [.Results[]?.Vulnerabilities[]? | select(.Severity == s)] | length;
+              .[] | "- `\(.ArtifactName // "unknown")`: CRITICAL \(n("CRITICAL")), HIGH \(n("HIGH")), MEDIUM \(n("MEDIUM")), LOW \(n("LOW")), UNKNOWN \(n("UNKNOWN"))"
+            ' "${files[@]}" 2>/dev/null || true)"
+          fi
+          echo "finding_count=${finding_count}" >> "${GITHUB_OUTPUT}"
+          echo "critical_count=${critical_count}" >> "${GITHUB_OUTPUT}"
+          echo "high_count=${high_count}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "## Trivy image (vuln)"
+            echo
+            echo "- Images: \`${IMAGES}\`"
+            echo "- Soft fail: \`${SOFT_FAIL}\`"
+            echo "- Severity: \`${SEVERITY}\`"
+            echo "- Ignore unfixed: \`${IGNORE_UNFIXED}\`"
+            echo "- Scanners: \`vuln\`"
+            echo "- Total vulnerabilities: **${finding_count}**"
+            echo "- CRITICAL: **${critical_count}**"
+            echo "- HIGH: **${high_count}**"
+            echo "- MEDIUM: **${medium_count}**"
+            echo "- LOW: **${low_count}**"
+            echo "- UNKNOWN: **${unknown_count}**"
+            if [[ -n "${per_image}" ]]; then
+              echo
+              echo "${per_image}"
+            elif [[ ${#files[@]} -eq 0 ]]; then
+              echo
+              echo "JSON reports were not produced; see job logs."
+            fi
+            echo
+            echo "SARIF/JSON are workflow artifacts only. Code Scanning upload requires \`upload_sarif: true\` and Code Security."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload Trivy artifacts
+        if: success() || failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: trivy-image-${{ inputs.artifact_suffix }}
+          path: trivy-results/
+          if-no-files-found: warn
+
+      - name: Upload SARIF to Code Scanning
+        if: ${{ (success() || failure()) && inputs.upload_sarif }}
+        uses: github/codeql-action/upload-sarif@9f759ee644a3e7c15c1390abf49868036c00067b # v3.38.3
+        with:
+          sarif_file: trivy-results
+          category: trivy-image-${{ inputs.artifact_suffix }}

@@ -1,0 +1,22 @@
+# Per-repo Trivy config.
+# When any non-comment key is set, this file REPLACES the shared defaults from
+# foxglove/actions (trivy/trivy.yaml). Keys are not merged — copy any shared
+# settings you still want into this file.
+#
+# Docs: https://github.com/foxglove/actions/blob/main/docs/trivy-image.md
+#
+# Vulnerability IDs to skip belong in .trivyignore (or the ignore_file input),
+# not in this file. Example .trivyignore line:
+#
+# CVE-2024-00000
+#
+# scan:
+#   scanners:
+#     - vuln
+#
+# vulnerability:
+#   ignore-unfixed: false
+#
+# severity:
+#   - HIGH
+#   - CRITICAL
