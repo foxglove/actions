@@ -117,6 +117,8 @@ scan_json() {
 
 # --config "" so convert does not re-read trivy.yaml and filter differently
 # from the JSON scan. --scanners vuln is only for the table summary.
+# Trivy 0.76 convert rejects --disable-telemetry, --skip-version-check, and
+# --no-progress. The image scan still passes them; telemetry stays off there.
 convert_report() {
   local format="$1"
   local output="$2"
@@ -136,9 +138,6 @@ convert_report() {
     "${TRIVY_IMAGE}" \
     convert \
     --config "" \
-    --disable-telemetry \
-    --skip-version-check \
-    --no-progress \
     --timeout "${TRIVY_TIMEOUT}" \
     --exit-code "${code}" \
     --format "${format}" \
