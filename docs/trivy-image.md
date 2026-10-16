@@ -81,7 +81,7 @@ jobs:
       upload_sarif: false
 ```
 
-The scan runner is `ubuntu-24.04`. Trivy reads image contents through the Docker API, so an image built for another architecture can be scanned once it is loaded on this runner.
+The scan job runs on `ubuntu-24.04` unless the caller sets `runner`. Trivy reads image contents through the Docker API, so an image built for another architecture can be scanned once it is loaded. Large images (CUDA or a large virtualenv) need a runner with more disk: `docker load` of those tarballs fills the default runner.
 
 Callers should path-filter on Dockerfiles (and this workflow file) so unrelated PRs skip the scan. This reusable workflow has no path filters of its own.
 
@@ -100,6 +100,7 @@ Callers should path-filter on Dockerfiles (and this workflow file) so unrelated 
 | `upload_sarif`     | `false`                              | Upload SARIF to Code Scanning when Code Security is enabled             |
 | `artifact_suffix`  | `default`                            | Artifact name `trivy-image-<suffix>`                                    |
 | `timeout_minutes`  | `30`                                 | Job timeout. Each Trivy invocation has its own 15m cap                  |
+| `runner`           | `ubuntu-24.04`                       | `runs-on` for the scan job. Large images (CUDA/venv) need more disk     |
 
 Each image is scanned once to JSON. Table and SARIF are `trivy convert` from that file. `--exit-code` is on the table convert. Raise `timeout_minutes` when several images no longer fit.
 

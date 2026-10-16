@@ -57,6 +57,11 @@ on:
         type: number
         required: false
         default: 30
+      runner:
+        description: runs-on label for the scan job. Large images (CUDA/venv) need a runner with more disk than ubuntu-24.04
+        type: string
+        required: false
+        default: ubuntu-24.04
     outputs:
       finding_count:
         description: Total vulnerabilities reported across scanned images
@@ -82,7 +87,7 @@ env:
 
 jobs:
   trivy-image:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     outputs:
       finding_count: ${{ steps.summary.outputs.finding_count }}
