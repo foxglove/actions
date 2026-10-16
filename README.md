@@ -101,3 +101,29 @@ jobs:
       directory: .
       mode: static
 ```
+
+## Dependency scanning
+
+Report-only Trivy scans of committed lockfiles. Soft-fail by default; results go to job logs, the step summary, and workflow artifacts. Findings do not fail the job. A scanner crash, a bad image digest, or a failed database download still does.
+
+**Docs:** [`docs/dependency-scan.md`](docs/dependency-scan.md)
+
+**Workflow:** [`dependency-scan.yml`](.github/workflows/dependency-scan.yml)
+
+The workflow is self-contained. Callers pin `uses` to a full commit SHA and do not pass `actions_ref`. `aquasecurity/trivy-action` is not used. The image is `ghcr.io/aquasecurity/trivy` pinned by digest inside the workflow.
+
+This repository's caller is [`dependencies.yml`](.github/workflows/dependencies.yml). `yarn.lock` contains only the devDependency `prettier`. Dev dependencies are excluded, so a package count of zero on that caller is expected and is not a failed Yarn Berry parse.
+
+```yaml
+jobs:
+  dependency-scan:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    # Full SHA of the commit on foxglove/actions main. Not @main.
+    uses: foxglove/actions/.github/workflows/dependency-scan.yml@<full-commit-sha>
+    with:
+      lockfiles: yarn.lock,Cargo.lock
+      soft_fail: true
+```
