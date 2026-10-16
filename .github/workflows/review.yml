@@ -162,14 +162,36 @@ jobs:
         continue-on-error: true
         run: sudo tailscale logout
 
-      - name: Checkout project repository
+      # A newer push starts its own run, which reviews the new head.
+      - name: Check that the commit is still the PR head
+        id: head
         if: steps.follow.outputs.done != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          current="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha || true)"
+          if [ -z "$current" ] || [ "$current" = "$HEAD_SHA" ]; then
+            exit 0
+          fi
+          # Some pushes start no run, for example a push with GITHUB_TOKEN or with [skip ci].
+          workflow="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .workflow_id || true)"
+          runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$current&event=pull_request" \
+            --jq .total_count || echo 0)"
+          if [ -n "$workflow" ] && [ "${runs:-0}" -gt 0 ]; then
+            echo "::notice::The PR head is now ${current:0:7}, and the run for that commit reviews it."
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout project repository
+        if: steps.follow.outputs.done != 'true' && steps.head.outputs.stale != 'true'
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Checkout workflow repository
-        if: steps.follow.outputs.done != 'true'
+        if: steps.follow.outputs.done != 'true' && steps.head.outputs.stale != 'true'
         uses: actions/checkout@v6
         with:
           repository: foxglove/actions
@@ -189,20 +211,20 @@ jobs:
       # roughly three times as much on the rare one that installs, and its post-step writes
       # under a lockfile-keyed name CI restores from, which a partial node_modules would poison.
       - name: Set up Node
-        if: steps.follow.outputs.done != 'true' && hashFiles('.node-version', '.nvmrc') != ''
+        if: steps.follow.outputs.done != 'true' && steps.head.outputs.stale != 'true' && hashFiles('.node-version', '.nvmrc') != ''
         continue-on-error: true
         uses: actions/setup-node@v6
         with:
           node-version-file: ${{ hashFiles('.node-version') != '' && '.node-version' || '.nvmrc' }}
 
       - name: Enable Corepack
-        if: steps.follow.outputs.done != 'true' && hashFiles('yarn.lock') != ''
+        if: steps.follow.outputs.done != 'true' && steps.head.outputs.stale != 'true' && hashFiles('yarn.lock') != ''
         continue-on-error: true
         run: corepack enable
 
       - name: Build Claude inputs
         id: claude-inputs
-        if: steps.follow.outputs.done != 'true'
+        if: steps.follow.outputs.done != 'true' && steps.head.outputs.stale != 'true'
         shell: bash
         run: |
           prompt_file=".foxglove-actions/prompts/review.md"
@@ -248,7 +270,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Clean up prior reviews (before attempt 1)
-        if: steps.follow.outputs.done != 'true'
+        if: steps.follow.outputs.done != 'true' && steps.head.outputs.stale != 'true'
         uses: actions/github-script@v7
         with:
           github-token: ${{ github.token }}
@@ -260,7 +282,7 @@ jobs:
 
       - name: Run Claude review (attempt 1)
         id: attempt1
-        if: steps.follow.outputs.done != 'true'
+        if: steps.follow.outputs.done != 'true' && steps.head.outputs.stale != 'true'
         continue-on-error: true
         uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280, Agent SDK 0.3.280 (after v1.0.231)
         with:
