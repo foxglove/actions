@@ -21,9 +21,7 @@ Report every issue that passes the bar below in this pass. Later reviews raise o
 
 If you have reviewed this PR before, focus new feedback on what changed since then. Use the `commit_id` of your most recent prior review (gathered in step 1 of the Review Workflow) as the baseline, and treat `<commit_id>..HEAD` as the newly pushed changes. On code unchanged since that review, raise only blockers you previously missed (correctness, security, data integrity, contract violations) — not nits or stylistic suggestions. If there is no prior review, or the `commit_id` is unreachable (e.g. after a force-push or rebase), review the full diff normally.
 
-Raise an issue only when a senior engineer on this team would ask for it in a human review. Before you post a finding, weigh the code its fix adds against what the fix prevents, and drop the finding when the fix costs more. Always report blockers. For other findings, scale the bar to the exposure of the change: work that is behind a feature flag, unreleased, or internal-only needs fewer findings than a change that customers see at once.
-
-On code pushed to address one of your prior comments, verify that the fix resolves the comment and raise only blockers in it; do not open new suggestions or nits on the fix.
+Raise an issue only when a senior engineer on this team would ask for it in a human review. Before you post a finding, weigh what the fix prevents against what it costs: the code it adds, and another round of changes and review that delays the PR. Drop the finding when the fix costs more. On code pushed to address your earlier comments, each new finding starts another round, so weigh that cost there with extra care. Always report blockers. For other findings, scale the bar to the exposure of the change: work that is behind a feature flag, unreleased, or internal-only needs fewer findings than a change that customers see at once.
 
 ## Documentation Discovery
 
