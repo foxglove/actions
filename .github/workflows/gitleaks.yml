@@ -1,0 +1,395 @@
+name: Gitleaks
+
+on:
+  workflow_call:
+    inputs:
+      soft_fail:
+        description: Do not fail the job when Gitleaks finds leaks (exit code 2)
+        type: boolean
+        required: false
+        default: true
+      inventory:
+        description: Full history. Honored on pull_request only. Any other event with inventory true fails the job.
+        type: boolean
+        required: false
+        default: false
+      config_file:
+        description: Optional path passed as --config. On pull_request, read from the base commit, and empty uses the base .gitleaks.toml or the built-in rules. On other events, empty uses Gitleaks' own lookup.
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    # Hosted ubuntu-24.04 is x64, which matches the pinned linux_x64 asset.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      # MIT CLI 8.30.1, linux x64. The digest is the trust anchor, not the release checksums file.
+      GITLEAKS_VERSION: "8.30.1"
+      GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    steps:
+      - name: Checkout consumer repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # Full history so a base..head range includes the commits in between.
+          # LFS stays off; Gitleaks reads git blobs.
+          fetch-depth: 0
+          lfs: false
+          # On pull_request, github.sha is the synthetic merge commit.
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${GITLEAKS_VERSION:?}"
+          : "${GITLEAKS_SHA256:?}"
+          asset="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${asset}"
+          work="${RUNNER_TEMP}/gitleaks-install"
+          mkdir -p "${work}"
+          curl -fsSL --retry 3 --retry-delay 2 -o "${work}/${asset}" "${url}"
+          echo "${GITLEAKS_SHA256}  ${work}/${asset}" | sha256sum -c -
+          tar -xzf "${work}/${asset}" -C "${work}" gitleaks
+          chmod 0755 "${work}/gitleaks"
+          version="$("${work}/gitleaks" version)"
+          if [[ "${version}" != "${GITLEAKS_VERSION}" ]]; then
+            echo "gitleaks version '${version}' != ${GITLEAKS_VERSION}" >&2
+            exit 1
+          fi
+          echo "${work}" >> "${GITHUB_PATH}"
+
+      - name: Scan
+        id: scan
+        shell: bash
+        env:
+          SOFT_FAIL: ${{ inputs.soft_fail }}
+          INVENTORY: ${{ inputs.inventory }}
+          CONFIG_FILE: ${{ inputs.config_file }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+
+          if ! command -v gitleaks >/dev/null; then
+            echo "gitleaks is not on PATH" >&2
+            exit 1
+          fi
+          if ! command -v jq >/dev/null; then
+            echo "jq is required to build the job summary" >&2
+            exit 1
+          fi
+
+          assert_head() {
+            local expected="$1"
+            if [[ ! "${expected}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              echo "expected commit is not a 40-character SHA: '${expected}'" >&2
+              exit 1
+            fi
+            local actual
+            actual="$(git rev-parse HEAD)"
+            if [[ "${actual,,}" != "${expected,,}" ]]; then
+              echo "checked out ${actual}, expected ${expected}" >&2
+              exit 1
+            fi
+          }
+
+          require_commit() {
+            local label="$1"
+            local sha="$2"
+            if [[ ! "${sha}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              echo "${label} is not a 40-character SHA: '${sha}'" >&2
+              exit 1
+            fi
+            if ! git rev-parse --verify --quiet "${sha}^{commit}" >/dev/null; then
+              echo "${label} ${sha} is not in this clone" >&2
+              exit 1
+            fi
+          }
+
+          blob_exists() {
+            local kind
+            kind="$(git cat-file -t "$1" 2>/dev/null || true)"
+            [[ "${kind}" == "blob" ]]
+          }
+
+          # Reject absolute paths and '..' so the spec stays inside the base tree.
+          repo_blob_path() {
+            local path="$1"
+            local rest part
+            path="${path#./}"
+            if [[ -z "${path}" || "${path}" == /* || "${path}" == *:* ]]; then
+              echo "config_file must be a relative path in the repository: ${1}" >&2
+              return 1
+            fi
+            rest="${path}"
+            while [[ -n "${rest}" ]]; do
+              part="${rest%%/*}"
+              if [[ -z "${part}" || "${part}" == "." || "${part}" == ".." ]]; then
+                echo "config_file must be a relative path in the repository: ${1}" >&2
+                return 1
+              fi
+              if [[ "${rest}" == */* ]]; then
+                rest="${rest#*/}"
+              else
+                rest=""
+              fi
+            done
+            printf '%s\n' "${path}"
+          }
+
+          # Extend path is resolved against the worktree, which is the PR head.
+          # Viper folds case variants of one key, so every extend table and every path is checked.
+          # A quoted top-level "extend.path" is that path too.
+          reject_extend_path() {
+            local config_path="$1"
+            if ! command -v python3 >/dev/null; then
+              echo "python3 is required to check the gitleaks config" >&2
+              exit 1
+            fi
+            python3 -c 'import textwrap, sys; exec(textwrap.dedent("""
+            import tomllib
+            def get_all_ci(table, key):
+                if not isinstance(table, dict):
+                    return []
+                return [
+                    value
+                    for found, value in table.items()
+                    if isinstance(found, str) and found.lower() == key
+                ]
+            def fail_if_path(value):
+                if isinstance(value, str) and value.strip():
+                    print("base gitleaks config sets [extend] path; Gitleaks resolves that path against the pull request head", file=sys.stderr)
+                    sys.exit(1)
+            with open(sys.argv[1], "rb") as handle:
+                try:
+                    data = tomllib.load(handle)
+                except tomllib.TOMLDecodeError as err:
+                    print("gitleaks config is not valid TOML: %s" % err, file=sys.stderr)
+                    sys.exit(1)
+            for extend in get_all_ci(data, "extend"):
+                for path in get_all_ci(extend, "path"):
+                    fail_if_path(path)
+            for path in get_all_ci(data, "extend.path"):
+                fail_if_path(path)
+            """))' "${config_path}"
+          }
+
+          # Worktree files are the PR head. Read config from the base commit.
+          # The CLI also loads <source>/.gitleaksignore when --gitleaks-ignore-path is set.
+          load_pull_request_config() {
+            local cfg_dir="${RUNNER_TEMP}/gitleaks-config"
+            local spec config_path
+            rm -rf "${cfg_dir}"
+            mkdir -p "${cfg_dir}"
+            unset GITLEAKS_CONFIG GITLEAKS_CONFIG_TOML
+            cmd+=(--ignore-gitleaks-allow)
+
+            if blob_exists "${BASE_SHA}:.gitleaksignore"; then
+              git cat-file -p "${BASE_SHA}:.gitleaksignore" > "${cfg_dir}/.gitleaksignore"
+            fi
+            rm -f .gitleaksignore
+            cmd+=(--gitleaks-ignore-path="${cfg_dir}")
+
+            config_path=""
+            if [[ -n "${CONFIG_FILE}" ]]; then
+              spec="$(repo_blob_path "${CONFIG_FILE}")" || exit 1
+              if ! blob_exists "${BASE_SHA}:${spec}"; then
+                echo "config_file does not exist on the base commit: ${CONFIG_FILE}" >&2
+                exit 1
+              fi
+              config_path="${cfg_dir}/config.toml"
+              git cat-file -p "${BASE_SHA}:${spec}" > "${config_path}"
+            elif blob_exists "${BASE_SHA}:.gitleaks.toml"; then
+              config_path="${cfg_dir}/.gitleaks.toml"
+              git cat-file -p "${BASE_SHA}:.gitleaks.toml" > "${config_path}"
+            else
+              rm -f .gitleaks.toml
+            fi
+            if [[ -n "${config_path}" ]]; then
+              reject_extend_path "${config_path}"
+              cmd+=(--config="${config_path}")
+            fi
+          }
+
+          publish_artifact() {
+            if [[ ! -f gitleaks-report.json ]]; then
+              return 0
+            fi
+            {
+              echo "artifact_paths<<EOF"
+              echo "gitleaks-report.json"
+              if [[ -f gitleaks-inventory.md ]]; then
+                echo "gitleaks-inventory.md"
+              fi
+              echo "EOF"
+            } >> "${GITHUB_OUTPUT}"
+          }
+
+          log_opts=""
+          case "${EVENT_NAME}" in
+            pull_request)
+              assert_head "${HEAD_SHA}"
+              require_commit "pull_request base" "${BASE_SHA}"
+              if [[ "${INVENTORY}" != "true" ]]; then
+                log_opts="${BASE_SHA}..${HEAD_SHA}"
+              fi
+              ;;
+            push)
+              if [[ "${INVENTORY}" == "true" ]]; then
+                echo "inventory: true is not allowed on push" >&2
+                exit 1
+              fi
+              assert_head "${COMMIT_SHA}"
+              if [[ "${BEFORE_SHA}" =~ ^0+$ ]]; then
+                log_opts="-n 1"
+              else
+                require_commit "push before" "${BEFORE_SHA}"
+                log_opts="${BEFORE_SHA}..${COMMIT_SHA}"
+              fi
+              ;;
+            workflow_dispatch)
+              if [[ "${INVENTORY}" == "true" ]]; then
+                echo "inventory: true is only honored on pull_request" >&2
+                exit 1
+              fi
+              assert_head "${COMMIT_SHA}"
+              log_opts="-n 1"
+              ;;
+            *)
+              echo "unsupported event: ${EVENT_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
+          cmd=(
+            gitleaks git .
+            --redact
+            --no-banner
+            --exit-code 2
+            --report-format json
+            --report-path gitleaks-report.json
+          )
+          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+            load_pull_request_config
+          elif [[ -n "${CONFIG_FILE}" ]]; then
+            if [[ ! -f "${CONFIG_FILE}" ]]; then
+              echo "config_file does not exist: ${CONFIG_FILE}" >&2
+              exit 1
+            fi
+            cmd+=(--config="${CONFIG_FILE}")
+          fi
+          if [[ -n "${log_opts}" ]]; then
+            cmd+=(--log-opts="${log_opts}")
+          fi
+
+          stderr_file="${RUNNER_TEMP}/gitleaks-stderr.txt"
+          set +e
+          "${cmd[@]}" 2>"${stderr_file}"
+          scan_rc=$?
+          set -e
+          cat "${stderr_file}" >&2
+
+          # 8.30.1 can exit 0 and write [] when git log fails. A fatal line is a scan error.
+          if grep -E -q '\[git\] fatal:' "${stderr_file}"; then
+            echo "git log failed during the scan" >&2
+            publish_artifact
+            exit 1
+          fi
+
+          if [[ "${scan_rc}" -ne 0 && "${scan_rc}" -ne 2 ]]; then
+            publish_artifact
+            exit "${scan_rc}"
+          fi
+
+          if [[ ! -s gitleaks-report.json ]]; then
+            echo "gitleaks exit ${scan_rc} did not write a report" >&2
+            exit 1
+          fi
+
+          head_sha="$(git rev-parse HEAD)"
+          summary_file="${RUNNER_TEMP}/gitleaks-summary.md"
+          jq -r \
+            --arg head "${head_sha}" \
+            --arg soft_fail "${SOFT_FAIL}" \
+            --arg inventory "${INVENTORY}" \
+            --arg log_opts "${log_opts}" \
+            '
+              def cell: tostring | gsub("\r\n|\n|\r"; " ") | gsub("\\|"; "\\|");
+              def findings:
+                if type == "array" then .
+                elif . == null then []
+                else error("gitleaks report is not a JSON array")
+                end;
+              findings as $rows |
+              ($rows | length) as $total |
+              [
+                "## Gitleaks",
+                "",
+                "- Commit: `\($head)`",
+                "- Findings: **\($total)**",
+                "- Soft fail: `\($soft_fail)`",
+                "- Inventory: `\($inventory)`",
+                (if $log_opts == "" then "- Range: full history" else "- Range: `\($log_opts)`" end),
+                "",
+                "### By rule",
+                "",
+                (
+                  if $total == 0 then "None."
+                  else
+                    (
+                      ["| Rule | Count |", "| --- | ---: |"]
+                      + (
+                        $rows
+                        | group_by(.RuleID // "")
+                        | map({rule: (.[0].RuleID // ""), count: length})
+                        | sort_by(-.count, .rule)
+                        | map("| \(.rule | cell) | \(.count) |")
+                      )
+                    )
+                  end
+                ),
+                "",
+                "### Findings",
+                "",
+                (
+                  if $total == 0 then "None."
+                  else
+                    (
+                      ["| Rule | File | Commit | Start line |", "| --- | --- | --- | ---: |"]
+                      + (
+                        $rows[:40]
+                        | map("| \(.RuleID // "" | cell) | \(.File // "" | cell) | \(.Commit // "" | cell) | \(.StartLine // "" | cell) |")
+                      )
+                      + (if $total > 40 then ["", "Showing 40 of \($total)."] else [] end)
+                    )
+                  end
+                )
+              ] | flatten | join("\n")
+            ' gitleaks-report.json > "${summary_file}"
+          echo >> "${summary_file}"
+          cat "${summary_file}" >> "${GITHUB_STEP_SUMMARY}"
+          if [[ "${INVENTORY}" == "true" ]]; then
+            cp "${summary_file}" gitleaks-inventory.md
+          fi
+
+          publish_artifact
+          if [[ "${scan_rc}" -eq 2 && "${SOFT_FAIL}" != "true" ]]; then
+            exit 2
+          fi
+
+      - name: Upload Gitleaks report
+        if: ${{ !cancelled() && steps.scan.outputs.artifact_paths != '' && (steps.scan.outcome == 'success' || steps.scan.outcome == 'failure') }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: gitleaks
+          path: ${{ steps.scan.outputs.artifact_paths }}
+          if-no-files-found: error
