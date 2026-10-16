@@ -1,0 +1,235 @@
+name: Dependency scan
+
+on:
+  workflow_call:
+    inputs:
+      lockfiles:
+        description: Comma-separated lockfile paths. Each path is scanned on its own. Directories are rejected.
+        type: string
+        required: true
+      soft_fail:
+        description: Do not fail the job when Trivy finds vulnerabilities
+        type: boolean
+        required: false
+        default: true
+      upload_sarif:
+        description: Upload SARIF to GitHub Code Scanning (requires Code Security on private repos)
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+env:
+  # Trivy 0.76.0 by digest (manifest list for tag 0.76.0).
+  TRIVY_IMAGE: ghcr.io/aquasecurity/trivy@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222
+
+jobs:
+  dependency-scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout consumer repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Scan lockfiles
+        id: scan
+        shell: bash
+        env:
+          LOCKFILES: ${{ inputs.lockfiles }}
+          SOFT_FAIL: ${{ inputs.soft_fail }}
+        run: |
+          set -euo pipefail
+
+          case "${TRIVY_IMAGE}" in
+            *@sha256:*) ;;
+            *)
+              echo "TRIVY_IMAGE must be pinned by digest." >&2
+              exit 1
+              ;;
+          esac
+
+          case "${SOFT_FAIL}" in
+            true) exit_code=0 ;;
+            false) exit_code=1 ;;
+            *)
+              echo "soft_fail must be true or false (got '${SOFT_FAIL}')." >&2
+              exit 1
+              ;;
+          esac
+
+          trim() {
+            local value="$1"
+            value="${value#"${value%%[![:space:]]*}"}"
+            value="${value%"${value##*[![:space:]]}"}"
+            printf '%s' "${value}"
+          }
+
+          # This CLI accepts one --format. JSON downloads the DB; SARIF reuses that cache.
+          run_scan() {
+            local lockfile="$1"
+            local format="$2"
+            local output_name="$3"
+            local skip_db_update="$4"
+            local -a cmd=(
+              docker run --rm
+              -v "${PWD}:/src"
+              -v "${PWD}/dependency-scan-results:/out"
+              -v /tmp/trivy-cache:/trivy-cache
+              -w /src
+              "${TRIVY_IMAGE}"
+              fs
+              --scanners vuln
+              --pkg-types library
+              --exit-code "${exit_code}"
+              --no-progress
+              --disable-telemetry
+              --cache-dir /trivy-cache
+              --format "${format}"
+              --output "/out/${output_name}"
+            )
+            if [[ "${skip_db_update}" == "true" ]]; then
+              cmd+=(--skip-db-update)
+            fi
+            cmd+=("${lockfile}")
+            "${cmd[@]}"
+          }
+
+          # upload-sarif keeps an existing automationDetails.id and otherwise
+          # stamps every run with one category. The id has to differ per lockfile.
+          stamp_sarif_run_id() {
+            local base="$1"
+            local sarif="dependency-scan-results/${base}.sarif"
+            local tmp
+            tmp="$(mktemp)"
+            if ! jq --arg id "dependency-scan/${base}/" '
+              if (.runs | type) != "array" or (.runs | length) == 0 then
+                error("SARIF has no runs")
+              else
+                .runs[].automationDetails = {id: $id}
+              end
+            ' "${sarif}" > "${tmp}"; then
+              rm -f "${tmp}"
+              echo "Failed to set a SARIF automation id for ${base}" >&2
+              return 1
+            fi
+            mv "${tmp}" "${sarif}"
+          }
+
+          mkdir -p dependency-scan-results /tmp/trivy-cache
+          docker pull "${TRIVY_IMAGE}"
+
+          declare -A seen_basenames=()
+          IFS=',' read -r -a lockfile_entries <<< "${LOCKFILES}"
+          scanned=0
+          scan_failed=0
+
+          for entry in "${lockfile_entries[@]}"; do
+            lockfile="$(trim "${entry}")"
+            [[ -z "${lockfile}" ]] && continue
+
+            if [[ "${lockfile}" == /* || "${lockfile}" == *..* ]]; then
+              echo "Lockfile path must stay inside the repository: ${lockfile}" >&2
+              exit 1
+            fi
+            if [[ ! -f "${lockfile}" ]]; then
+              echo "Lockfile is not a file: ${lockfile}" >&2
+              echo "Pass explicit lockfile paths. Directories are not scanned." >&2
+              exit 1
+            fi
+
+            base="$(basename "${lockfile}")"
+            if [[ -n "${seen_basenames[${base}]:-}" ]]; then
+              echo "Two lockfiles share the basename ${base}: ${seen_basenames[${base}]} and ${lockfile}" >&2
+              exit 1
+            fi
+            seen_basenames["${base}"]="${lockfile}"
+
+            echo "Scanning ${lockfile}"
+            set +e
+            run_scan "${lockfile}" json "${base}.json" false
+            json_rc=$?
+            run_scan "${lockfile}" sarif "${base}.sarif" true
+            sarif_rc=$?
+            set -e
+
+            if [[ "${json_rc}" -ne 0 || "${sarif_rc}" -ne 0 ]]; then
+              echo "Trivy exited ${json_rc} (json) and ${sarif_rc} (sarif) for ${lockfile}" >&2
+              scan_failed=1
+            fi
+            if [[ ! -s "dependency-scan-results/${base}.json" || ! -s "dependency-scan-results/${base}.sarif" ]]; then
+              echo "Trivy did not write a report for ${lockfile}" >&2
+              scan_failed=1
+            elif ! stamp_sarif_run_id "${base}"; then
+              scan_failed=1
+            fi
+            scanned=$((scanned + 1))
+          done
+
+          if [[ "${scanned}" -eq 0 ]]; then
+            echo "No lockfiles to scan. Pass explicit file paths in lockfiles." >&2
+            exit 1
+          fi
+          if [[ "${scan_failed}" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Summarize results
+        if: success() || failure()
+        shell: bash
+        env:
+          SOFT_FAIL: ${{ inputs.soft_fail }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Dependency scan"
+            echo
+            echo "- Soft fail: \`${SOFT_FAIL}\`"
+            echo "- Dev dependencies: excluded"
+            echo
+            shopt -s nullglob
+            json_files=(dependency-scan-results/*.json)
+            if [[ ${#json_files[@]} -eq 0 ]]; then
+              echo "Result files were not produced. See the job logs."
+              echo
+            fi
+            for json in "${json_files[@]}"; do
+              name="$(basename "${json}" .json)"
+              packages="$(jq '[.Results[]?.Packages[]?] | length' "${json}")"
+              findings="$(jq '[.Results[]?.Vulnerabilities[]?] | length' "${json}")"
+              ecosystems="$(jq -r '[.Results[]?.Type // empty] | unique | join(", ")' "${json}")"
+              if [[ -z "${ecosystems}" ]]; then
+                ecosystems="none"
+              fi
+              echo "### \`${name}\`"
+              echo
+              echo "- Packages: **${packages}**"
+              echo "- Findings: **${findings}**"
+              echo "- Ecosystem: \`${ecosystems}\`"
+              echo
+              jq -r '
+                (["CRITICAL","HIGH","MEDIUM","LOW","UNKNOWN"]) as $severities
+                | ([.Results[]?.Vulnerabilities[]?.Severity] | group_by(.) | map({(.[0]): length}) | add // {}) as $counts
+                | $severities[] | "- \(.): **\($counts[.] // 0)**"
+              ' "${json}"
+              echo
+            done
+            echo "SARIF and JSON are workflow artifacts. Code Scanning upload requires \`upload_sarif: true\` and Code Security."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload dependency scan artifacts
+        if: success() || failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dependency-scan-${{ github.event.repository.name }}-${{ github.run_id }}
+          path: dependency-scan-results/
+          if-no-files-found: warn
+
+      - name: Upload SARIF to Code Scanning
+        if: ${{ (success() || failure()) && inputs.upload_sarif }}
+        uses: github/codeql-action/upload-sarif@9f759ee644a3e7c15c1390abf49868036c00067b # v3.38.3
+        with:
+          sarif_file: dependency-scan-results
