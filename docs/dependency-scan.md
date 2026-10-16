@@ -31,7 +31,7 @@ jobs:
       soft_fail: true
 ```
 
-Pin `uses` to the full 40-character commit SHA. After the workflow lands on `main`, that SHA is the commit on `main`, not the PR head. A squash merge or a merge commit does not keep the PR head SHA. Do not float these callers on `@main` during the noise measurement. Dependabot's `github-actions` updates will not move a bare SHA.
+Pin `uses` to the full 40-character commit SHA. Dependabot's `github-actions` updates will not move a bare SHA.
 
 In this repository the reusable workflow already occupies `dependency-scan.yml`, so the local caller is [`dependencies.yml`](../.github/workflows/dependencies.yml) and uses `uses: ./.github/workflows/dependency-scan.yml`. Other repositories name their caller `dependency-scan.yml`.
 
@@ -39,11 +39,11 @@ In this repository the reusable workflow already occupies `dependency-scan.yml`,
 
 | Input | Default | Role |
 | --- | --- | --- |
-| `lockfiles` | `.` | Comma-separated file paths. Each path is scanned on its own. |
+| `lockfiles` | required | Comma-separated file paths. Each path is scanned on its own. |
 | `soft_fail` | `true` | Findings stay green (`--exit-code 0`). `false` uses `--exit-code 1`. |
 | `upload_sarif` | `false` | Upload SARIF to GitHub Code Scanning. Requires Code Security on private repos. |
 
-The default `.` is not a scan of the repository root. A directory path fails the job. Callers pass explicit files so testdata lockfiles, Nix flakes, and Terraform provider locks are not swept in. A path that escapes the repository (`..` or an absolute path) fails the job. Two lockfiles that share a basename fail the job, because the report file is named from the basename.
+Callers pass explicit files. A directory path fails the job, so testdata lockfiles, Nix flakes, and Terraform provider locks are not swept in. A path that escapes the repository (`..` or an absolute path) fails the job. Two lockfiles that share a basename fail the job, because the report file is named from the basename.
 
 `soft_fail` does not hide a scanner failure. Missing report files fail the job.
 
@@ -68,8 +68,6 @@ Permissions on the caller and on the reusable workflow: `contents: read`, `actio
 
 `yarn.lock` is Yarn Berry (`__metadata` version 8). Its only registry package is the devDependency `prettier`. `--include-dev-deps` is not passed, so a package count of zero on this caller is expected. That zero is not a failed Berry parse.
 
-The non-zero package-count check is the `infra` caller: `db-backup-processor`'s `yarn.lock` and `vanta-vuln-tickets`'s `package-lock.json`. This caller still runs so the workflow executes here.
-
 ## Reporting
 
 | Channel | Default |
@@ -77,13 +75,13 @@ The non-zero package-count check is the `infra` caller: `db-backup-processor`'s 
 | Job logs | Yes |
 | `$GITHUB_STEP_SUMMARY` | Package count, finding count, ecosystem, counts by severity |
 | Workflow artifacts (SARIF + JSON) | Yes. Name is `dependency-scan-<repo>-<run id>` |
-| GitHub Code Scanning (`upload_sarif`) | Off |
+| GitHub Code Scanning (`upload_sarif`) | Off. Each SARIF run has its own `automationDetails.id` (`dependency-scan/<basename>/`), so one upload can include every lockfile. |
 
 The step summary reads the JSON. `--list-all-pkgs` defaults to true, so the package count is every package Trivy parsed, not only vulnerable ones. Dev dependencies are excluded. The summary says so.
 
 Trivy 0.76 accepts one `--format` per invocation. The JSON run downloads the vulnerability database into a job-local cache. The SARIF run passes `--skip-db-update` and uses that cache. There is no cross-job cache. A registry or database outage fails the job.
 
-No `.trivyignore` and no `trivy.yaml` are shipped. A file a caller commits later is still loaded by Trivy's defaults. This pass does not add one. Every severity is reported. There is no `--severity` filter.
+No `.trivyignore` and no `trivy.yaml` ship with the workflow. A file a caller commits is still loaded by Trivy's defaults. Every severity is reported. There is no `--severity` filter.
 
 ## Pinning Trivy
 
@@ -95,4 +93,4 @@ Usage telemetry to Aqua is disabled (`--disable-telemetry`).
 
 On this pin, `--include-dev-deps` is not passed. Yarn and npm dev dependencies are excluded. The release's Python docs say `uv` dev dependencies are excluded unless that flag is set. Rust dev dependencies in `Cargo.lock` are still reported. The flag's help text lists npm, yarn, and gradle.
 
-Lockfiles this pin reads for the callers in this rollout: `yarn.lock` (Berry and classic), `package-lock.json`, `Cargo.lock`, and `uv.lock`.
+This pin reads `yarn.lock` (Berry and classic), `package-lock.json`, `Cargo.lock`, and `uv.lock`.

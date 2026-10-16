@@ -6,8 +6,7 @@ on:
       lockfiles:
         description: Comma-separated lockfile paths. Each path is scanned on its own. Directories are rejected.
         type: string
-        required: false
-        default: .
+        required: true
       soft_fail:
         description: Do not fail the job when Trivy finds vulnerabilities
         type: boolean
@@ -99,6 +98,27 @@ jobs:
             "${cmd[@]}"
           }
 
+          # upload-sarif keeps an existing automationDetails.id and otherwise
+          # stamps every run with one category. The id has to differ per lockfile.
+          stamp_sarif_run_id() {
+            local base="$1"
+            local sarif="dependency-scan-results/${base}.sarif"
+            local tmp
+            tmp="$(mktemp)"
+            if ! jq --arg id "dependency-scan/${base}/" '
+              if (.runs | type) != "array" or (.runs | length) == 0 then
+                error("SARIF has no runs")
+              else
+                .runs[].automationDetails = {id: $id}
+              end
+            ' "${sarif}" > "${tmp}"; then
+              rm -f "${tmp}"
+              echo "Failed to set a SARIF automation id for ${base}" >&2
+              return 1
+            fi
+            mv "${tmp}" "${sarif}"
+          }
+
           mkdir -p dependency-scan-results /tmp/trivy-cache
           docker pull "${TRIVY_IMAGE}"
 
@@ -142,6 +162,8 @@ jobs:
             fi
             if [[ ! -s "dependency-scan-results/${base}.json" || ! -s "dependency-scan-results/${base}.sarif" ]]; then
               echo "Trivy did not write a report for ${lockfile}" >&2
+              scan_failed=1
+            elif ! stamp_sarif_run_id "${base}"; then
               scan_failed=1
             fi
             scanned=$((scanned + 1))
@@ -211,4 +233,3 @@ jobs:
         uses: github/codeql-action/upload-sarif@9f759ee644a3e7c15c1390abf49868036c00067b # v3.38.3
         with:
           sarif_file: dependency-scan-results
-          category: dependency-scan
