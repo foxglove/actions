@@ -39,11 +39,49 @@ Use the same ref for `uses` and `actions_ref`. After the workflow is on `main`, 
 
 Do not point `uses:` at a SHA that is not on the actions branch under test. GitHub will not find the workflow file.
 
-## Images must already be local
+## Images must be on this job
 
 The job runs `docker image inspect` on every tag in `images` and fails if any tag is missing. It does not build images and it does not `docker pull` the tags under scan (`--image-src docker`, so Trivy will not fall through to a registry).
 
-`needs:` does not share a Docker daemon between jobs. Tags built in an earlier job are not visible here. The caller has to get those images onto this job's daemon before the reusable workflow runs. The scan runner is `ubuntu-24.04`. Trivy reads image contents through the Docker API, so an image built for another architecture can be scanned once it is loaded on this runner.
+`needs:` does not share a Docker daemon between jobs, and a caller cannot add steps inside `uses:`. Pass `image_artifact` with the name of an Actions artifact whose file is a `docker save` tarball. One tar may contain multiple images. The scan job downloads that artifact and runs `docker load` before inspect. Leave `image_artifact` empty to scan tags that are already local on this runner.
+
+After load, a tag that is still missing fails the job.
+
+Caller sequence: build, `docker save`, `upload-artifact`, then call this workflow with `needs:` on the build job.
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - name: Build
+        run: docker build -t api:latest .
+      - name: Save image
+        run: docker save -o api.tar api:latest
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: api-image
+          path: api.tar
+          if-no-files-found: error
+
+  trivy:
+    needs: build
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    # Keep uses: and actions_ref on the same full commit SHA.
+    uses: foxglove/actions/.github/workflows/trivy-image.yml@<full-commit-sha>
+    with:
+      actions_ref: <full-commit-sha>
+      images: api:latest
+      image_artifact: api-image
+      soft_fail: true
+      upload_sarif: false
+```
+
+The scan runner is `ubuntu-24.04`. Trivy reads image contents through the Docker API, so an image built for another architecture can be scanned once it is loaded on this runner.
 
 Callers should path-filter on Dockerfiles (and this workflow file) so unrelated PRs skip the scan. This reusable workflow has no path filters of its own.
 
@@ -51,7 +89,8 @@ Callers should path-filter on Dockerfiles (and this workflow file) so unrelated 
 
 | Input              | Default                              | Purpose                                                                 |
 | ------------------ | ------------------------------------ | ----------------------------------------------------------------------- |
-| `images`           | required                             | Comma-separated local image references                                  |
+| `images`           | required                             | Comma-separated image references to scan                                |
+| `image_artifact`   | empty                                | Actions artifact name of a `docker save` tarball. Empty skips download  |
 | `actions_ref`      | `main`                               | Second checkout of `foxglove/actions`                                   |
 | `soft_fail`        | `true`                               | `true`: vulnerabilities exit 0. `false`: `--exit-code 1`               |
 | `severity`         | `UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL`   | Passed to `--severity`                                                  |
@@ -62,7 +101,7 @@ Callers should path-filter on Dockerfiles (and this workflow file) so unrelated 
 | `artifact_suffix`  | `default`                            | Artifact name `trivy-image-<suffix>`                                    |
 | `timeout_minutes`  | `30`                                 | Job timeout. Each Trivy invocation has its own 15m cap                  |
 
-Several images in one call run table, JSON, and SARIF once per image. Raise `timeout_minutes` when that no longer fits.
+Each image is scanned once to JSON. Table and SARIF are `trivy convert` from that file. `--exit-code` is on the table convert. Raise `timeout_minutes` when several images no longer fit.
 
 Workflow outputs: `finding_count`, `critical_count`, `high_count`.
 
@@ -74,7 +113,7 @@ Workflow outputs: `finding_count`, `critical_count`, `high_count`.
 | Vulnerabilities, `soft_fail: false`            | Failure                                         |
 | Image missing, Trivy crash, pinned image pull fails | Failure                                    |
 
-`soft_fail` applies only to vulnerability findings on the table scan. A JSON or SARIF report that fails to write still fails the job.
+`soft_fail` applies only to vulnerability findings on the table convert. A JSON or SARIF report that fails to write still fails the job. A missing image after `docker load` still fails the job.
 
 ## Config resolution
 
@@ -84,9 +123,9 @@ Workflow outputs: `finding_count`, `critical_count`, `high_count`.
 
 **Replace, do not merge.** When a consumer `trivy.yaml` has any non-comment key, Trivy is given **only** that file. Copy needed keys from the shared file when you start customizing.
 
-`--scanners vuln`, `--severity`, `--ignore-unfixed`, and `--exit-code` are always passed from the workflow inputs and override the config file. A consumer config cannot turn the secret scanner on through this workflow.
+`--scanners vuln`, `--severity`, `--ignore-unfixed`, and `--exit-code` are always passed from the workflow inputs and override the config file. `severity` and `ignore_unfixed` are those inputs. A consumer config cannot turn the secret scanner on through this workflow, and uncommenting `severity` or `ignore-unfixed` in `trivy.yaml` does nothing.
 
-Stub template: [`trivy/trivy.stub.yaml`](../trivy/trivy.stub.yaml). CVE suppressions go in `.trivyignore` (one id per line) or `ignore_file`, not in `trivy.yaml`.
+Stub template: [`trivy/trivy.stub.yaml`](../trivy/trivy.stub.yaml). Its examples are keys the workflow does not override (`db.repository`, `vulnerability.vex`). CVE suppressions go in `.trivyignore` (one id per line) or `ignore_file`, not in `trivy.yaml`.
 
 ## Reporting
 
@@ -96,6 +135,8 @@ Stub template: [`trivy/trivy.stub.yaml`](../trivy/trivy.stub.yaml). CVE suppress
 | `$GITHUB_STEP_SUMMARY`                 | Yes     |
 | Workflow artifacts (SARIF + JSON)      | Yes     |
 | GitHub Code Scanning (`upload_sarif`)  | Off     |
+
+`upload_sarif` stays off until Code Scanning is enabled. Each image's SARIF gets its own `automationDetails.id` (`trivy-image-<artifact_suffix>/<image>/`). The upload step does not set `category`, because one category on every file is rejected when `images` has more than one entry.
 
 ## Pinning Trivy
 

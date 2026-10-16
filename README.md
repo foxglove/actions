@@ -110,7 +110,7 @@ Report-only Trivy scans of local container images. Soft-fail by default: vulnera
 
 **Workflow:** [`trivy-image.yml`](.github/workflows/trivy-image.yml)
 
-Pass the same full SHA as `uses:` and `actions_ref` so scripts and shared config match the workflow revision. Image tags must already be on that job's Docker daemon.
+Pass the same full SHA as `uses:` and `actions_ref` so scripts and shared config match the workflow revision. Set `image_artifact` to a `docker save` tarball from an earlier job. Leave it empty only when the tags are already on this job's Docker daemon. `severity` and `ignore_unfixed` are workflow inputs; the same keys in `trivy.yaml` are overridden.
 
 **Shared config:** [`trivy/trivy.yaml`](trivy/trivy.yaml) · consumer stub: [`trivy/trivy.stub.yaml`](trivy/trivy.stub.yaml)
 

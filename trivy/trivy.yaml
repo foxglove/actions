@@ -1,20 +1,13 @@
-# Shared Trivy defaults for Foxglove reusable workflows.
+# Shared Trivy config passed as --config.
 # Consumers may commit a root trivy.yaml. If it has non-comment keys it
 # REPLACES this file entirely (no merge). See docs/trivy-image.md.
 #
-# The workflow also passes --scanners vuln, --severity, --ignore-unfixed,
-# and --exit-code. Those flags override this file. Secret scanning is off.
+# The workflow always passes --scanners vuln, --severity, --ignore-unfixed,
+# and --exit-code. Those flags override the same keys in this file, so they
+# are not set here. Severity and ignore-unfixed are the severity and
+# ignore_unfixed workflow inputs.
+#
+# parallel is not passed on the CLI. 5 is Trivy's own default.
 
 scan:
-  scanners:
-    - vuln
-
-vulnerability:
-  ignore-unfixed: false
-
-severity:
-  - UNKNOWN
-  - LOW
-  - MEDIUM
-  - HIGH
-  - CRITICAL
+  parallel: 5
