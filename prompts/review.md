@@ -47,7 +47,7 @@ These instructions supplement this prompt. Where a repo-specific instruction dir
 
 ## Review Objectives
 
-Evaluate the changes for:
+Example areas to consider:
 
 ### 1. Correctness
 
@@ -87,7 +87,7 @@ Evaluate the changes for:
 
 ### 7. Product & UX
 
-For any PR that touches user-facing behavior, apply the full product lens:
+For a PR that touches user-facing behavior, example questions to consider:
 
 **Terminology & naming consistency:**
 
