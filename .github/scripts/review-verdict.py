@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Exit 0 when beefcake's review on this commit is LGTM.
+"""Exit 0 unless beefcake posted a Blocker or Should fix.
 
-The workflow runs this after a review is submitted. Exit 0 when the latest
-matching review body is LGTM, so the job stays green. Exit 2 when that review
-is not visible yet, so the job can wait. Exit 1 for any other verdict, or for
-input the job cannot trust. Exit 1 fails the job, so GitHub shows a failed check.
+The workflow runs this after a review is submitted. Exit 0 when the review
+body is LGTM, when the only comments are nits, or when a summary body has no
+unresolved Blocker or Should fix thread. Exit 2 when that review is not
+visible yet, so the job can wait. Exit 1 when a Blocker or Should fix is
+present, or when the input cannot be trusted. Exit 1 fails the job, so GitHub
+shows a failed check.
 """
 
 from __future__ import annotations
@@ -19,10 +21,14 @@ from typing import Any
 LGTM = "LGTM"
 # Local beefcake appends this hidden marker after the verdict text.
 BEEFCAKE_MARKER = re.compile(r"<!--\s*beefcake-review\s*-->")
+# These labels fail the check. A nit does not.
+FAILING_LABELS = ("Blocker:", "Should fix:")
 # Dismissed and pending reviews are not a submitted verdict.
 SKIPPED_STATES = {"PENDING", "DISMISSED"}
-EXIT_LGTM = 0
-EXIT_NOT_LGTM = 1
+# GraphQL omits the [bot] suffix that the REST API includes.
+REVIEW_BOTS = {"foxglove-beefcake", "claude"}
+EXIT_PASS = 0
+EXIT_FAIL = 1
 EXIT_MISSING = 2
 
 
@@ -102,13 +108,100 @@ def one_line(text: str, limit: int = 180) -> str:
     return collapsed[: limit - 3] + "..."
 
 
+def canonical_login(login: str) -> str:
+    if login.endswith("[bot]"):
+        return login[: -len("[bot]")]
+    return login
+
+
+def is_review_bot(login: str | None, bot_login: str) -> bool:
+    """True for this run's bot and for earlier beefcake or claude reviews."""
+    if login is None:
+        return False
+    return canonical_login(login) in REVIEW_BOTS | {canonical_login(bot_login)}
+
+
+def same_bot(login: str | None, bot_login: str) -> bool:
+    if login is None:
+        return False
+    return canonical_login(login) == canonical_login(bot_login)
+
+
+def comment_login(comment: dict[str, Any]) -> str | None:
+    user = comment.get("user")
+    if isinstance(user, dict) and isinstance(user.get("login"), str):
+        return user["login"]
+    author = comment.get("author")
+    if isinstance(author, dict) and isinstance(author.get("login"), str):
+        return author["login"]
+    return None
+
+
+def failing_label(body: object) -> str | None:
+    """Return Blocker or Should fix when the comment starts with that label."""
+    if not isinstance(body, str):
+        return None
+    text = BEEFCAKE_MARKER.sub("", body).lstrip()
+    for label in FAILING_LABELS:
+        if text.startswith(label):
+            return label
+    return None
+
+
+def review_sort_key(review: dict[str, Any], started: datetime) -> tuple[datetime, int]:
+    submitted = parse_time(str(review.get("submitted_at")))
+    submitted_at = submitted if submitted is not None else started
+    review_id = review.get("id")
+    numeric_id = review_id if isinstance(review_id, int) else 0
+    return (submitted_at, numeric_id)
+
+
+def root_comments_for_review(
+    comments: list[dict[str, Any]],
+    review_id: int,
+    bot_login: str,
+) -> list[dict[str, Any]]:
+    matched: list[dict[str, Any]] = []
+    for comment in comments:
+        if comment.get("pull_request_review_id") != review_id:
+            continue
+        if comment.get("in_reply_to_id") is not None or comment.get("in_reply_to") is not None:
+            continue
+        if not same_bot(comment_login(comment), bot_login):
+            continue
+        matched.append(comment)
+    return matched
+
+
+def thread_roots(threads: list[dict[str, Any]]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """Return unresolved threads paired with their first comment."""
+    roots: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for thread in threads:
+        if thread.get("isResolved") is True:
+            continue
+        comments = thread.get("comments")
+        nodes: object
+        if isinstance(comments, list):
+            nodes = comments
+        elif isinstance(comments, dict):
+            nodes = comments.get("nodes")
+        else:
+            continue
+        if not isinstance(nodes, list) or not nodes or not isinstance(nodes[0], dict):
+            continue
+        roots.append((thread, nodes[0]))
+    return roots
+
+
 def review_verdict(
     reviews: list[dict[str, Any]],
+    comments: list[dict[str, Any]],
+    threads: list[dict[str, Any]],
     head_sha: str,
     bot_login: str,
     started_at: str,
 ) -> tuple[str, str]:
-    """Return (lgtm|not-lgtm|missing|invalid, message)."""
+    """Return (pass|fail|missing|invalid, message)."""
     started = parse_time(started_at)
     if started is None:
         return ("invalid", "Could not read the start time for this job.")
@@ -117,7 +210,7 @@ def review_verdict(
     for review in reviews:
         user = review.get("user")
         login = user.get("login") if isinstance(user, dict) else None
-        if login != bot_login:
+        if not same_bot(login, bot_login):
             continue
         if review.get("commit_id") != head_sha:
             continue
@@ -135,27 +228,68 @@ def review_verdict(
     if not candidates:
         return ("missing", "Beefcake did not post a review on this commit.")
 
-    def sort_key(review: dict[str, Any]) -> tuple[datetime, int]:
-        submitted = parse_time(str(review.get("submitted_at")))
-        # Candidates already have a parseable submitted_at.
-        submitted_at = submitted if submitted is not None else started
-        review_id = review.get("id")
-        numeric_id = review_id if isinstance(review_id, int) else 0
-        return (submitted_at, numeric_id)
-
-    latest = max(candidates, key=sort_key)
+    latest = max(candidates, key=lambda review: review_sort_key(review, started))
+    latest_id = latest.get("id")
+    if not isinstance(latest_id, int):
+        return ("invalid", "Could not read the id of the beefcake review.")
     body = latest.get("body")
     text = verdict_text(body) if isinstance(body, str) else ""
+    latest_comments = root_comments_for_review(comments, latest_id, bot_login)
+    # An empty body means the review added comments. Wait until those comments appear.
+    if text == "" and not latest_comments:
+        return ("missing", "Beefcake posted a review, and its comments are not visible yet.")
+
+    for comment in latest_comments:
+        label = failing_label(comment.get("body"))
+        if label is None:
+            continue
+        shown = one_line(verdict_text(str(comment.get("body"))))
+        return (
+            "fail",
+            f"The beefcake review on this commit has a {label} comment. {shown}",
+        )
+
+    for _thread, root in thread_roots(threads):
+        if not is_review_bot(comment_login(root), bot_login):
+            continue
+        label = failing_label(root.get("body"))
+        if label is None:
+            continue
+        shown = one_line(verdict_text(str(root.get("body"))))
+        return (
+            "fail",
+            f"The beefcake review on this commit has an unresolved {label} thread. {shown}",
+        )
+
     if text == LGTM:
-        return ("lgtm", "The beefcake review on this commit is LGTM.")
-    if text == "":
-        shown = "empty"
-    else:
-        shown = one_line(text)
-    return (
-        "not-lgtm",
-        f"The beefcake review on this commit is not LGTM. The review body is: {shown}",
-    )
+        return ("pass", "The beefcake review on this commit is LGTM.")
+    return ("pass", "The beefcake review on this commit has no Blocker or Should fix.")
+
+
+def flatten_threads(values: list[Any]) -> list[dict[str, Any]]:
+    threads: list[dict[str, Any]] = []
+    for value in values:
+        if isinstance(value, list):
+            threads.extend(item for item in value if isinstance(item, dict))
+            continue
+        if not isinstance(value, dict):
+            continue
+        nested = value.get("threads")
+        if isinstance(nested, list):
+            threads.extend(item for item in nested if isinstance(item, dict))
+            continue
+        if "isResolved" in value or "comments" in value:
+            threads.append(value)
+    return threads
+
+
+def list_payload(values: list[Any], flatten) -> list[dict[str, Any]] | None:
+    """Return items from a JSON list payload. None means the payload is unusable."""
+    items = flatten(values)
+    pages_are_lists = all(isinstance(value, list) for value in values)
+    if not values or (not items and not pages_are_lists):
+        return None
+    return items
 
 
 def verdict_from_files(
@@ -164,10 +298,14 @@ def verdict_from_files(
     reviews_text: str,
     head_sha: str,
     bot_login: str,
+    comments_text: str = "[]",
+    threads_text: str = "[]",
 ) -> tuple[str, str]:
     try:
         job_values = load_json_values(jobs_text)
         review_values = load_json_values(reviews_text)
+        comment_values = load_json_values(comments_text)
+        thread_values = load_json_values(threads_text)
     except json.JSONDecodeError:
         return ("invalid", "Could not read the review response from GitHub.")
     if len(job_values) != 1 or not isinstance(job_values[0], dict):
@@ -175,12 +313,12 @@ def verdict_from_files(
     started_at = job_started_at(job_values[0], job_name)
     if started_at is None:
         return ("invalid", f"Could not read the start time for job {job_name}.")
-    reviews = flatten_reviews(review_values)
-    # An empty page is a valid list. An error object or empty file is not.
-    pages_are_lists = all(isinstance(value, list) for value in review_values)
-    if not review_values or (not reviews and not pages_are_lists):
+    reviews = list_payload(review_values, flatten_reviews)
+    comments = list_payload(comment_values, flatten_reviews)
+    threads = list_payload(thread_values, flatten_threads)
+    if reviews is None or comments is None or threads is None:
         return ("invalid", "Could not read the reviews response from GitHub.")
-    return review_verdict(reviews, head_sha, bot_login, started_at)
+    return review_verdict(reviews, comments, threads, head_sha, bot_login, started_at)
 
 
 def main(argv: list[str]) -> int:
@@ -188,6 +326,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--jobs", required=True)
     parser.add_argument("--job-name", required=True)
     parser.add_argument("--reviews", required=True)
+    parser.add_argument("--comments", required=True)
+    parser.add_argument("--threads", required=True)
     parser.add_argument("--head-sha", required=True)
     parser.add_argument("--bot", required=True)
     args = parser.parse_args(argv)
@@ -195,19 +335,25 @@ def main(argv: list[str]) -> int:
         jobs_text = jobs_file.read()
     with open(args.reviews, encoding="utf-8") as reviews_file:
         reviews_text = reviews_file.read()
+    with open(args.comments, encoding="utf-8") as comments_file:
+        comments_text = comments_file.read()
+    with open(args.threads, encoding="utf-8") as threads_file:
+        threads_text = threads_file.read()
     status, message = verdict_from_files(
         jobs_text,
         args.job_name,
         reviews_text,
         args.head_sha,
         args.bot,
+        comments_text,
+        threads_text,
     )
     print(message)
-    if status == "lgtm":
-        return EXIT_LGTM
+    if status == "pass":
+        return EXIT_PASS
     if status == "missing":
         return EXIT_MISSING
-    return EXIT_NOT_LGTM
+    return EXIT_FAIL
 
 
 if __name__ == "__main__":
