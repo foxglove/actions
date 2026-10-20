@@ -141,6 +141,7 @@ jobs:
                   jq -r '.posted | "Posted the review: \(.comments) comments, \(.replies) replies, \(.resolved) resolved threads."' \
                     <<< "$progress" | tee -a "$GITHUB_STEP_SUMMARY" || true
                   echo "done=true" >> "$GITHUB_OUTPUT"
+                  echo "posted=true" >> "$GITHUB_OUTPUT"
                   finished=true
                   exit 0
                   ;;
@@ -294,7 +295,7 @@ jobs:
           fetch-depth: 0
 
       - name: Checkout workflow repository
-        if: steps.follow.outputs.done != 'true'
+        if: steps.follow.outputs.done != 'true' || steps.follow.outputs.posted == 'true'
         uses: actions/checkout@v6
         with:
           repository: foxglove/actions
@@ -467,4 +468,56 @@ jobs:
         if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure' && steps.attempt3.outcome == 'failure'
         run: |
           echo "Review failed after 3 attempts."
+          exit 1
+
+      # The follow step uses continue-on-error, so a failure there does not fail the job.
+      # This step does not. Exit 1 when the submitted review body is not exactly LGTM.
+      # GitHub then reports the review / beefcake check as failed.
+      - name: Fail unless the review is LGTM
+        if: >-
+          steps.follow.outputs.posted == 'true' ||
+          steps.attempt1.outcome == 'success' ||
+          steps.attempt2.outcome == 'success' ||
+          steps.attempt3.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BOT_LOGIN: foxglove-beefcake[bot]
+        run: |
+          set -euo pipefail
+          script=".foxglove-actions/.github/scripts/review-verdict.py"
+          if [ ! -f "$script" ]; then
+            echo "Missing review verdict script: $script" >&2
+            exit 1
+          fi
+          jobs_file="$(mktemp)"
+          reviews_file="$(mktemp)"
+          trap 'rm -f "$jobs_file" "$reviews_file"' EXIT
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" > "$jobs_file"
+          attempt=1
+          while [ "$attempt" -le 6 ]; do
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" > "$reviews_file"
+            set +e
+            message="$(python3 "$script" \
+              --jobs "$jobs_file" \
+              --job-name "$GITHUB_JOB" \
+              --reviews "$reviews_file" \
+              --head-sha "$HEAD_SHA" \
+              --bot "$BOT_LOGIN" 2>&1)"
+            status=$?
+            set -e
+            echo "$message"
+            if [ "$status" -eq 0 ]; then
+              echo "$message" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [ "$status" -ne 2 ] || [ "$attempt" -eq 6 ]; then
+              echo "$message" >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            echo "The review is not on this commit yet. Waiting."
+            attempt=$((attempt + 1))
+            sleep 5
+          done
           exit 1
