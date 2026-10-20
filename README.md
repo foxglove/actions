@@ -14,9 +14,11 @@ An AI-powered PR review that combines technical and product perspectives in a si
 
 Dependencies are not installed. On Yarn repos the reviewer can install them itself when a finding turns on running the repo's own code. `node` and `yarn` are the only JS tooling in the allowlist, so npm and pnpm repos get the pinned runtime but no install path.
 
+**Check and comment author:** callers name their job `review`, and this job id is `beefcake`, so the status check is `review / beefcake`. Inline comments are posted as `foxglove-beefcake[bot]`. The cloud path mints an installation token for that GitHub App and passes it as `github_token`. The action then does not exchange an OIDC token for `claude[bot]`. Callers pass `BEEFCAKE_APP_ID` (the numeric App id) and `BEEFCAKE_APP_PRIVATE_KEY` (the PEM private key). Both secrets are optional on the workflow call. When the cloud path runs without them, the job fails before it posts. Threads from `claude[bot]` stay in scope for reply, resolve, and minimize. New reviews are posted as `foxglove-beefcake[bot]`.
+
 ### Beefcake hand-off (optional)
 
-A caller can set the `beefcake-dispatch-url` input and pass the `TAILSCALE_OAUTH_CLIENT_ID` and `TAILSCALE_OAUTH_SECRET` secrets to offer each review to beefcake, a local reviewer, first. When beefcake takes the review, the job prints its progress until it posts. When beefcake declines, fails, or takes longer than 15 minutes, the job runs the review as usual.
+A caller can set the `beefcake-dispatch-url` input and pass the `TAILSCALE_OAUTH_CLIENT_ID` and `TAILSCALE_OAUTH_SECRET` secrets to offer each review to beefcake, a local reviewer, first. When beefcake takes the review, the job prints its progress until it posts. The check name is still `review / beefcake`, and the App secrets above are not read. When beefcake declines, fails, or takes longer than 15 minutes, the job runs the cloud review.
 
 ### Repository-specific review instructions
 
@@ -49,7 +51,11 @@ jobs:
     uses: foxglove/actions/.github/workflows/review.yml@main
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      BEEFCAKE_APP_ID: ${{ secrets.BEEFCAKE_APP_ID }}
+      BEEFCAKE_APP_PRIVATE_KEY: ${{ secrets.BEEFCAKE_APP_PRIVATE_KEY }}
 ```
+
+Create `BEEFCAKE_APP_ID` and `BEEFCAKE_APP_PRIVATE_KEY` as organization Actions secrets, or as repository secrets on each caller. Do not commit the private key. A caller that does not pass them still runs the beefcake hand-off. The cloud path fails until the secrets are passed.
 
 > **Note:** If your repository restricts the default `GITHUB_TOKEN` permissions, you may also need to add a top-level `permissions` block to explicitly grant the required access at the workflow level.
 >

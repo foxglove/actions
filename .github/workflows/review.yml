@@ -16,13 +16,20 @@ on:
         required: false
       TAILSCALE_OAUTH_SECRET:
         required: false
+      # Numeric GitHub App id for foxglove-beefcake. Callers pass this when the
+      # cloud path may run. Beefcake acceptance does not read it.
+      BEEFCAKE_APP_ID:
+        required: false
+      # PEM private key for that App. Callers pass this with BEEFCAKE_APP_ID.
+      BEEFCAKE_APP_PRIVATE_KEY:
+        required: false
 
 concurrency:
-  group: claude-review-${{ github.repository }}-${{ github.head_ref }}-${{ github.event.action }}
+  group: beefcake-review-${{ github.repository }}-${{ github.head_ref }}-${{ github.event.action }}
   cancel-in-progress: true
 
 jobs:
-  claude:
+  beefcake:
     if: >-
       github.event.pull_request != null &&
       github.actor != 'dependabot[bot]' &&
@@ -162,6 +169,124 @@ jobs:
         continue-on-error: true
         run: sudo tailscale logout
 
+      # The cloud review posts with the beefcake GitHub App. An empty github_token
+      # makes claude-code-action exchange an OIDC token for claude[bot]. Fail here
+      # instead. Mint after the beefcake follow so a long follow does not use up
+      # the installation token, which expires after one hour.
+      - name: Mint the beefcake token
+        id: app-token
+        if: steps.follow.outputs.done != 'true'
+        env:
+          APP_ID: ${{ secrets.BEEFCAKE_APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.BEEFCAKE_APP_PRIVATE_KEY }}
+        run: |
+          python3 - << 'PY'
+          import base64
+          import json
+          import os
+          import subprocess
+          import tempfile
+          import time
+          import urllib.error
+          import urllib.request
+
+          app_id = os.environ.get("APP_ID", "").strip()
+          private_key = os.environ.get("APP_PRIVATE_KEY", "")
+          if "\n" not in private_key and "\\n" in private_key:
+              private_key = private_key.replace("\\n", "\n")
+
+          if not app_id or not private_key.strip():
+              raise SystemExit(
+                  "Cloud review needs secrets BEEFCAKE_APP_ID and BEEFCAKE_APP_PRIVATE_KEY. "
+                  "Pass them from the caller. Create them as organization Actions secrets "
+                  "for the foxglove org. Do not paste the private key into a pull request or a log."
+              )
+          if not app_id.isdigit():
+              raise SystemExit("BEEFCAKE_APP_ID must be the numeric GitHub App id.")
+
+          def b64(data):
+              return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+          header = b64(json.dumps({"alg": "RS256", "typ": "JWT"}, separators=(",", ":")).encode())
+          now = int(time.time())
+          payload = b64(
+              json.dumps(
+                  {"iat": now - 60, "exp": now + 540, "iss": app_id},
+                  separators=(",", ":"),
+              ).encode()
+          )
+          signing_input = f"{header}.{payload}".encode()
+          key_file = tempfile.NamedTemporaryFile("w", delete=False)
+          try:
+              key_file.write(private_key if private_key.endswith("\n") else private_key + "\n")
+              key_file.close()
+              os.chmod(key_file.name, 0o600)
+              signature = subprocess.check_output(
+                  ["openssl", "dgst", "-sha256", "-sign", key_file.name],
+                  input=signing_input,
+              )
+          except subprocess.CalledProcessError:
+              raise SystemExit(
+                  "Could not sign the GitHub App JWT. Check that BEEFCAKE_APP_PRIVATE_KEY is a PEM private key."
+              )
+          finally:
+              try:
+                  os.remove(key_file.name)
+              except OSError:
+                  pass
+
+          jwt = f"{header}.{payload}.{b64(signature)}"
+          print(f"::add-mask::{jwt}")
+
+          def github_json(method, url, body=None):
+              data = None if body is None else json.dumps(body).encode()
+              request = urllib.request.Request(
+                  url,
+                  data=data,
+                  method=method,
+                  headers={
+                      "Authorization": f"Bearer {jwt}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2026-03-10",
+                      "User-Agent": "foxglove-actions-review",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  detail = error.read().decode("utf-8", "replace")[:500]
+                  raise SystemExit(f"GitHub {method} {url.split('?')[0]} failed: {error.code} {detail}")
+
+          repository = os.environ["GITHUB_REPOSITORY"]
+          installation = github_json(
+              "GET",
+              f"https://api.github.com/repos/{repository}/installation",
+          )
+          installation_id = installation.get("id")
+          if not installation_id:
+              raise SystemExit("GitHub did not return an installation id for this repository.")
+
+          token_payload = github_json(
+              "POST",
+              f"https://api.github.com/app/installations/{installation_id}/access_tokens",
+              {
+                  "permissions": {
+                      "contents": "read",
+                      "issues": "write",
+                      "pull_requests": "write",
+                  }
+              },
+          )
+          token = token_payload.get("token") or ""
+          if not token:
+              raise SystemExit("GitHub did not return an installation token.")
+          print(f"::add-mask::{token}")
+          delimiter = "BEEFCAKE_TOKEN_END"
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"token<<{delimiter}\n{token}\n{delimiter}\n")
+          PY
+
       - name: Checkout project repository
         if: steps.follow.outputs.done != 'true'
         uses: actions/checkout@v6
@@ -226,7 +351,11 @@ jobs:
             echo "  pr_number: ${{ github.event.pull_request.number }}"
             echo "  base_branch: ${{ github.event.pull_request.base.ref }}"
             echo "  is_draft: ${{ github.event.pull_request.draft }}"
-            echo "  bot_login: claude[bot]"
+            echo "  bot_login: foxglove-beefcake[bot]"
+            echo "  own_thread_logins: foxglove-beefcake[bot], claude[bot]"
+            echo "  When the review instructions say CONTEXT.bot_login, post new reviews as foxglove-beefcake[bot]."
+            echo "  Treat threads and review comments from own_thread_logins as your own for reply, resolve, and minimize."
+            echo "  Do not post a new review as claude[bot]."
             echo "  repo_instruction_files:"
             if [ -n "$instruction_files" ]; then
               echo "$instruction_files" | sed 's/^/    - /'
@@ -251,7 +380,7 @@ jobs:
         if: steps.follow.outputs.done != 'true'
         uses: actions/github-script@v7
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const cleanupPendingReviews = require(
               `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/cleanup-pending-reviews.js`,
@@ -265,6 +394,10 @@ jobs:
         uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280, Agent SDK 0.3.280 (after v1.0.231)
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app-token.outputs.token }}
+          bot_id: "342178988"
+          bot_name: foxglove-beefcake[bot]
+          include_fix_links: "false"
           track_progress: false
           use_sticky_comment: false
           allowed_bots: cursor[bot]
@@ -276,7 +409,7 @@ jobs:
         if: steps.attempt1.outcome == 'failure'
         uses: actions/github-script@v7
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const cleanupPendingReviews = require(
               `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/cleanup-pending-reviews.js`,
@@ -290,6 +423,10 @@ jobs:
         uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280, Agent SDK 0.3.280 (after v1.0.231)
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app-token.outputs.token }}
+          bot_id: "342178988"
+          bot_name: foxglove-beefcake[bot]
+          include_fix_links: "false"
           track_progress: false
           use_sticky_comment: false
           allowed_bots: cursor[bot]
@@ -301,7 +438,7 @@ jobs:
         if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
         uses: actions/github-script@v7
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const cleanupPendingReviews = require(
               `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/cleanup-pending-reviews.js`,
@@ -315,6 +452,10 @@ jobs:
         uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280, Agent SDK 0.3.280 (after v1.0.231)
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app-token.outputs.token }}
+          bot_id: "342178988"
+          bot_name: foxglove-beefcake[bot]
+          include_fix_links: "false"
           track_progress: false
           use_sticky_comment: false
           allowed_bots: cursor[bot]
@@ -325,5 +466,5 @@ jobs:
       - name: Verify success
         if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure' && steps.attempt3.outcome == 'failure'
         run: |
-          echo "Claude review failed after 3 attempts."
+          echo "Review failed after 3 attempts."
           exit 1
