@@ -208,6 +208,36 @@ class ReviewVerdictTest(unittest.TestCase):
         status, _message = self.decide([review("LGTM, with one note")])
         self.assertEqual(status, "pass")
 
+    def test_later_reply_only_review_keeps_lgtm(self) -> None:
+        reviews = [
+            review("LGTM", submitted_at="2026-10-20T12:05:00Z", review_id=1),
+            review("", submitted_at="2026-10-20T12:05:01Z", review_id=2),
+        ]
+        status, message = self.decide(
+            reviews,
+            [comment("Resolved.", review_id=2, comment_id=11, in_reply_to_id=99)],
+        )
+        self.assertEqual(status, "pass")
+        self.assertIn("LGTM", message)
+        self.assertNotIn("not visible yet", message)
+
+    def test_later_reply_only_review_with_non_verdict_body_keeps_lgtm(self) -> None:
+        reviews = [
+            review(
+                "LGTM\n\n<!-- beefcake-review -->",
+                submitted_at="2026-10-20T12:05:00Z",
+                review_id=1,
+            ),
+            review("thanks", submitted_at="2026-10-20T12:05:01Z", review_id=2),
+        ]
+        status, message = self.decide(
+            reviews,
+            [comment("Resolved.", review_id=2, comment_id=11, in_reply_to_id=99)],
+            [thread("Nit (optional): rename the local variable.")],
+        )
+        self.assertEqual(status, "pass")
+        self.assertIn("LGTM", message)
+
     def test_latest_should_fix_comment_fails(self) -> None:
         reviews = [
             review("LGTM", submitted_at="2026-10-20T12:05:00Z", review_id=1),

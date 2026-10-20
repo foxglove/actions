@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 LGTM = "LGTM"
+SUMMARY_BODY = "Prior unresolved thread(s) still open."
 # Local beefcake appends this hidden marker after the verdict text.
 BEEFCAKE_MARKER = re.compile(r"<!--\s*beefcake-review\s*-->")
 # These labels fail the check. A nit does not.
@@ -137,6 +138,35 @@ def comment_login(comment: dict[str, Any]) -> str | None:
     return None
 
 
+def is_verdict_body(body: object) -> bool:
+    """True when the review body is LGTM or the unresolved-thread summary."""
+    if not isinstance(body, str):
+        return False
+    text = verdict_text(body)
+    return text == LGTM or text == SUMMARY_BODY
+
+
+def is_reply_comment(comment: dict[str, Any]) -> bool:
+    return comment.get("in_reply_to_id") is not None or comment.get("in_reply_to") is not None
+
+
+def is_reply_only_review(review: dict[str, Any], comments: list[dict[str, Any]]) -> bool:
+    """True when this review only carries thread replies and has no verdict body.
+
+    GitHub files each thread reply on a new review. That review uses the head
+    commit and a later submitted time, but it is not a new verdict.
+    """
+    if is_verdict_body(review.get("body")):
+        return False
+    review_id = review.get("id")
+    owned = [
+        item for item in comments if item.get("pull_request_review_id") == review_id
+    ]
+    if not owned:
+        return False
+    return all(is_reply_comment(item) for item in owned)
+
+
 def failing_label(body: object) -> str | None:
     """Return Blocker or Should fix when the comment starts with that label."""
     if not isinstance(body, str):
@@ -165,7 +195,7 @@ def root_comments_for_review(
     for comment in comments:
         if comment.get("pull_request_review_id") != review_id:
             continue
-        if comment.get("in_reply_to_id") is not None or comment.get("in_reply_to") is not None:
+        if is_reply_comment(comment):
             continue
         if not same_bot(comment_login(comment), bot_login):
             continue
@@ -222,6 +252,8 @@ def review_verdict(
             continue
         submitted = parse_time(submitted_raw)
         if submitted is None or submitted < started:
+            continue
+        if is_reply_only_review(review, comments):
             continue
         candidates.append(review)
 
