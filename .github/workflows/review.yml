@@ -17,7 +17,8 @@ on:
       TAILSCALE_OAUTH_SECRET:
         required: false
       # Numeric GitHub App id for foxglove-beefcake. Callers pass this when the
-      # cloud path may run. Beefcake acceptance does not read it.
+      # cloud path should post as foxglove-beefcake[bot]. Beefcake acceptance
+      # does not read it. A missing or unusable value does not fail the job.
       BEEFCAKE_APP_ID:
         required: false
       # PEM private key for that App. Callers pass this with BEEFCAKE_APP_ID.
@@ -170,13 +171,17 @@ jobs:
         continue-on-error: true
         run: sudo tailscale logout
 
-      # The cloud review posts with the beefcake GitHub App. An empty github_token
-      # makes claude-code-action exchange an OIDC token for claude[bot]. Fail here
-      # instead. Mint after the beefcake follow so a long follow does not use up
-      # the installation token, which expires after one hour.
+      # The cloud review posts with the beefcake GitHub App when this mint
+      # succeeds. An empty github_token makes claude-code-action exchange an
+      # OIDC token for claude[bot]. Missing secrets, an empty private key, or a
+      # mint API error must not fail the job: continue into the Claude review
+      # attempts with an empty github_token. Mint after the beefcake follow so a
+      # long follow does not use up the installation token, which expires after
+      # one hour.
       - name: Mint the beefcake token
         id: app-token
         if: steps.follow.outputs.done != 'true'
+        continue-on-error: true
         env:
           APP_ID: ${{ secrets.BEEFCAKE_APP_ID }}
           APP_PRIVATE_KEY: ${{ secrets.BEEFCAKE_APP_PRIVATE_KEY }}
@@ -329,6 +334,8 @@ jobs:
       - name: Build Claude inputs
         id: claude-inputs
         if: steps.follow.outputs.done != 'true'
+        env:
+          REVIEW_BOT_LOGIN: ${{ steps.app-token.outcome == 'failure' && 'claude[bot]' || 'foxglove-beefcake[bot]' }}
         shell: bash
         run: |
           prompt_file=".foxglove-actions/prompts/review.md"
@@ -352,11 +359,15 @@ jobs:
             echo "  pr_number: ${{ github.event.pull_request.number }}"
             echo "  base_branch: ${{ github.event.pull_request.base.ref }}"
             echo "  is_draft: ${{ github.event.pull_request.draft }}"
-            echo "  bot_login: foxglove-beefcake[bot]"
+            echo "  bot_login: ${REVIEW_BOT_LOGIN}"
             echo "  own_thread_logins: foxglove-beefcake[bot], claude[bot]"
-            echo "  When the review instructions say CONTEXT.bot_login, post new reviews as foxglove-beefcake[bot]."
+            echo "  When the review instructions say CONTEXT.bot_login, post new reviews as ${REVIEW_BOT_LOGIN}."
             echo "  Treat threads and review comments from own_thread_logins as your own for reply, resolve, and minimize."
-            echo "  Do not post a new review as claude[bot]."
+            if [ "$REVIEW_BOT_LOGIN" = "claude[bot]" ]; then
+              echo "  Do not post a new review as foxglove-beefcake[bot]."
+            else
+              echo "  Do not post a new review as claude[bot]."
+            fi
             echo "  repo_instruction_files:"
             if [ -n "$instruction_files" ]; then
               echo "$instruction_files" | sed 's/^/    - /'
@@ -381,7 +392,7 @@ jobs:
         if: steps.follow.outputs.done != 'true'
         uses: actions/github-script@v7
         with:
-          github-token: ${{ steps.app-token.outputs.token }}
+          github-token: ${{ steps.app-token.outcome == 'success' && steps.app-token.outputs.token || github.token }}
           script: |
             const cleanupPendingReviews = require(
               `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/cleanup-pending-reviews.js`,
@@ -395,9 +406,9 @@ jobs:
         uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280, Agent SDK 0.3.280 (after v1.0.231)
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ steps.app-token.outputs.token }}
-          bot_id: "342178988"
-          bot_name: foxglove-beefcake[bot]
+          github_token: ${{ steps.app-token.outcome == 'success' && steps.app-token.outputs.token || '' }}
+          bot_id: ${{ steps.app-token.outcome == 'success' && '342178988' || '41898282' }}
+          bot_name: ${{ steps.app-token.outcome == 'success' && 'foxglove-beefcake[bot]' || 'claude[bot]' }}
           include_fix_links: "false"
           track_progress: false
           use_sticky_comment: false
@@ -410,7 +421,7 @@ jobs:
         if: steps.attempt1.outcome == 'failure'
         uses: actions/github-script@v7
         with:
-          github-token: ${{ steps.app-token.outputs.token }}
+          github-token: ${{ steps.app-token.outcome == 'success' && steps.app-token.outputs.token || github.token }}
           script: |
             const cleanupPendingReviews = require(
               `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/cleanup-pending-reviews.js`,
@@ -424,9 +435,9 @@ jobs:
         uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280, Agent SDK 0.3.280 (after v1.0.231)
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ steps.app-token.outputs.token }}
-          bot_id: "342178988"
-          bot_name: foxglove-beefcake[bot]
+          github_token: ${{ steps.app-token.outcome == 'success' && steps.app-token.outputs.token || '' }}
+          bot_id: ${{ steps.app-token.outcome == 'success' && '342178988' || '41898282' }}
+          bot_name: ${{ steps.app-token.outcome == 'success' && 'foxglove-beefcake[bot]' || 'claude[bot]' }}
           include_fix_links: "false"
           track_progress: false
           use_sticky_comment: false
@@ -439,7 +450,7 @@ jobs:
         if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
         uses: actions/github-script@v7
         with:
-          github-token: ${{ steps.app-token.outputs.token }}
+          github-token: ${{ steps.app-token.outcome == 'success' && steps.app-token.outputs.token || github.token }}
           script: |
             const cleanupPendingReviews = require(
               `${process.env.GITHUB_WORKSPACE}/.foxglove-actions/.github/scripts/cleanup-pending-reviews.js`,
@@ -453,9 +464,9 @@ jobs:
         uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280, Agent SDK 0.3.280 (after v1.0.231)
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ steps.app-token.outputs.token }}
-          bot_id: "342178988"
-          bot_name: foxglove-beefcake[bot]
+          github_token: ${{ steps.app-token.outcome == 'success' && steps.app-token.outputs.token || '' }}
+          bot_id: ${{ steps.app-token.outcome == 'success' && '342178988' || '41898282' }}
+          bot_name: ${{ steps.app-token.outcome == 'success' && 'foxglove-beefcake[bot]' || 'claude[bot]' }}
           include_fix_links: "false"
           track_progress: false
           use_sticky_comment: false
@@ -484,7 +495,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BOT_LOGIN: foxglove-beefcake[bot]
+          BOT_LOGIN: ${{ steps.app-token.outcome == 'failure' && 'claude[bot]' || 'foxglove-beefcake[bot]' }}
         run: |
           set -euo pipefail
           script=".foxglove-actions/.github/scripts/review-verdict.py"
