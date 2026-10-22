@@ -76,6 +76,8 @@ class ReviewVerdictTest(unittest.TestCase):
         comments: list[dict] | None = None,
         threads: list[dict] | None = None,
         job_name: str = "beefcake",
+        issue_comments: list[dict] | None = None,
+        accept_earlier: bool = False,
     ):
         payload = jobs(f"review / {job_name}")
         return review_verdict.verdict_from_files(
@@ -86,6 +88,8 @@ class ReviewVerdictTest(unittest.TestCase):
             BOT,
             json.dumps(comments or []),
             json.dumps(threads or []),
+            json.dumps(issue_comments or []),
+            accept_earlier,
         )
 
     def test_lgtm_passes(self) -> None:
@@ -100,6 +104,107 @@ class ReviewVerdictTest(unittest.TestCase):
     def test_lgtm_with_hidden_marker_passes(self) -> None:
         status, _message = self.decide([review("LGTM\n\n<!-- beefcake-review -->")])
         self.assertEqual(status, "pass")
+
+    def test_approving_review_passes(self) -> None:
+        status, message = self.decide([review("LGTM", state="APPROVED")])
+        self.assertEqual(status, "pass")
+        self.assertIn("is LGTM", message)
+
+    def test_lgtm_review_comment_passes(self) -> None:
+        status, message = self.decide([review("")], [comment("LGTM")])
+        self.assertEqual(status, "pass")
+        self.assertIn("is LGTM", message)
+
+    def test_lgtm_review_comment_with_marker_passes(self) -> None:
+        status, message = self.decide(
+            [review("")],
+            [comment("LGTM\n\n<!-- beefcake-review -->")],
+        )
+        self.assertEqual(status, "pass")
+        self.assertIn("is LGTM", message)
+
+    def test_lgtm_reply_passes(self) -> None:
+        status, message = self.decide(
+            [review("")],
+            [comment("LGTM", in_reply_to_id=9)],
+        )
+        self.assertEqual(status, "pass")
+        self.assertIn("is LGTM", message)
+
+    def test_lgtm_issue_comment_passes(self) -> None:
+        status, message = self.decide(
+            [],
+            issue_comments=[
+                {
+                    "id": 1,
+                    "body": "LGTM\n\n<!-- beefcake-review -->",
+                    "created_at": "2026-10-20T12:05:00Z",
+                    "user": {"login": BOT},
+                }
+            ],
+        )
+        self.assertEqual(status, "pass")
+        self.assertIn("is LGTM", message)
+
+    def test_old_issue_comment_lgtm_is_missing(self) -> None:
+        status, _message = self.decide(
+            [],
+            issue_comments=[
+                {
+                    "id": 1,
+                    "body": "LGTM",
+                    "created_at": "2026-10-20T11:00:00Z",
+                    "user": {"login": BOT},
+                }
+            ],
+        )
+        self.assertEqual(status, "missing")
+
+    def test_human_issue_comment_lgtm_is_missing(self) -> None:
+        status, _message = self.decide(
+            [],
+            issue_comments=[
+                {
+                    "id": 1,
+                    "body": "LGTM",
+                    "created_at": "2026-10-20T12:05:00Z",
+                    "user": {"login": "someone"},
+                }
+            ],
+        )
+        self.assertEqual(status, "missing")
+
+    def test_unresolved_should_fix_fails_lgtm_body(self) -> None:
+        status, message = self.decide(
+            [review("LGTM")],
+            [],
+            [thread("Should fix: close the file.")],
+        )
+        self.assertEqual(status, "fail")
+        self.assertIn("unresolved Should fix:", message)
+
+    def test_should_fix_fails_when_issue_comment_is_lgtm(self) -> None:
+        status, _message = self.decide(
+            [review("")],
+            [comment("Should fix: close the file.")],
+            issue_comments=[
+                {
+                    "id": 1,
+                    "body": "LGTM",
+                    "created_at": "2026-10-20T12:05:00Z",
+                    "user": {"login": BOT},
+                }
+            ],
+        )
+        self.assertEqual(status, "fail")
+
+    def test_accept_earlier_lgtm_passes(self) -> None:
+        status, message = self.decide(
+            [review("LGTM", submitted_at="2026-10-20T11:00:00Z")],
+            accept_earlier=True,
+        )
+        self.assertEqual(status, "pass")
+        self.assertIn("is LGTM", message)
 
     def test_empty_body_waits_for_comments(self) -> None:
         status, message = self.decide([review("")])

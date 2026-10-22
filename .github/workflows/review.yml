@@ -289,8 +289,30 @@ jobs:
               raise SystemExit("GitHub did not return an installation token.")
           print(f"::add-mask::{token}")
           delimiter = "BEEFCAKE_TOKEN_END"
+          # A second token, only for re-running an earlier failed pull_request
+          # check after LGTM. The review token stays valid when the App cannot
+          # mint this one.
+          actions_token = ""
+          try:
+              actions_payload = github_json(
+                  "POST",
+                  f"https://api.github.com/app/installations/{installation_id}/access_tokens",
+                  {"permissions": {"actions": "write"}},
+              )
+              actions_token = actions_payload.get("token") or ""
+          except SystemExit as error:
+              print(
+                  "::notice::No actions token for refreshing an earlier review check. "
+                  f"{error.code}"
+              )
+          if actions_token:
+              print(f"::add-mask::{actions_token}")
+          actions_delimiter = "BEEFCAKE_ACTIONS_TOKEN_END"
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"token<<{delimiter}\n{token}\n{delimiter}\n")
+              output.write(
+                  f"actions_token<<{actions_delimiter}\n{actions_token}\n{actions_delimiter}\n"
+              )
           PY
 
       - name: Checkout project repository
@@ -307,6 +329,21 @@ jobs:
           path: .foxglove-actions
           ref: ${{ github.repository == 'foxglove/actions' && github.sha || 'main' }}
 
+      # A re-run of the pull_request check starts after the LGTM was posted.
+      # Pass that check without another review when the LGTM is already on
+      # this commit. Attempt 1 does not use this step.
+      - name: Keep an existing LGTM on rerun
+        id: prior
+        if: github.run_attempt > 1 && (steps.follow.outputs.done != 'true' || steps.follow.outputs.posted == 'true')
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BOT_LOGIN: ${{ steps.app-token.outcome == 'failure' && 'claude[bot]' || 'foxglove-beefcake[bot]' }}
+          VERDICT_MODE: prior
+        run: bash .foxglove-actions/.github/scripts/review-check.sh --accept-earlier
+
       # Give the reviewer a working JS runtime so it can check claims by running them instead of
       # reasoning from the spec. Dependencies are deliberately not installed: most reviews never
       # need them, and the reviewer can run `yarn install` itself on the rare one that does.
@@ -320,20 +357,20 @@ jobs:
       # roughly three times as much on the rare one that installs, and its post-step writes
       # under a lockfile-keyed name CI restores from, which a partial node_modules would poison.
       - name: Set up Node
-        if: steps.follow.outputs.done != 'true' && hashFiles('.node-version', '.nvmrc') != ''
+        if: steps.follow.outputs.done != 'true' && steps.prior.outputs.skip != 'true' && hashFiles('.node-version', '.nvmrc') != ''
         continue-on-error: true
         uses: actions/setup-node@v6
         with:
           node-version-file: ${{ hashFiles('.node-version') != '' && '.node-version' || '.nvmrc' }}
 
       - name: Enable Corepack
-        if: steps.follow.outputs.done != 'true' && hashFiles('yarn.lock') != ''
+        if: steps.follow.outputs.done != 'true' && steps.prior.outputs.skip != 'true' && hashFiles('yarn.lock') != ''
         continue-on-error: true
         run: corepack enable
 
       - name: Build Claude inputs
         id: claude-inputs
-        if: steps.follow.outputs.done != 'true'
+        if: steps.follow.outputs.done != 'true' && steps.prior.outputs.skip != 'true'
         env:
           REVIEW_BOT_LOGIN: ${{ steps.app-token.outcome == 'failure' && 'claude[bot]' || 'foxglove-beefcake[bot]' }}
         shell: bash
@@ -389,7 +426,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Clean up prior reviews (before attempt 1)
-        if: steps.follow.outputs.done != 'true'
+        if: steps.follow.outputs.done != 'true' && steps.prior.outputs.skip != 'true'
         uses: actions/github-script@v7
         with:
           github-token: ${{ steps.app-token.outcome == 'success' && steps.app-token.outputs.token || github.token }}
@@ -401,7 +438,7 @@ jobs:
 
       - name: Run Claude review (attempt 1)
         id: attempt1
-        if: steps.follow.outputs.done != 'true'
+        if: steps.follow.outputs.done != 'true' && steps.prior.outputs.skip != 'true'
         continue-on-error: true
         uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280, Agent SDK 0.3.280 (after v1.0.231)
         with:
@@ -484,101 +521,87 @@ jobs:
       # The follow step uses continue-on-error, so a failure there does not fail the job.
       # This step does not. Exit 1 for a Blocker or Should fix comment, or for an
       # unresolved thread that starts with one of those labels. A nit does not fail
-      # the job. GitHub then reports the review / beefcake check as failed.
+      # the job. An LGTM review body, review comment, or conversation comment passes.
+      # GitHub then reports the review / beefcake check as failed or passed.
       - name: Fail on a blocker or should-fix
+        id: verdict
         if: >-
-          steps.follow.outputs.posted == 'true' ||
+          steps.prior.outputs.skip != 'true' &&
+          (steps.follow.outputs.posted == 'true' ||
           steps.attempt1.outcome == 'success' ||
           steps.attempt2.outcome == 'success' ||
-          steps.attempt3.outcome == 'success'
+          steps.attempt3.outcome == 'success')
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BOT_LOGIN: ${{ steps.app-token.outcome == 'failure' && 'claude[bot]' || 'foxglove-beefcake[bot]' }}
+        run: bash .foxglove-actions/.github/scripts/review-check.sh
+
+      # The pull request shows the pull_request event's check. A later run can
+      # pass on LGTM without changing that check. Re-run the failed one so it
+      # turns green. This step does not fail the job when the re-run is refused.
+      - name: Refresh the pull request check
+        if: steps.verdict.outputs.lgtm == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTIONS_TOKEN: ${{ steps.app-token.outputs.actions_token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          script=".foxglove-actions/.github/scripts/review-verdict.py"
+          script=".foxglove-actions/.github/scripts/refresh-pull-request-check.py"
           if [ ! -f "$script" ]; then
-            echo "Missing review verdict script: $script" >&2
-            exit 1
+            echo "::warning::Missing refresh script: $script"
+            exit 0
           fi
-          jobs_file="$(mktemp)"
-          reviews_file="$(mktemp)"
-          comments_file="$(mktemp)"
-          threads_file="$(mktemp)"
-          trap 'rm -f "$jobs_file" "$reviews_file" "$comments_file" "$threads_file"' EXIT
-          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" > "$jobs_file"
-          owner="${GITHUB_REPOSITORY%%/*}"
-          repo_name="${GITHUB_REPOSITORY#*/}"
-          thread_query="$(cat <<'GRAPHQL'
-          query($owner:String!, $name:String!, $number:Int!, $cursor:String) {
-            repository(owner:$owner, name:$name) {
-              pullRequest(number:$number) {
-                reviewThreads(first:100, after:$cursor) {
-                  pageInfo { hasNextPage endCursor }
-                  nodes {
-                    isResolved
-                    comments(first:1) {
-                      nodes { author { login } body }
-                    }
-                  }
-                }
-              }
-            }
-          }
-          GRAPHQL
-          )"
-          attempt=1
-          while [ "$attempt" -le 6 ]; do
-            gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" > "$reviews_file"
-            gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/comments?per_page=100" > "$comments_file"
-            threads='[]'
-            cursor=""
-            page_number=0
-            while [ "$page_number" -lt 10 ]; do
-              if [ -z "$cursor" ]; then
-                page="$(gh api graphql -f query="$thread_query" -f owner="$owner" -f name="$repo_name" -F number="$PR_NUMBER")"
-              else
-                page="$(gh api graphql -f query="$thread_query" -f owner="$owner" -f name="$repo_name" -F number="$PR_NUMBER" -f cursor="$cursor")"
+          runs_file="$(mktemp)"
+          trap 'rm -f "$runs_file"' EXIT
+          if ! gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${HEAD_SHA}&event=pull_request&per_page=100" > "$runs_file"; then
+            echo "::warning::Could not list workflow runs to refresh the review check."
+            exit 0
+          fi
+          set +e
+          ids="$(python3 "$script" \
+            --runs "$runs_file" \
+            --current-run "$GITHUB_RUN_ID" \
+            --head-sha "$HEAD_SHA" \
+            --workflow-ref "$GITHUB_WORKFLOW_REF")"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "::warning::Could not choose a review check to refresh."
+            exit 0
+          fi
+          if [ -z "$ids" ]; then
+            echo "No earlier failed pull_request review check to refresh."
+            exit 0
+          fi
+          token="${ACTIONS_TOKEN:-}"
+          if [ -z "$token" ]; then
+            token="$GH_TOKEN"
+          fi
+          switched=0
+          for run_id in $ids; do
+            code="$(curl -sS -o /tmp/rerun-body -w "%{http_code}" --max-time 30 -X POST \
+              -H "Authorization: Bearer ${token}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/rerun-failed-jobs" || true)"
+            if [ "$code" = "401" ] || [ "$code" = "403" ]; then
+              if [ "$switched" = 0 ] && [ -n "${GH_TOKEN:-}" ] && [ "$token" != "$GH_TOKEN" ]; then
+                token="$GH_TOKEN"
+                switched=1
+                code="$(curl -sS -o /tmp/rerun-body -w "%{http_code}" --max-time 30 -X POST \
+                  -H "Authorization: Bearer ${token}" \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "X-GitHub-Api-Version: 2026-03-10" \
+                  "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/rerun-failed-jobs" || true)"
               fi
-              if jq -e '(.errors // []) | length > 0' >/dev/null <<< "$page"; then
-                echo "Could not read review threads." >&2
-                jq -r '.errors[]?.message' <<< "$page" >&2
-                exit 1
-              fi
-              nodes="$(jq -c '.data.repository.pullRequest.reviewThreads.nodes // []' <<< "$page")"
-              threads="$(jq -c --argjson nodes "$nodes" '. + $nodes' <<< "$threads")"
-              has_next="$(jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage' <<< "$page")"
-              if [ "$has_next" != "true" ]; then
-                break
-              fi
-              cursor="$(jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor // empty' <<< "$page")"
-              page_number=$((page_number + 1))
-            done
-            printf '%s\n' "$threads" > "$threads_file"
-            set +e
-            message="$(python3 "$script" \
-              --jobs "$jobs_file" \
-              --job-name "$GITHUB_JOB" \
-              --reviews "$reviews_file" \
-              --comments "$comments_file" \
-              --threads "$threads_file" \
-              --head-sha "$HEAD_SHA" \
-              --bot "$BOT_LOGIN" 2>&1)"
-            status=$?
-            set -e
-            echo "$message"
-            if [ "$status" -eq 0 ]; then
-              echo "$message" >> "$GITHUB_STEP_SUMMARY"
-              exit 0
             fi
-            if [ "$status" -ne 2 ] || [ "$attempt" -eq 6 ]; then
-              echo "$message" >> "$GITHUB_STEP_SUMMARY"
-              exit 1
+            if [ "$code" = "201" ]; then
+              echo "Re-ran the failed pull_request review check (run ${run_id})." | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::warning::Could not re-run review check ${run_id} (HTTP ${code})."
             fi
-            echo "The review is not on this commit yet. Waiting."
-            attempt=$((attempt + 1))
-            sleep 5
           done
-          exit 1
+          exit 0
