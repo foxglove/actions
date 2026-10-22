@@ -122,10 +122,20 @@ def is_review_bot(login: str | None, bot_login: str) -> bool:
     return canonical_login(login) in REVIEW_BOTS | {canonical_login(bot_login)}
 
 
+def accepted_logins(bot_login: str) -> set[str]:
+    """Return the review-bot logins this check should treat as its own.
+
+    One login is the normal case. A comma-separated list lets a rerun accept
+    an LGTM from either foxglove-beefcake or claude before the job knows which
+    bot posted it.
+    """
+    return {canonical_login(part.strip()) for part in bot_login.split(",") if part.strip()}
+
+
 def same_bot(login: str | None, bot_login: str) -> bool:
     if login is None:
         return False
-    return canonical_login(login) == canonical_login(bot_login)
+    return canonical_login(login) in accepted_logins(bot_login)
 
 
 def comment_login(comment: dict[str, Any]) -> str | None:

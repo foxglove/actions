@@ -46,10 +46,39 @@ jobs:
       id-token: write
 
     steps:
+      # A re-run of the pull_request check starts after the LGTM was posted.
+      # Look for that LGTM before offering the review to local beefcake, so the
+      # re-run does not post another review. The app token is not minted yet,
+      # so accept an LGTM from either review bot. The checkout stays outside
+      # the workspace so the later project checkout can still clean it.
+      # Attempt 1 skips this step.
+      - name: Checkout workflow repository for the rerun check
+        if: github.run_attempt > 1
+        uses: actions/checkout@v6
+        with:
+          repository: foxglove/actions
+          path: ${{ runner.temp }}/foxglove-actions
+          ref: ${{ github.repository == 'foxglove/actions' && github.sha || 'main' }}
+
+      - name: Keep an existing LGTM on rerun
+        id: prior
+        if: github.run_attempt > 1
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BOT_LOGIN: foxglove-beefcake[bot],claude[bot]
+          VERDICT_MODE: prior
+        run: bash "${RUNNER_TEMP}/foxglove-actions/.github/scripts/review-check.sh" --accept-earlier
+
       # Offer the review to beefcake first. A decline or failure falls through to the review below.
       - name: Join the tailnet
         id: tailnet
-        if: inputs.beefcake-dispatch-url != '' && github.event.pull_request.head.repo.full_name == github.repository
+        if: >-
+          steps.prior.outputs.skip != 'true' &&
+          inputs.beefcake-dispatch-url != '' &&
+          github.event.pull_request.head.repo.full_name == github.repository
         continue-on-error: true
         timeout-minutes: 2
         uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
@@ -62,7 +91,7 @@ jobs:
 
       - name: Hand the review to beefcake
         id: beefcake
-        if: steps.tailnet.outcome == 'success'
+        if: steps.prior.outputs.skip != 'true' && steps.tailnet.outcome == 'success'
         continue-on-error: true
         timeout-minutes: 1
         env:
@@ -101,7 +130,7 @@ jobs:
 
       - name: Follow the beefcake review
         id: follow
-        if: steps.beefcake.outputs.accepted == 'true'
+        if: steps.prior.outputs.skip != 'true' && steps.beefcake.outputs.accepted == 'true'
         continue-on-error: true
         timeout-minutes: 20
         env:
@@ -180,7 +209,7 @@ jobs:
       # one hour.
       - name: Mint the beefcake token
         id: app-token
-        if: steps.follow.outputs.done != 'true'
+        if: steps.prior.outputs.skip != 'true' && steps.follow.outputs.done != 'true'
         continue-on-error: true
         env:
           APP_ID: ${{ secrets.BEEFCAKE_APP_ID }}
@@ -289,60 +318,25 @@ jobs:
               raise SystemExit("GitHub did not return an installation token.")
           print(f"::add-mask::{token}")
           delimiter = "BEEFCAKE_TOKEN_END"
-          # A second token, only for re-running an earlier failed pull_request
-          # check after LGTM. The review token stays valid when the App cannot
-          # mint this one.
-          actions_token = ""
-          try:
-              actions_payload = github_json(
-                  "POST",
-                  f"https://api.github.com/app/installations/{installation_id}/access_tokens",
-                  {"permissions": {"actions": "write"}},
-              )
-              actions_token = actions_payload.get("token") or ""
-          except SystemExit as error:
-              print(
-                  "::notice::No actions token for refreshing an earlier review check. "
-                  f"{error.code}"
-              )
-          if actions_token:
-              print(f"::add-mask::{actions_token}")
-          actions_delimiter = "BEEFCAKE_ACTIONS_TOKEN_END"
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"token<<{delimiter}\n{token}\n{delimiter}\n")
-              output.write(
-                  f"actions_token<<{actions_delimiter}\n{actions_token}\n{actions_delimiter}\n"
-              )
           PY
 
       - name: Checkout project repository
-        if: steps.follow.outputs.done != 'true'
+        if: steps.prior.outputs.skip != 'true' && steps.follow.outputs.done != 'true'
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Checkout workflow repository
-        if: steps.follow.outputs.done != 'true' || steps.follow.outputs.posted == 'true'
+        if: >-
+          steps.prior.outputs.skip != 'true' &&
+          (steps.follow.outputs.done != 'true' || steps.follow.outputs.posted == 'true')
         uses: actions/checkout@v6
         with:
           repository: foxglove/actions
           path: .foxglove-actions
           ref: ${{ github.repository == 'foxglove/actions' && github.sha || 'main' }}
-
-      # A re-run of the pull_request check starts after the LGTM was posted.
-      # Pass that check without another review when the LGTM is already on
-      # this commit. Attempt 1 does not use this step.
-      - name: Keep an existing LGTM on rerun
-        id: prior
-        if: github.run_attempt > 1 && (steps.follow.outputs.done != 'true' || steps.follow.outputs.posted == 'true')
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BOT_LOGIN: ${{ steps.app-token.outcome == 'failure' && 'claude[bot]' || 'foxglove-beefcake[bot]' }}
-          VERDICT_MODE: prior
-        run: bash .foxglove-actions/.github/scripts/review-check.sh --accept-earlier
 
       # Give the reviewer a working JS runtime so it can check claims by running them instead of
       # reasoning from the spec. Dependencies are deliberately not installed: most reviews never
@@ -538,6 +532,39 @@ jobs:
           BOT_LOGIN: ${{ steps.app-token.outcome == 'failure' && 'claude[bot]' || 'foxglove-beefcake[bot]' }}
         run: bash .foxglove-actions/.github/scripts/review-check.sh
 
+      # Mint actions: write only when a refresh is about to run. Local beefcake
+      # skips the review-token mint, and the job token has actions: read, so
+      # this token is what can re-run the earlier pull_request check.
+      - name: Mint an actions token
+        id: actions-token
+        if: steps.verdict.outputs.lgtm == 'true'
+        continue-on-error: true
+        env:
+          APP_ID: ${{ secrets.BEEFCAKE_APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.BEEFCAKE_APP_PRIVATE_KEY }}
+          TOKEN_PERMISSIONS: '{"actions":"write"}'
+        run: |
+          script=".foxglove-actions/.github/scripts/mint-installation-token.py"
+          if [ ! -f "$script" ]; then
+            echo "::notice::No actions token for refreshing an earlier review check. Missing mint script."
+            exit 0
+          fi
+          if ! token="$(python3 "$script")"; then
+            echo "::notice::No actions token for refreshing an earlier review check."
+            exit 0
+          fi
+          if [ -z "$token" ]; then
+            echo "::notice::No actions token for refreshing an earlier review check."
+            exit 0
+          fi
+          echo "::add-mask::$token"
+          delimiter="BEEFCAKE_ACTIONS_TOKEN_END"
+          {
+            echo "token<<${delimiter}"
+            echo "$token"
+            echo "${delimiter}"
+          } >> "$GITHUB_OUTPUT"
+
       # The pull request shows the pull_request event's check. A later run can
       # pass on LGTM without changing that check. Re-run the failed one so it
       # turns green. This step does not fail the job when the re-run is refused.
@@ -545,7 +572,7 @@ jobs:
         if: steps.verdict.outputs.lgtm == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          ACTIONS_TOKEN: ${{ steps.app-token.outputs.actions_token }}
+          ACTIONS_TOKEN: ${{ steps.actions-token.outputs.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail

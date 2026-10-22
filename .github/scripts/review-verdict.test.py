@@ -78,6 +78,7 @@ class ReviewVerdictTest(unittest.TestCase):
         job_name: str = "beefcake",
         issue_comments: list[dict] | None = None,
         accept_earlier: bool = False,
+        bot: str = BOT,
     ):
         payload = jobs(f"review / {job_name}")
         return review_verdict.verdict_from_files(
@@ -85,7 +86,7 @@ class ReviewVerdictTest(unittest.TestCase):
             job_name,
             json.dumps(reviews),
             HEAD,
-            BOT,
+            bot,
             json.dumps(comments or []),
             json.dumps(threads or []),
             json.dumps(issue_comments or []),
@@ -278,6 +279,22 @@ class ReviewVerdictTest(unittest.TestCase):
             [thread("Should fix: close the file.", login="claude")],
         )
         self.assertEqual(status, "fail")
+
+    def test_rerun_accepts_lgtm_from_either_review_bot(self) -> None:
+        either = "foxglove-beefcake[bot],claude[bot]"
+        status, message = self.decide(
+            [review("LGTM", login="claude[bot]", submitted_at="2026-10-20T11:00:00Z")],
+            accept_earlier=True,
+            bot=either,
+        )
+        self.assertEqual(status, "pass")
+        self.assertIn("is LGTM", message)
+        status, message = self.decide(
+            [review("LGTM", login="claude[bot]", submitted_at="2026-10-20T11:00:00Z")],
+            accept_earlier=True,
+        )
+        self.assertEqual(status, "missing")
+        self.assertIn("did not post", message)
 
     def test_human_should_fix_thread_does_not_fail(self) -> None:
         status, _message = self.decide(
